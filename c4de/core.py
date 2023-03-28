@@ -1,6 +1,7 @@
 import re
 import json
 import sys
+from urllib import parse
 from typing import List, Tuple
 from datetime import datetime, timedelta
 from discord import Message, Game, Intents
@@ -22,8 +23,9 @@ from c4de.version_reader import report_version_info
 from c4de.protocols.cleanup import archive_stagnant_senate_hall_threads, remove_spoiler_tags_from_page, \
     check_preload_for_missing_fields, check_infobox_category
 from c4de.protocols.edelweiss import run_edelweiss_protocol, calculate_isbns_for_all_pages
-from c4de.protocols.rss import check_rss_feed, check_latest_url, check_wookieepedia_feeds, check_sw_news_page
-from c4de.data.filenames import INTERNAL_RSS_CACHE, EXTERNAL_RSS_CACHE
+from c4de.protocols.rss import check_rss_feed, check_latest_url, check_wookieepedia_feeds, check_sw_news_page, \
+    check_review_board_nominations, check_policy, check_consensus_track_duration, check_user_rights_nominations
+from c4de.data.filenames import INTERNAL_RSS_CACHE, EXTERNAL_RSS_CACHE, BOARD_CACHE
 
 
 SELF = 880096997217013801
@@ -31,13 +33,16 @@ CADE = 346767878005194772
 MONITOR = 268478587651358721
 MAIN = "wookieepedia"
 COMMANDS = "bot-commands"
+ANNOUNCEMENTS = "announcements"
 NOM_CHANNEL = "article-nominations"
 SOCIAL_MEDIA = "social-media-team"
 UPDATES = "star-wars-news"
+SITE_URL = "https://starwars.fandom.com/wiki"
 
 THUMBS_UP = "👍"
 TIMER = "⏲️"
 EXCLAMATION = "❗"
+BOARD_EMOTES = {"EduCorps": "EC", "AgriCorps": "AC", "Inquisitorius": "Inq"}
 
 
 # noinspection PyPep8Naming
@@ -49,6 +54,9 @@ class C4DE_Bot(commands.Bot):
     :type rss_data: dict[str, dict]
     :type internal_rss_cache: dict[str, dict[str, list[str]]]
     :type external_rss_cache: dict[str, dict[str, list[str]]]
+    :type board_nominations: dict[str, list[str]]
+    :type policy_updates: dict[str, list[str]]
+    :type rights_cache: dict[str, list[str]]
     :type report_dm: discord.DMChannel
     """
 
@@ -85,6 +93,16 @@ class C4DE_Bot(commands.Bot):
         with open(EXTERNAL_RSS_CACHE, "r") as f:
             self.external_rss_cache = json.load(f)
 
+        with open(BOARD_CACHE, "r") as f:
+            self.board_nominations = json.load(f)
+
+        with open(POLICY_CACHE, "r") as f:
+            self.policy_updates = json.load(f)
+
+        with open(RIGHTS_CACHE, "r") as f:
+            self.rights_cache = json.load(f)
+
+        self.overdue_cts = []
         self.project_data = {}
 
     async def on_ready(self):
@@ -109,11 +127,15 @@ class C4DE_Bot(commands.Bot):
         try:
             info = report_version_info(self.site, self.version)
             if info:
-                await self.text_channel(COMMANDS).send(info)
+                await self.text_channel(ANNOUNCEMENTS).send(info)
         except Exception as e:
             error_log(type(e), e)
 
         if not self.ready:
+            self.check_membership_nominations.start()
+            self.check_rights_nominations.start()
+            self.check_consensus_track_statuses.start()
+            self.check_policy.start()
             self.check_internal_rss.start()
             self.check_external_rss.start()
             self.check_senate_hall_threads.start()
@@ -191,6 +213,11 @@ class C4DE_Bot(commands.Bot):
 
         await self.handle_commands(message, True)
 
+        match = re.search("delete messages? in #(?P<channel>.*?): (?P<ids>[0-9, ]+)", message.content)
+        if match:
+            await self.delete_message(match.groupdict()['ids'], match.groupdict()['channel'])
+            return
+
         match = re.search("message #(?P<channel>.*?): (?P<text>.*?)$", message.content)
         if match:
             channel = match.groupdict()['channel']
@@ -200,6 +227,12 @@ class C4DE_Bot(commands.Bot):
                 await self.text_channel(channel).send(text)
             except Exception as e:
                 await self.report_error(message.content, type(e), e)
+
+    async def delete_message(self, id_string, channel):
+        message_ids = [i.strip() for i in id_string.split(",")]
+        for message in await self.text_channel(channel).history(limit=30).flatten():
+            if str(message.id) in message_ids:
+                await message.delete()
 
     async def handle_commands(self, message: Message, dm):
         channel = self.text_channel("bot-requests") if dm else message.channel
@@ -256,7 +289,7 @@ class C4DE_Bot(commands.Bot):
             "**Additional Protocols:**",
             "- Archives stagnant Senate Hall threads (runs every 4 hours)",
             "**Additional Info (contact Cade if you have questions):**",
-            "- RSS feed configuration JSON: https://starwars.fandom.com/wiki/User:C4-DE/RSS",
+            f"- RSS feed configuration JSON: {SITE_URL}/User:C4-DE/RSS",
         ]
 
         return {1072245240913723522: "\n".join(text), 1072245242566299698: "\n".join(related)}
@@ -397,7 +430,89 @@ class C4DE_Bot(commands.Bot):
         log("Scheduled Operation: Checking Edelweiss")
         messages = run_edelweiss_protocol(self.site, True)
         for m in messages:
-            await self.text_channel(UPDATES).send(m)
+            try:
+                await self.text_channel(UPDATES).send(m)
+            except Exception as e:
+                print(m)
+                print(e)
+
+    def prepare_link(self, link):
+        return parse.quote_from_bytes(link.replace(' ', '_').encode(self.site.encoding()), safe='').replace('%3A', ':')
+
+    @tasks.loop(minutes=30)
+    async def check_policy(self):
+        updates = check_policy(self.site)
+        messages = []
+        for date, posts in updates.items():
+            for post in posts:
+                if post['link'] not in self.policy_updates.get(date, []):
+                    link = self.prepare_link(post['link'])
+                    messages.append(f"🗨️ **{post['link']}** has completed with the following result: **{post['result']}**\n<{SITE_URL}/{link}>")
+
+        for message in messages:
+            await self.text_channel(ANNOUNCEMENTS).send(message)
+
+        self.policy_updates = {d: [l['link'] for l in v] for d, v in updates.items()}
+
+        with open(POLICY_CACHE, "w") as f:
+            f.writelines(json.dumps(self.policy_updates, indent=4))
+
+    @tasks.loop(minutes=15)
+    async def check_membership_nominations(self):
+        log("Checking board membership nominations")
+        current_nominations = check_review_board_nominations(self.site)
+        messages = []
+        for board, noms in current_nominations.items():
+            for user in noms:
+                if user not in self.board_nominations[board]:
+                    username = self.prepare_link(user)
+                    emote = self.emoji_by_name(BOARD_EMOTES[board])
+                    messages.append(f"{emote} **{user} has been nominated for membership in the {board}!**\n<{SITE_URL}/Wookieepedia:Review_board_membership_nominations#{username}>")
+
+        for message in messages:
+            await self.text_channel(ANNOUNCEMENTS).send(message)
+
+        self.board_nominations = current_nominations
+
+        with open(BOARD_CACHE, "w") as f:
+            f.writelines(json.dumps(self.board_nominations, indent=4))
+
+    @tasks.loop(minutes=15)
+    async def check_rights_nominations(self):
+        log("Checking user rights nominations")
+        current_nominations = check_user_rights_nominations(self.site)
+        messages = []
+        for right, noms in current_nominations.items():
+            for user in noms:
+                if user not in self.rights_cache[right]:
+                    if right == "Removal":
+                        messages.append(f"📢 **{user} has been nominated for removal of their user rights. Please weigh in here.**\n<{SITE_URL}/Wookieepedia:Requests_for_removal_of_user_rights>")
+                    else:
+                        messages.append(f"📢 **{user} has been nominated for {right} rights!**\n<{SITE_URL}/Wookieepedia:Requests_for_user_rights>")
+
+        for message in messages:
+            await self.text_channel(ANNOUNCEMENTS).send(message)
+
+        self.rights_cache = current_nominations
+
+        with open(RIGHTS_CACHE, "w") as f:
+            f.writelines(json.dumps(self.rights_cache, indent=4))
+
+    @tasks.loop(minutes=30)
+    async def check_consensus_track_statuses(self):
+        log("Checking status of active Consensus Track votes")
+        cts = check_consensus_track_duration(self.site)
+        overdue = []
+        for page, duration in cts.items():
+            if page in self.overdue_cts:
+                continue
+            elif duration.days >= 14:
+                overdue.append(page)
+
+        for page in overdue:
+            link = self.prepare_link(page)
+            message = f"**{page}** has been open for 14 days and can now be archived\n<{SITE_URL}/{link}>"
+            await self.text_channel("admin-help").send(message)
 
     CHANNEL_FILTERS = {
         "the-high-republic": ["high republic"],
@@ -408,7 +523,7 @@ class C4DE_Bot(commands.Bot):
     async def check_internal_rss(self):
         log("Checking internal RSS feeds")
 
-        messages_to_post = check_wookieepedia_feeds(self.internal_rss_cache)
+        messages_to_post = check_wookieepedia_feeds(self.site, self.internal_rss_cache)
 
         for channel, message in messages_to_post:
             try:

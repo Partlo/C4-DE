@@ -38,3 +38,17 @@
 *'''2.2.0''': February 6, 2023
 **Fixed spamfilter reporting
 **Added commands to deal with infobox preloads
+*'''2.2.1''': February 20, 2023
+**Reporting of new review board membership nominations
+*'''2.2.2''': March 23, 2023
+**Fixed reporting of nominations
+*'''2.2.3''': March 23, 2023
+**Overhauled reporting of policy & consensus updates
+*'''2.2.4''': March 24, 2023
+**Reporting of consensus track votes that are ready for archiving
+*'''2.2.5''': March 26, 2023
+**Reporting of new requests for user rights (WP:RFU)
+*'''2.2.6''': March 26, 2023
+**Reporting of new requests for removal of user rights (WP:RFRUR)
+*'''2.2.7''': March 27, 2023
+**Reworked CSD reporting to eliminate false positives

@@ -1,4 +1,3 @@
-import datetime
 from typing import Dict, List
 import feedparser
 import re
@@ -6,6 +5,7 @@ import requests
 import html
 from datetime import datetime
 from bs4 import BeautifulSoup
+from pywikibot import Site, Page, Category
 
 from c4de.common import error_log, log
 
@@ -18,7 +18,7 @@ FEED_URLS = [
 ]
 
 
-def check_new_pages_rss_feed(url, cache: Dict[str, List[str]]):
+def check_new_pages_rss_feed(site, url, cache: Dict[str, List[str]]):
     d = feedparser.parse(url)
     is_new = "NewPages" in url
 
@@ -42,8 +42,9 @@ def check_new_pages_rss_feed(url, cache: Dict[str, List[str]]):
             continue
         elif e.title.startswith("Forum:TC:") and re.match("^<p>.*?delete.*?</p>", e.description.lower()):
             continue
-        elif re.match("^<p>.*?CSD.*?</p>", e.description) or re.match("^<p>.*?delete.*?</p>", e.description.lower()) \
-                or "{{CSD" in e.description or "{{delete" in e.description.lower():
+        elif re.match("^<p>.*?CSD.*?</p>", e.description) or re.match("^<p>.*?delete.*?</p>", e.description.lower()):
+            pt, ch, message = "CSD", "admin-help", f"❗ **{e.author}** requested deletion of **{e.title}**\n<{e.link}>"
+        elif ("{{CSD" in e.description or "{{delete" in e.description.lower()) and did_edit_add_deletion_template(site, e.title):
             pt, ch, message = "CSD", "admin-help", f"❗ **{e.author}** requested deletion of **{e.title}**\n<{e.link}>"
         else:
             continue
@@ -57,6 +58,27 @@ def check_new_pages_rss_feed(url, cache: Dict[str, List[str]]):
             cache[pt].append(e.link)
 
     return entries_to_report
+
+
+def parse_diff_description(text):
+    table_content = []
+    for row in re.findall("<tr>(.*?)</tr>", text):
+        row_content = []
+        for (css, content) in re.findall("<td(.*?)>(.*?)</td>", row):
+            if "colspan=2" in css:
+                row_content.append(content)
+            row_content.append(content)
+        table_content.append(row_content)
+
+    return table_content
+
+
+def did_edit_add_deletion_template(site, title):
+    page = Page(site, title)
+    if not page.exists():
+        return False
+    table_content = parse_diff_description(page.get())
+    return ["{{csd" in row[-1].lower() or "{{delete|" in row[-1].lower() for row in table_content]
 
 
 def parse_history_rss_feed(feed_url, cache, feed_type):
@@ -75,11 +97,11 @@ def parse_history_rss_feed(feed_url, cache, feed_type):
     return entries_to_report
 
 
-def check_wookieepedia_feeds(cache):
+def check_wookieepedia_feeds(site, cache):
     messages = []
 
     for url in FEED_URLS:
-        entries = check_new_pages_rss_feed(url, cache)
+        entries = check_new_pages_rss_feed(site, url, cache)
         for cm in entries:
             messages.append(cm)
 
@@ -95,9 +117,9 @@ def check_wookieepedia_feeds(cache):
     for e in entries:
         messages.append(("admin-help", f"⚠️ **WP:SF** was edited by **{e.author}**\n<{e.link}>"))
 
-    entries = parse_history_rss_feed("https://starwars.fandom.com/wiki/Wookieepedia:Policy_and_consensus_updates?action=history&feed=rss", cache, "Policy")
-    for e in entries:
-        messages.append(("announcements", f"🗨️  New **Policy and consensus updates**\n<{e.link}>"))
+    # entries = parse_history_rss_feed("https://starwars.fandom.com/wiki/Wookieepedia:Policy_and_consensus_updates?action=history&feed=rss", cache, "Policy")
+    # for e in entries:
+    #     messages.append(("announcements", f"🗨️  New **Policy and consensus updates**\n<{e.link}>"))
 
     entries = parse_history_rss_feed("https://starwars.fandom.com/wiki/Wookieepedia:Image_requests?action=history&feed=rss", cache, "Image")
     for e in entries:
@@ -274,3 +296,84 @@ def check_title_formatting(text, title_regex, title):
     title = title.replace("“", '"').replace("”", '"').replace("’", "'").replace("‘", "'")
 
     return html.unescape(title).replace("’", "'")
+
+
+def check_review_board_nominations(site: Site):
+    page = Page(site, "Wookieepedia:Review board membership nominations")
+    text = page.get()
+
+    noms = {"EduCorps": [], "AgriCorps": [], "Inquisitorius": []}
+    for section in text.split("==[[Wookieepedia:"):
+        board = section.split("|", 1)[0]
+        if board not in noms:
+            continue
+
+        for u in re.findall("====\{\{U\|(.*?)\}\}====", section):
+            if u != "USERNAME":
+                noms[board].append(u)
+
+    return noms
+
+
+def check_user_rights_nominations(site: Site):
+    page = Page(site, "Wookieepedia:Requests for user rights")
+    text = page.get()
+
+    noms = {"Rollback": [], "Admin": [], "Bureaucrat": []}
+    for section in text.split("==Requests for "):
+        right = None
+        for r, x in noms.items():
+            if section.lower().startswith(r.lower()):
+                right = r
+        if right is None:
+            continue
+
+        for u in re.findall("====\{\{U\|(.*?)\}\} \(.*?\)====", section):
+            if u != "USERNAME":
+                noms[right].append(u)
+
+    page2 = Page(site, "Wookieepedia:Requests for removal of user rights")
+    text2 = page2.get()
+    noms["Removal"] = []
+    for u in re.findall("====\{\{U\|(.*?)\}\} \(.*?\)====", text2):
+        noms["Removal"].append(u)
+
+    return noms
+
+
+def check_policy(site: Site):
+    page = Page(site, "Wookieepedia:Policy and consensus updates")
+    text = page.get()
+
+    year = datetime.today().year
+    section = text.split(f"={year}=")[1]
+    section = section.split(f"={year - 1}")[0]
+    updates = {}
+    current = None
+    for line in section.splitlines():
+        if not line:
+            continue
+        elif line.startswith("=="):
+            current = line.replace("==", "")
+        else:
+            if current not in updates:
+                updates[current] = []
+            match = re.search("'''CT:?''':?[ ]+\[\[(?P<link>.*?)\]\][ ]+.*?'''(?P<result>.*?)'''", line)
+            if match:
+                x = {k: v.replace("‎", "") for k, v in match.groupdict().items()}
+                updates[current].append(x)
+            else:
+                print(f"Cannot identify results from {line}")
+    return updates
+
+
+def check_consensus_track_duration(site: Site):
+    category = Category(site, "Consensus track")
+    result = {}
+
+    now = datetime.now()
+    for page in category.articles():
+        created = page.oldest_revision['timestamp']
+        result[page.title()] = now - created
+
+    return result
