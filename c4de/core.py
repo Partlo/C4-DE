@@ -10,7 +10,8 @@ from discord.channel import TextChannel, DMChannel
 from discord.ext import commands, tasks
 import ssl
 
-from pywikibot import Page
+import time
+from pywikibot import Page, Category
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -144,6 +145,12 @@ class C4DE_Bot(commands.Bot):
             self.check_edelweiss.start()
             self.ready = True
 
+            # for message in await self.text_channel(ANNOUNCEMENTS).history(limit=25).flatten():
+            #     if message.id == 1089920440388026530:
+            #         await message.edit(content=f"📢 **LucaRoR has been nominated for Rollback rights!**\n<{SITE_URL}/Wookieepedia:Requests_for_user_rights/Rollback/LucaRoR>")
+            #     elif message.id == 1089753200040611952:
+            #         await message.edit(content=f"📢 **AnilSerifoglu has been nominated for Rollback rights!**\n<{SITE_URL}/Wookieepedia:Requests_for_user_rights/Rollback/AnilSerifoglu>")
+
     # noinspection PyTypeChecker
     def text_channel(self, name) -> TextChannel:
         try:
@@ -252,6 +259,10 @@ class C4DE_Bot(commands.Bot):
                 await channel.send(m)
             return
 
+        if "ghost touch" in message.content.lower():
+            await self.ghost_touch(message)
+            return
+
         if "spoiler" in message.content.lower():
             for page in pywikibot.Category(self.site, "Articles with expired spoiler notices").articles(namespaces=0):
                 remove_spoiler_tags_from_page(self.site, page)
@@ -306,6 +317,28 @@ class C4DE_Bot(commands.Bot):
 
         if target:
             await target.reply("**Commands have been updated! Please view this channel's pinned messages for more info.**")
+
+    async def ghost_touch(self, message: Message):
+        match = re.search("[Gg]host touch Category:(.*?)$", message.content)
+        if match:
+            await message.add_reaction(TIMER)
+            category = Category(self.site, match.group(1))
+            if not category.exists():
+                await message.add_reaction(EXCLAMATION)
+                return
+            for page in category.articles():
+                try:
+                    text = page.get()
+                    page.put(text, "Bot: Ghost edit to update WhatLinksHere. Tell Cade if you see this.")
+                except pywikibot.exceptions.NoPageError:
+                    continue
+                except pywikibot.exceptions.LockedPageError:
+                    continue
+            await message.remove_reaction(TIMER, self.user)
+            await message.add_reaction(THUMBS_UP)
+            return
+        else:
+            await message.add_reaction(EXCLAMATION)
 
     @staticmethod
     def is_reload_command(message: Message):
@@ -485,10 +518,11 @@ class C4DE_Bot(commands.Bot):
         for right, noms in current_nominations.items():
             for user in noms:
                 if user not in self.rights_cache[right]:
+                    username = self.prepare_link(user)
                     if right == "Removal":
-                        messages.append(f"📢 **{user} has been nominated for removal of their user rights. Please weigh in here.**\n<{SITE_URL}/Wookieepedia:Requests_for_removal_of_user_rights>")
+                        messages.append(f"📢 **{user} has been nominated for removal of their user rights. Please weigh in here.**\n<{SITE_URL}/Wookieepedia:Requests_for_removal_of_user_rights/{right}/{username}>")
                     else:
-                        messages.append(f"📢 **{user} has been nominated for {right} rights!**\n<{SITE_URL}/Wookieepedia:Requests_for_user_rights>")
+                        messages.append(f"📢 **{user} has been nominated for {right} rights!**\n<{SITE_URL}/Wookieepedia:Requests_for_user_rights/{right}/{username}>")
 
         for message in messages:
             await self.text_channel(ANNOUNCEMENTS).send(message)
@@ -509,6 +543,7 @@ class C4DE_Bot(commands.Bot):
             elif duration.days >= 14:
                 overdue.append(page)
 
+        self.overdue_cts = overdue
         for page in overdue:
             link = self.prepare_link(page)
             message = f"**{page}** has been open for 14 days and can now be archived\n<{SITE_URL}/{link}>"

@@ -52,3 +52,5 @@
 **Reporting of new requests for removal of user rights (WP:RFRUR)
 *'''2.2.7''': March 27, 2023
 **Reworked CSD reporting to eliminate false positives
+*'''2.2.8''': April 7, 2023
+**Bug fixes and ghost touch command

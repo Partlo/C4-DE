@@ -42,10 +42,10 @@ def check_new_pages_rss_feed(site, url, cache: Dict[str, List[str]]):
             continue
         elif e.title.startswith("Forum:TC:") and re.match("^<p>.*?delete.*?</p>", e.description.lower()):
             continue
+        elif did_edit_add_deletion_template(site, e.title, e.description) or "<p>CSD</p>" in e.description or "<p>delete</p>" in e.description.lower():
+            pt, ch, message = "CSD", "admin-help", f"❗ **{e.author}** requested deletion of **{e.title}**\n<{e.link}>"
         elif re.match("^<p>.*?CSD.*?</p>", e.description) or re.match("^<p>.*?delete.*?</p>", e.description.lower()):
-            pt, ch, message = "CSD", "admin-help", f"❗ **{e.author}** requested deletion of **{e.title}**\n<{e.link}>"
-        elif ("{{CSD" in e.description or "{{delete" in e.description.lower()) and did_edit_add_deletion_template(site, e.title):
-            pt, ch, message = "CSD", "admin-help", f"❗ **{e.author}** requested deletion of **{e.title}**\n<{e.link}>"
+            pt, ch, message = "CSD", "admin-help", f"❓ **{e.author}** used 'delete' or 'CSD' in edit summary on **{e.title}**; may be false positive.\n<{e.link}>"
         else:
             continue
 
@@ -62,23 +62,23 @@ def check_new_pages_rss_feed(site, url, cache: Dict[str, List[str]]):
 
 def parse_diff_description(text):
     table_content = []
-    for row in re.findall("<tr>(.*?)</tr>", text):
+    for row in re.findall("<tr.*?>((.*?\n)*?.*?)</tr>", text):
         row_content = []
-        for (css, content) in re.findall("<td(.*?)>(.*?)</td>", row):
-            if "colspan=2" in css:
-                row_content.append(content)
-            row_content.append(content)
+        for line in re.findall("<td(.*?)>(.*?)</td>", row[0]):
+            if "colspan=2" in line[0]:
+                row_content.append(line[1])
+            row_content.append(line[1])
         table_content.append(row_content)
 
     return table_content
 
 
-def did_edit_add_deletion_template(site, title):
+def did_edit_add_deletion_template(site, title, description):
     page = Page(site, title)
-    if not page.exists():
+    if not page.exists() or page.isRedirectPage():
         return False
-    table_content = parse_diff_description(page.get())
-    return ["{{csd" in row[-1].lower() or "{{delete|" in row[-1].lower() for row in table_content]
+    table_content = parse_diff_description(description)
+    return any("{{csd" in row[-1].lower() or "{{delete|" in row[-1].lower() for row in table_content)
 
 
 def parse_history_rss_feed(feed_url, cache, feed_type):
