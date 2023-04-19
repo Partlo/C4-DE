@@ -3,7 +3,7 @@ import feedparser
 import re
 import requests
 import html
-from datetime import datetime
+from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 from pywikibot import Site, Page, Category
 
@@ -24,38 +24,41 @@ def check_new_pages_rss_feed(site, url, cache: Dict[str, List[str]]):
 
     entries_to_report = []
     for e in d.entries:
-        pt, ch, message = None, None, None
-        if is_new:
-            if e.title.startswith("Forum:SH:"):
-                pt, ch, message = "Senate Hall", "announcements", f"📣 **New Senate Hall thread**\n<{e.link}>"
-            elif e.title.startswith("Forum:NB:"):
-                pt, ch, message = "Administrator's Noticeboard", "announcements", f"📢 **New Administrators' noticeboard thread**\n<{e.link}>"
-            elif e.title.startswith("Forum:CT:"):
-                pt, ch, message = "Consensus Track", "announcements", f"📢 **New Consensus track vote**\n<{e.link}>"
-            elif e.title.startswith("Forum:TC:") or e.title.startswith("Wookieepedia:Trash compactor"):
-                pt, ch, message = "Trash Compactor", "announcements", f"🗑️ **New Trash Compactor thread**\n<{e.link}>"
-            elif e.title.startswith("User blog:"):
-                pt, ch, message = "Fandom Blog", "announcements", f"<:fandom:872166055693393940>**New Fandom Staff blog post**\n<{e.link}>"
-        elif re.match("^<p>.*? deleted page.*?</p>", e.description):
-            continue
-        elif e.title.startswith("Wookieepedia:Trash compactor") and re.match("^<p>.*?delete.*?</p>", e.description.lower()):
-            continue
-        elif e.title.startswith("Forum:TC:") and re.match("^<p>.*?delete.*?</p>", e.description.lower()):
-            continue
-        elif did_edit_add_deletion_template(site, e.title, e.description) or "<p>CSD</p>" in e.description or "<p>delete</p>" in e.description.lower():
-            pt, ch, message = "CSD", "admin-help", f"❗ **{e.author}** requested deletion of **{e.title}**\n<{e.link}>"
-        elif re.match("^<p>.*?CSD.*?</p>", e.description) or re.match("^<p>.*?delete.*?</p>", e.description.lower()):
-            pt, ch, message = "CSD", "admin-help", f"❓ **{e.author}** used 'delete' or 'CSD' in edit summary on **{e.title}**; may be false positive.\n<{e.link}>"
-        else:
-            continue
-
-        if pt:
-            if pt not in cache:
-                cache[pt] = []
-            if e.link in cache[pt]:
+        try:
+            pt, ch, message = None, None, None
+            if is_new:
+                if e.title.startswith("Forum:SH:"):
+                    pt, ch, message = "Senate Hall", "announcements", f"📣 **New Senate Hall thread**\n<{e.link}>"
+                elif e.title.startswith("Forum:NB:"):
+                    pt, ch, message = "Administrator's Noticeboard", "announcements", f"📢 **New Administrators' noticeboard thread**\n<{e.link}>"
+                elif e.title.startswith("Forum:CT:"):
+                    pt, ch, message = "Consensus Track", "announcements", f"📢 **New Consensus track vote**\n<{e.link}>"
+                elif e.title.startswith("Forum:TC:") or e.title.startswith("Wookieepedia:Trash compactor"):
+                    pt, ch, message = "Trash Compactor", "announcements", f"🗑️ **New Trash Compactor thread**\n<{e.link}>"
+                elif e.title.startswith("User blog:"):
+                    pt, ch, message = "Fandom Blog", "announcements", f"<:fandom:872166055693393940>**New Fandom Staff blog post**\n<{e.link}>"
+            elif re.match("^<p>.*? deleted page.*?</p>", e.description):
                 continue
-            entries_to_report.append((ch, message))
-            cache[pt].append(e.link)
+            elif e.title.startswith("Wookieepedia:Trash compactor") and re.match("^<p>.*?delete.*?</p>", e.description.lower()):
+                continue
+            elif e.title.startswith("Forum:TC:") and re.match("^<p>.*?delete.*?</p>", e.description.lower()):
+                continue
+            elif did_edit_add_deletion_template(site, e.title, e.description) or "<p>CSD</p>" in e.description or "<p>delete</p>" in e.description.lower():
+                pt, ch, message = "CSD", "admin-help", f"❗ **{e.author}** requested deletion of **{e.title}**\n<{e.link}>"
+            elif re.match("^<p>.*?CSD.*?</p>", e.description) or re.match("^<p>.*?delete[^d].*?</p>", e.description.lower()):
+                pt, ch, message = "CSD", "admin-help", f"❓ **{e.author}** used 'delete' or 'CSD' in edit summary on **{e.title}**; may be false positive.\n<{e.link}>"
+            else:
+                continue
+
+            if pt:
+                if pt not in cache:
+                    cache[pt] = []
+                if e.link in cache[pt]:
+                    continue
+                entries_to_report.append((ch, message))
+                cache[pt].append(e.link)
+        except Exception as x:
+            error_log(f"Encountered {type(x)} while parsing RSS feed entry for {e.title}", e)
 
     return entries_to_report
 
@@ -78,7 +81,7 @@ def did_edit_add_deletion_template(site, title, description):
     if not page.exists() or page.isRedirectPage():
         return False
     table_content = parse_diff_description(description)
-    return any("{{csd" in row[-1].lower() or "{{delete|" in row[-1].lower() for row in table_content)
+    return any("{{csd" in row[-1].lower() or "{{delete|" in row[-1].lower() for row in table_content if row)
 
 
 def parse_history_rss_feed(feed_url, cache, feed_type):
@@ -182,16 +185,17 @@ def check_sw_news_page(feed_url, cache: Dict[str, List[str]], title_regex):
     final_entries = []
     for e in initial_entries:
         try:
-            r_text = requests.get(e["url"]).text
+            if site_cache and e["url"] in site_cache:
+                continue
+
+            r_text = requests.get(e["url"], timeout=5).text
             title = check_title_formatting(r_text, title_regex, e["title"])
             if not e.get("date"):
                 x = re.search('<div class="publish-date">(.*?)</div>', r_text)
                 if x:
                     e["date"] = x.group(1)
 
-            if site_cache and e["url"] in site_cache:
-                continue
-            elif not site_cache:
+            if not site_cache:
                 if e.get("date") and today not in e["date"]:
                     continue
             else:
@@ -320,17 +324,12 @@ def check_user_rights_nominations(site: Site):
     text = page.get()
 
     noms = {"Rollback": [], "Admin": [], "Bureaucrat": []}
-    for section in text.split("==Requests for "):
-        right = None
-        for r, x in noms.items():
-            if section.lower().startswith(r.lower()):
-                right = r
-        if right is None:
-            continue
-
-        for u in re.findall("====\{\{U\|(.*?)\}\} \(.*?\)====", section):
-            if u != "USERNAME":
-                noms[right].append(u)
+    for u in re.findall("\n{{/(.*?)/(.*?)}}", text):
+        if u[0] not in noms:
+            error_log(f"Unexpected nom type {u[0]}")
+            noms[u[0]] = []
+        if u[1] != "USERNAME":
+            noms[u[0]].append(u[1])
 
     page2 = Page(site, "Wookieepedia:Requests for removal of user rights")
     text2 = page2.get()
@@ -367,13 +366,13 @@ def check_policy(site: Site):
     return updates
 
 
-def check_consensus_track_duration(site: Site):
+def check_consensus_track_duration(site: Site, offset):
     category = Category(site, "Consensus track")
     result = {}
 
     now = datetime.now()
     for page in category.articles():
         created = page.oldest_revision['timestamp']
-        result[page.title()] = now - created
+        result[page.title()] = now - (created - timedelta(hours=offset))
 
     return result

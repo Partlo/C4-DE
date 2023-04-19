@@ -8,15 +8,15 @@ from c4de.common import log, error_log
 bots = ["01miki10-bot", "C4-DE Bot", "EcksBot", "JocastaBot", "RoboCade", "PLUMEBOT", "TOM-E Macaron.ii"]
 
 
-def archive_stagnant_senate_hall_threads(site):
+def archive_stagnant_senate_hall_threads(site, offset):
     for page in Category(site, "Senate Hall").articles(namespaces=100):
         try:
-            archive_senate_hall_thread(site, page)
+            archive_senate_hall_thread(site, page, offset)
         except LockedPageError:
             continue
 
 
-def archive_senate_hall_thread(site, page):
+def archive_senate_hall_thread(site, page, offset):
     text = page.get()
     if "{{sticky}}" in text.lower():
         return
@@ -27,7 +27,7 @@ def archive_senate_hall_thread(site, page):
             continue
         elif "Undo revision" in revision["comment"] and any(b in revision["comment"] for b in bots):
             continue
-        duration = datetime.now() - revision["timestamp"]
+        duration = datetime.now() - (revision["timestamp"] - timedelta(hours=offset))
         stagnant = duration.days >= 31
         break
 
@@ -39,7 +39,7 @@ def archive_senate_hall_thread(site, page):
             page.put(new_text, f"Archiving stagnant Senate Hall thread")
 
 
-def remove_spoiler_tags_from_page(site, page, limit=30):
+def remove_spoiler_tags_from_page(site, page, limit=30, offset=5):
     text = page.get()
 
     line = re.findall("\n\{\{[Ss]poiler\|(.*?)\}\}.*?\n", text)
@@ -67,7 +67,7 @@ def remove_spoiler_tags_from_page(site, page, limit=30):
     elif len(fields) <= 2:
         t = page.title() if len(fields) == 0 else fields[0]
         time = datetime.strptime(named["time"], "%Y-%m-%d")
-        if time > (datetime.now() + timedelta(hours=5)):
+        if time > (datetime.now() + timedelta(hours=offset)):
             print(f"{page.title()}: Spoilers for {t} do not expire until {time}")
             return time
         new_text = re.sub("\{\{Spoiler.*?\}\}.*?\n", "", text)
@@ -95,7 +95,7 @@ def remove_expired_fields(site, text, fields: list, named: dict, limit=30):
             release_dates.append(release_date)
 
         fields_to_keep.append(f1)
-        if i < len(fields):
+        if i < len(fields) - 1:
             fields_to_keep.append(fields[i + 1])
         j += 1
         if f"quote{j}" in named:

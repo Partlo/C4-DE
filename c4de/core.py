@@ -265,7 +265,11 @@ class C4DE_Bot(commands.Bot):
 
         if "spoiler" in message.content.lower():
             for page in pywikibot.Category(self.site, "Articles with expired spoiler notices").articles(namespaces=0):
-                remove_spoiler_tags_from_page(self.site, page)
+                try:
+                    remove_spoiler_tags_from_page(self.site, page, offset=self.timezone_offset)
+                except Exception as e:
+                    error_log(f"Encountered {type(e)} while removing spoiler template from {page.title()}", e)
+                    await self.text_channel(COMMANDS).send(f"Encountered {type(e)} while removing expired spoiler template from {page.title()}. Please check template usage for anomalies.")
             return
 
         if "isbn" in message.content.lower():
@@ -428,7 +432,7 @@ class C4DE_Bot(commands.Bot):
 
     @tasks.loop(hours=4)
     async def check_senate_hall_threads(self):
-        archive_stagnant_senate_hall_threads(self.site)
+        archive_stagnant_senate_hall_threads(self.site, self.timezone_offset)
 
     @tasks.loop(hours=1)
     async def check_spoiler_templates(self):
@@ -436,7 +440,7 @@ class C4DE_Bot(commands.Bot):
             return
         log("Scheduled Operation: Checking {{Spoiler}} templates")
         for page in pywikibot.Category(self.site, "Articles with expired spoiler notices").articles(namespaces=0):
-            remove_spoiler_tags_from_page(self.site, page)
+            remove_spoiler_tags_from_page(self.site, page, offset=self.timezone_offset)
 
     @tasks.loop(hours=1)
     async def load_isbns(self):
@@ -535,19 +539,20 @@ class C4DE_Bot(commands.Bot):
     @tasks.loop(minutes=30)
     async def check_consensus_track_statuses(self):
         log("Checking status of active Consensus Track votes")
-        cts = check_consensus_track_duration(self.site)
+        cts = check_consensus_track_duration(self.site, self.timezone_offset)
         overdue = []
         for page, duration in cts.items():
-            if page in self.overdue_cts:
-                continue
-            elif duration.days >= 14:
+            print(f"{page}: {duration} ({page in self.overdue_cts})")
+            if page in self.overdue_cts or duration.days >= 14:
                 overdue.append(page)
 
-        self.overdue_cts = overdue
         for page in overdue:
+            if page in self.overdue_cts:
+                continue
             link = self.prepare_link(page)
             message = f"**{page}** has been open for 14 days and can now be archived\n<{SITE_URL}/{link}>"
             await self.text_channel("admin-help").send(message)
+        self.overdue_cts = overdue
 
     CHANNEL_FILTERS = {
         "the-high-republic": ["high republic"],

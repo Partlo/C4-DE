@@ -54,3 +54,7 @@
 **Reworked CSD reporting to eliminate false positives
 *'''2.2.8''': April 7, 2023
 **Bug fixes and ghost touch command
+*'''2.2.9''': April 7, 2023
+**Bug fixes around RSS and spoiler logic, and reporting broken spoiler templates
+*'''2.2.10''': April 18, 2023
+**Further bug fixes, and handling timeouts during RSS processing
