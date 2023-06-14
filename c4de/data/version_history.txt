@@ -57,4 +57,15 @@
 *'''2.2.9''': April 7, 2023
 **Bug fixes around RSS and spoiler logic, and reporting broken spoiler templates
 *'''2.2.10''': April 18, 2023
-**Further bug fixes, and handling timeouts during RSS processing
+**Further bug fixes, handling timeouts during RSS processing, and fixed CT reporting. Still dealing with timeouts involving StarWars.com
+*'''2.2.11''': April 21, 2023
+**Nominations for review board membership are now also forwarded to the respective board's channels
+*'''2.3.0''': May 10, 2023
+**ISBNs of new reprints will now be automatically added to novel pages
+*'''2.3.1''': May 25, 2023
+**FTBR (files to be renamed) requests will now be reported to #admin-help
+**Completed deletion requests in #admin-help will be struck-through
+*'''2.3.2''': May 31, 2023
+**Various bug fixes
+**Stopping repeat archiving of URLs already recorded in the archive
+**Further reporting of CSDs

@@ -1,3 +1,4 @@
+import codecs
 import re
 import json
 import sys
@@ -35,7 +36,8 @@ MONITOR = 268478587651358721
 MAIN = "wookieepedia"
 COMMANDS = "bot-commands"
 ANNOUNCEMENTS = "announcements"
-NOM_CHANNEL = "article-nominations"
+ADMIN_HELP = "admin-help"
+NOM_CHANNEL = "status-article-nominations"
 SOCIAL_MEDIA = "social-media-team"
 UPDATES = "star-wars-news"
 SITE_URL = "https://starwars.fandom.com/wiki"
@@ -53,7 +55,7 @@ class C4DE_Bot(commands.Bot):
     :type channels: dict[str, GuildChannel]
     :type emoji_storage: dict[str, int]
     :type rss_data: dict[str, dict]
-    :type internal_rss_cache: dict[str, dict[str, list[str]]]
+    :type internal_rss_cache: dict[str, list[str]]
     :type external_rss_cache: dict[str, dict[str, list[str]]]
     :type board_nominations: dict[str, list[str]]
     :type policy_updates: dict[str, list[str]]
@@ -76,8 +78,8 @@ class C4DE_Bot(commands.Bot):
         with open(VERSION_FILE, "r") as f:
             self.version = f.readline()
 
-        self.site = Site(user="C4-DE Bot")
-        self.site.login(user="C4-DE Bot")
+        self.site = self.reload_site()
+        self.refresh = 0
 
         self.bots = ["01miki10-bot", "C4-DE Bot", "EcksBot", "JocastaBot", "RoboCade", "PLUMEBOT", "TOM-E Macaron.ii"]
 
@@ -103,8 +105,17 @@ class C4DE_Bot(commands.Bot):
         with open(RIGHTS_CACHE, "r") as f:
             self.rights_cache = json.load(f)
 
+        with open(ADMIN_CACHE, "r") as f:
+            self.admin_messages = {int(k): v for k, v in json.load(f).items()}
+
         self.overdue_cts = []
         self.project_data = {}
+        self.files_to_be_renamed = []
+
+    def reload_site(self):
+        self.site = Site(user="C4-DE Bot")
+        self.site.login()
+        return self.site
 
     async def on_ready(self):
         log(f'C4-DE on as {self.user}!')
@@ -137,12 +148,15 @@ class C4DE_Bot(commands.Bot):
             self.check_rights_nominations.start()
             self.check_consensus_track_statuses.start()
             self.check_policy.start()
+            self.check_deleted_pages.start()
+            self.check_files_to_be_renamed.start()
             self.check_internal_rss.start()
             self.check_external_rss.start()
             self.check_senate_hall_threads.start()
             self.check_spoiler_templates.start()
             self.load_isbns.start()
             self.check_edelweiss.start()
+            log("Startup process completed.")
             self.ready = True
 
             # for message in await self.text_channel(ANNOUNCEMENTS).history(limit=25).flatten():
@@ -254,9 +268,13 @@ class C4DE_Bot(commands.Bot):
 
         if "edelweiss" in message.content.lower():
             self.run_edelweiss = False
-            messages = run_edelweiss_protocol(self.site)
+            messages, _ = run_edelweiss_protocol(self.site)
             for m in messages:
                 await channel.send(m)
+            return
+
+        if "load web" in message.content.lower():
+            await self.save_web_sources(message)
             return
 
         if "ghost touch" in message.content.lower():
@@ -288,22 +306,30 @@ class C4DE_Bot(commands.Bot):
         text = [
             f"Current C4DE Commands (v. {self.version}):",
             f"- **@C4-DE reload data** - reloads data from User:C4-DE/RSS and User:JocastaBot/Project Data",
-            f"- **@C4-DE RSS** - check internal RSS feeds and report changes to #announcements (runs every 5 minutes)",
             f"- **@C4-DE Edelweiss** - analyzes Edelweiss publishing catalog and reports new items or changes"
             f" (runs at 8 AM CST)",
             f"- **@C4-DE ISBN** - updates Template:ISBN/data with the ISBNs present in all articles (runs at 7 AM CST)",
-            f"- **@C4-DE spoiler** - removes expired spoiler notices from articless (runs at 6 AM CST)",
+            f"- **@C4-DE spoiler** - removes expired spoiler notices from articles (runs at 6 AM CST)",
             f"- **@C4-DE check preloads** - checks all infobox preloads for missing fields, and also reports fields"
             f" missing from InfoboxParamCheck",
             f"- **@C4-DE check preload for Template:<template>** - checks a particular infobox and its preload",
             f"- **@C4-DE update preload for Template:<template>** - checks a particular infobox and its preload, and"
-            f" updates the preload with the missing parameters. Does not change the parameters in InfoboxParamCheck."
+            f" updates the preload with the missing parameters. Does not change the parameters in InfoboxParamCheck.",
+            f"- **@C4-DE ghost touch Category:<category>** - ghost-edits (saves with no changes) pages in the category "
+            f"to force an update."
         ]
 
         related = [
             "**Additional Protocols:**",
-            "- Archives stagnant Senate Hall threads (runs every 4 hours)",
-            "**Additional Info (contact Cade if you have questions):**",
+            f"- Reports new Senate Hall and Administrator's Noticeboard threads, Consensus Track and Trash Compactor "
+            f"votes, file rename requests, and articles flagged for deletion to #announcements and #admin-help. "
+            f"(runs every 5 minutes)",
+            f"- Checks the RSS feeds of a variety of sites, such as StarWars.com and SWTOR.com, and reports new "
+            f"articles to #star-wars-news",
+            f"- Archives stagnant Senate Hall threads (runs every 4 hours)",
+            f"- Reports new policy and consensus changes",
+            f"- Reports new nominations for user rights and board memberships",
+            f"**Additional Info (contact Cade if you have questions):**",
             f"- RSS feed configuration JSON: {SITE_URL}/User:C4-DE/RSS",
         ]
 
@@ -321,6 +347,35 @@ class C4DE_Bot(commands.Bot):
 
         if target:
             await target.reply("**Commands have been updated! Please view this channel's pinned messages for more info.**")
+
+    async def save_web_sources(self, message):
+        log("Loading web sources file")
+        try:
+            by_year = {"Unknown": [], "Current": []}
+            with codecs.open("C:/Users/Michael/Documents/projects/C4DE/web.txt", mode="r", encoding="utf-8") as f:
+                for i in f.readlines():
+                    d, c = i.split("\t", 1)
+                    if d.startswith("1") or d.startswith("2"):
+                        y = d[:4]
+                        if y not in by_year:
+                            by_year[y] = []
+                        by_year[y].append(f"{d} {c}")
+                    elif d.startswith("Current"):
+                        by_year["Current"].append(f"{d} {c}")
+                    else:
+                        by_year["Unknown"].append(f"{d} {c}")
+
+            for k, v in by_year.items():
+                p = Page(self.site, f"Wookieepedia:Sources/Web/{k}")
+                t = p.get() if p.exists() else ""
+                c = len(t.splitlines())
+                log(f"{len(v)} sources found for {k}; currently {c - 1} are listed")
+                text = ("{{Wookieepedia:Sources/Web/Header}}\n" + "\n".join(f"*{i}".strip() for i in sorted(v))).replace("\n\n", "\n")
+                if text != t:
+                    p.put(text, "Updating sources list")
+            await message.add_reaction(THUMBS_UP)
+        except Exception as e:
+            error_log(type(e), e)
 
     async def ghost_touch(self, message: Message):
         match = re.search("[Gg]host touch Category:(.*?)$", message.content)
@@ -465,7 +520,10 @@ class C4DE_Bot(commands.Bot):
             self.run_edelweiss = True
             return
         log("Scheduled Operation: Checking Edelweiss")
-        messages = run_edelweiss_protocol(self.site, True)
+        messages, reprints = run_edelweiss_protocol(self.site, True)
+        if reprints:
+            messages.append("Errors encountered while adding reprint ISBNs to pages:")
+            messages += reprints
         for m in messages:
             try:
                 await self.text_channel(UPDATES).send(m)
@@ -478,6 +536,12 @@ class C4DE_Bot(commands.Bot):
 
     @tasks.loop(minutes=30)
     async def check_policy(self):
+        if self.refresh == 2:
+            self.reload_site()
+            self.refresh = 0
+        else:
+            self.refresh += 1
+
         updates = check_policy(self.site)
         messages = []
         for date, posts in updates.items():
@@ -504,10 +568,14 @@ class C4DE_Bot(commands.Bot):
                 if user not in self.board_nominations[board]:
                     username = self.prepare_link(user)
                     emote = self.emoji_by_name(BOARD_EMOTES[board])
-                    messages.append(f"{emote} **{user} has been nominated for membership in the {board}!**\n<{SITE_URL}/Wookieepedia:Review_board_membership_nominations#{username}>")
+                    messages.append((board, f"{emote} **{user} has been nominated for membership in the {board}!**\n<{SITE_URL}/Wookieepedia:Review_board_membership_nominations#{username}>"))
 
-        for message in messages:
-            await self.text_channel(ANNOUNCEMENTS).send(message)
+        for (board, message) in messages:
+            try:
+                await self.text_channel(ANNOUNCEMENTS).send(message)
+                await self.text_channel(board.lower()).send(message)
+            except Exception as e:
+                error_log(f"Encountered {type(e)} while checking board nominations", e)
 
         self.board_nominations = current_nominations
 
@@ -542,7 +610,6 @@ class C4DE_Bot(commands.Bot):
         cts = check_consensus_track_duration(self.site, self.timezone_offset)
         overdue = []
         for page, duration in cts.items():
-            print(f"{page}: {duration} ({page in self.overdue_cts})")
             if page in self.overdue_cts or duration.days >= 14:
                 overdue.append(page)
 
@@ -559,44 +626,108 @@ class C4DE_Bot(commands.Bot):
         "galaxys-edge": ["galaxys edge", "galaxy's edge", "halcyon", "galactic starcruiser"]
     }
 
+    @tasks.loop(minutes=15)
+    async def check_deleted_pages(self):
+        log("Checking deleted pages")
+
+        try:
+            update = []
+            for message_id, title in self.admin_messages.items():
+                p = Page(self.site, title)
+                if not p.exists():
+                    update.append(message_id)
+
+            for message in await self.text_channel(ADMIN_HELP).history(limit=200).flatten():
+                if message.id in update:
+                    await message.edit(content=f"~~{message.content}~~ (completed)")
+                    self.admin_messages.pop(message.id)
+                    update.remove(message.id)
+
+            if update:
+                log(f"Could not find messages {update} in #admin-help to update")
+        except Exception as e:
+            await self.report_error(f"Deleted Pages: {e}", type(e), e)
+
+    @tasks.loop(minutes=15)
+    async def check_files_to_be_renamed(self):
+        log("Checking FTBR")
+
+        try:
+            files = [p for p in Category(self.site, "Files to be renamed").articles()]
+            new_files = []
+            for f in files:
+                try:
+                    if f.title() not in self.files_to_be_renamed:
+                        x = re.search("\{\{FTBR\|.*\|(.*?)\}\}", f.get())
+                        new_name_text = f" to **{x.group(1)}**" if x else ""
+                        m = f"⚠️ **{f.lastNonBotUser()}** requested **{f.title()}** be renamed{new_name_text}\n<{f.full_url()}>"
+                        msg = await self.text_channel(ADMIN_HELP).send(m)
+                        self.admin_messages[msg.id] = f.title()
+                except Exception as e:
+                    await self.report_error(f"FTBR: {f.title()}", type(e), e)
+
+            self.files_to_be_renamed = [f.title() for f in files]
+        except Exception as e:
+            await self.report_error(f"FTBR: {e}", type(e), e)
+
     @tasks.loop(minutes=5)
     async def check_internal_rss(self):
         log("Checking internal RSS feeds")
 
-        messages_to_post = check_wookieepedia_feeds(self.site, self.internal_rss_cache)
+        messages_to_post, to_delete = check_wookieepedia_feeds(self.site, self.internal_rss_cache)
 
-        for channel, message in messages_to_post:
+        for channel, message, d_page in messages_to_post:
             try:
-                await self.text_channel(channel).send(message)
+                m = await self.text_channel(channel).send(message)
+                if d_page:
+                    self.admin_messages[m.id] = d_page
             except Exception as e:
                 await self.report_error(f"RSS: {message}", type(e), e)
 
+        for title, url in to_delete.items():
+            try:
+                m = await self.text_channel("admin-help").send(f"❗ **{title}** has been flagged for deletion\n<{url}>")
+                self.admin_messages[m.id] = title
+            except Exception as e:
+                await self.report_error(f"RSS: Deletion: {title}", type(e), e)
+
         with open(INTERNAL_RSS_CACHE, "w") as f:
-            f.writelines(json.dumps(self.internal_rss_cache, indent=4))
+            f.writelines(json.dumps({k: v[-50:] for k, v in self.internal_rss_cache.items()}, indent=4))
 
     @tasks.loop(minutes=10)
     async def check_external_rss(self):
         log("Checking external RSS feeds")
 
         messages_to_post = []
+        templates = []
 
         for site, site_data in self.rss_data["sites"].items():
-            if site == "StarWars.com":
-                messages = check_sw_news_page(site_data["url"], self.external_rss_cache["sites"], site_data["title"])
-            elif site_data.get("url"):
-                messages = check_latest_url(site_data["url"], self.external_rss_cache["sites"], site, site_data["title"])
-            else:
-                messages = check_rss_feed(site_data["rss"], self.external_rss_cache["sites"], site, site_data["title"],
-                                          site_data.get("nonSW", False))
-            for m in reversed(messages):
-                messages_to_post += await self.prepare_new_rss_message(m, site_data, False)
+            try:
+                if site == "StarWars.com":
+                    messages = check_sw_news_page(site_data["url"], self.external_rss_cache["sites"], site_data["title"])
+                elif site_data.get("url"):
+                    messages = check_latest_url(site_data["url"], self.external_rss_cache["sites"], site, site_data["title"])
+                else:
+                    messages = check_rss_feed(site_data["rss"], self.external_rss_cache["sites"], site, site_data["title"],
+                                              site_data.get("nonSW", False))
+
+                archive = self.parse_archive(site_data.get("addToArchive"), site_data["template"])
+                for m in reversed(messages):
+                    msg, template = await self.prepare_new_rss_message(m, site_data["baseUrl"], site_data, False, archive)
+                    messages_to_post += msg
+                    templates.append(template)
+            except Exception as e:
+                error_log(f"Encountered {type(e)} while checking RSS for {site}", e)
 
         for site, site_data in self.rss_data["YouTube"].items():
+            archive = self.parse_archive(site_data.get("addToArchive"), site_data["template"])
             messages = check_rss_feed(
                 f"https://www.youtube.com/feeds/videos.xml?channel_id={site_data['channelId']}",
                 self.external_rss_cache["YouTube"], site, "<h1 class=\"title.*?><.*?>(.*?)</.*?></h1>", site_data.get("sw"))
             for m in reversed(messages):
-                messages_to_post += await self.prepare_new_rss_message(m, site_data, True)
+                msg, template = await self.prepare_new_rss_message(m, "https://www.youtube.com", site_data, True, archive)
+                messages_to_post += msg
+                templates.append(template)
 
         for channel, message in messages_to_post:
             try:
@@ -605,11 +736,30 @@ class C4DE_Bot(commands.Bot):
                 await self.report_error(f"RSS: {message}", type(e), e)
 
         with open(EXTERNAL_RSS_CACHE, "w") as f:
-            f.writelines(json.dumps(self.external_rss_cache, indent=4))
+            f.writelines(json.dumps({k: {i: c[-150:] for i, c in v.items()} for k, v in self.external_rss_cache.items()}, indent=4))
 
-    async def prepare_new_rss_message(self, m: dict, site_data: dict, youtube: bool) -> List[Tuple[str, str]]:
-        log(f"Archiving URL: {m['url']}")
-        success, archivedate = archive_url(m["url"])
+        d = datetime.now().strftime("%Y-%m-%d")
+        try:
+            page = Page(self.site, f"Wookieepedia:Sources/Web/{datetime.now().year}")
+            text = page.get()
+            for t in templates:
+                text += f"\n*{d}: {t}"
+            if text != page.get():
+                page.put(text, "Adding new sources")
+        except Exception as e:
+            await self.report_error(f"RSS: Saving sources", type(e), e)
+        log("Completed external RSS check")
+
+    async def prepare_new_rss_message(self, m: dict, base_url: str, site_data: dict, youtube: bool, archive: dict) -> Tuple[List[Tuple[str, str]], str]:
+        target = m["url"].replace(base_url + "/", "")
+        already_archived = archive and archive.get(target)
+        if already_archived:
+            log(f"URL already archived and recorded: {m['url']}")
+            success, archivedate = True, archive[target]
+        else:
+            log(f"Archiving URL: {m['url']}")
+            success, archivedate = archive_url(m["url"])
+
         if youtube:
             t = f"New Video on the official {m['site']} YouTube channel"
         else:
@@ -618,10 +768,9 @@ class C4DE_Bot(commands.Bot):
         msg = "{0} **{1}:**    {2}\n- <{3}>".format(self.emoji_by_name(site_data["emoji"]), t, f, m["url"])
 
         include_archivedate = success
-        if success and site_data.get("addToArchive"):
+        if success and site_data.get("addToArchive") and not already_archived:
             try:
-                self.add_urls_to_archive(site_data["template"], m["url"].replace(site_data["baseUrl"] + "/", ""),
-                                         archivedate)
+                self.add_urls_to_archive(site_data["template"], target, archivedate)
                 include_archivedate = False
             except Exception as e:
                 await self.report_error(m["url"], type(e), e)
@@ -644,29 +793,31 @@ class C4DE_Bot(commands.Bot):
                     if f in msg.replace("-", "").lower() or f in m["content"].lower():
                         results.append((data["channel"], msg))
 
-        return results
+        return results, template
 
     @staticmethod
     def build_citation_template(msg: dict, youtube, site_data: dict, archivedate):
         t = msg['title'].replace("|", "&#124;")
+        x = msg.get('template') or site_data['template']
         if youtube:
-            result = f"{site_data['template']}|{msg['videoId']}|{t}"
+            result = f"{x}|{msg['videoId']}|{t}"
         else:
             url = msg["url"].replace(site_data["baseUrl"] + "/", "")
-            result = f"{site_data['template']}|url={url}|text={t}"
+            result = f"{x}|url={url}|text={t}"
         if archivedate:
             result += f"|archivedate={archivedate}"
         return "{{" + result + "}}"
 
-    def add_urls_to_archive(self, template, new_url, archivedate):
+    def get_archive_for_site(self, template):
         page = pywikibot.Page(self.site, f"Template:{template}/Archive")
         if page.exists():
-            text = page.get()
-            new_text = self.build_archive_template_text(text, new_url, archivedate)
-        else:
-            page = pywikibot.Page(self.site, f"Module:ArchiveAccess/{template}")
-            text = page.get()
-            new_text = self.build_archive_module_text(text, new_url, archivedate)
+            return page
+        return pywikibot.Page(self.site, f"Module:ArchiveAccess/{template}")
+
+    def add_urls_to_archive(self, template, new_url, archivedate):
+        page = self.get_archive_for_site(template)
+        text = page.get()
+        new_text = self.build_archive_template_text(page.title().startswith("Template"), text, new_url, archivedate)
 
         if text == new_text:
             return
@@ -677,22 +828,37 @@ class C4DE_Bot(commands.Bot):
             self.site.login()
             page.put("\n".join(new_text), f"Archiving {archivedate} for new URL: {new_url}")
 
+    def parse_archive(self, has_archive, template):
+        if has_archive:
+            page = self.get_archive_for_site(template)
+            if not page.exists():
+                return None
+            archive = {}
+            for u, d in re.findall("\[['\"](.*?)['\"]\] ?= ?['\"]?([0-9]+)['\"]?", page.get()):
+                archive[u] = d
+            return archive
+        return None
+
     @staticmethod
-    def build_archive_template_text(text, new_url, archivedate):
+    def build_archive_template_text(is_template, text, new_url, archivedate):
         special_start = "<!-- Start" in text
         new_text = []
-        found, start = False, False
+        found, start = False, False,
         u = new_url.replace("=", "{{=}}")
         for line in text.splitlines():
             if not start and special_start:
                 start = "<!-- Start" in line
             elif not start:
-                start = line.strip().startswith("|")
-            elif not found and f"| {u} = " in line:
+                start = line.strip().startswith("|" if is_template else "[")
+            elif not found and (f"['{u}']" in line or f"| {u} = " in line or f'["{u}"]' in line):
                 log(f"URL {u} is already archived")
                 return
             elif not found and u < line.strip()[1:].strip():
-                new_text.append(f"  | {u} = {archivedate}")
+                if is_template:
+                    new_text.append(f"  | {u} = {archivedate}")
+                else:
+                    z = u.replace("'", "\\'")
+                    new_text.append(f"  ['{z}'] = '{archivedate}'")
                 found = True
             new_text.append(line)
 

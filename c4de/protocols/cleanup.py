@@ -179,7 +179,6 @@ def check_preload_for_missing_fields(site, template: Page, apply: bool):
                 continue
             elif field not in required:
                 missing_from_check.append(field)
-            print(field)
             missing_from_preload.append(field)
             order[previous] = field
         previous = f"|{field.strip()}="

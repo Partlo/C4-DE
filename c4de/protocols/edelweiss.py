@@ -33,7 +33,6 @@ def build_driver(headless=True):
         return Chrome(chrome_options=options, executable_path="C:/Users/Michael/Documents/Drivers/chromedriver")
 
 
-
 def extract_isbns(title, text, data):
     if re.search("\[\[Category:.*?authors[|\]]", text):
         return
@@ -284,6 +283,7 @@ def analyze_products(site, products: List[dict], search_terms):
     processed = set()
 
     results = {"newItems": [], "newDates": [], "newImages": [], "reprints": [], "unknown": []}
+    reprints = {}
     new_missing_images = []
     for item in products:
         try:
@@ -338,6 +338,9 @@ def analyze_products(site, products: List[dict], search_terms):
                 arc = archive_sku(item['sku'])
                 if page_date < datetime.now():
                     results["reprints"].append(f"{title}: {item['isbn']} - {url}{arc}")
+                    if page.title() not in reprints:
+                        reprints[page.title()] = []
+                    reprints[page.title()].append(item)
                 elif by_isbn and dupe:
                     log(f"{title}: Duplicate listing {item['isbn']} has publication date {item['publicationDate']}")
                 elif by_isbn:
@@ -348,7 +351,8 @@ def analyze_products(site, products: List[dict], search_terms):
             error_log(item['title'], type(e), e)
 
     save_products_missing_images(new_missing_images)
-    return results
+    reprint_messages = save_reprints(site, reprints)
+    return results, reprint_messages
 
 
 def run_edelweiss_protocol(site, scheduled=False):
@@ -361,17 +365,17 @@ def run_edelweiss_protocol(site, scheduled=False):
             products += extract_items_from_edelweiss(driver, term, sku_list)
         except Exception as e:
             error_log(type(e), e)
-            return [f"Error encountered during Edelweiss protocol: {type(e)} - {e}"]
+            return [f"Error encountered during Edelweiss protocol: {type(e)} - {e}"], []
         driver.get("https://google.com")
     driver.close()
 
     log(f"Processing {len(products)} products")
 
     try:
-        analysis_results = analyze_products(site, products, search_terms)
+        analysis_results, reprints = analyze_products(site, products, search_terms)
     except Exception as e:
         error_log(type(e), e)
-        return [f"Error encountered during Edelweiss protocol: {type(e)} - {e}"]
+        return [f"Error encountered during Edelweiss protocol: {type(e)} - {e}"], []
 
     messages = []
     headers = {"newItems": "New Listings:", "newDates": "New Publication Dates:", "newImages": "New Cover Images:",
@@ -390,4 +394,68 @@ def run_edelweiss_protocol(site, scheduled=False):
     elif scheduled:
         messages.append(f"No updates found in Edelweiss catalog during scheduled run for {datetime.now().strftime('%B %d, %Y')}")
 
-    return messages
+    return messages, reprints
+
+
+def save_reprints(site, reprints: Dict[str, List[dict]]):
+    results = []
+    for title, entries in reprints.items():
+        try:
+            r = save_reprint(site, title, entries)
+            if r:
+                results.append(r)
+        except Exception as e:
+            error_log(type(e), e)
+    return results
+
+
+def save_reprint(site, title, entries: List[dict]):
+    page = Page(site, title)
+    text = page.get()
+    if "==Editions==" in text:
+        i_header, international = "", ""
+        before, split1, after = re.split("(=+Editions=+\n)", text)
+        if re.search("=+[A-z]* ?[Gg]allery=+", after):
+            section, split2, after = re.split("(\n=+[A-z]* ?gallery=+)", after, 1)
+        elif re.search("\n==[A-Z]", after):
+            section, split2, after = re.split("(\n==[A-z].*?==)", after, 1)
+        else:
+            return f"- Cannot add {len(entries)} new reprints to {page.title()} due to malformed Editions section"
+
+        if "===" in section:
+            section, i_header, international = re.split("(\n=+.*?=+)", section, 1)
+
+        section = section.rstrip()
+        for e in entries:
+            template = "{{" + f"Edelweiss|url=#sku={e['sku']}|text={e['title']}|nobackup=1" + "}}"
+            section += f"\n*{{{{ISBN|{e['isbn']}}}}}; {e['publicationDate']}; {e['publisher']}; {e['format']}<ref name=\"Edelweiss-{e['sku']}\">{template}</ref>"
+        section += "\n"
+
+        new_text = "".join([before, split1, section, i_header, international, split2, after])
+        page.put(new_text, f"Adding {len(entries)} new reprints to Editions")
+
+    elif re.search("=+[A-z]* ?[Gg]allery=+", text):
+        before, split, after = re.split("(=+[A-z]* ?[Gg]allery=+\n)", text)
+        lines = []
+        if "==Media==" in before:
+            pass
+        else:
+            lines.append("==Media==")
+            lines.append("===Editions===")
+            d = re.search("\|release date ?= ?\*?([\[\]A-Za-z, 0-9/]+)", text)
+            date = ("; " + d.group(1)) if d else ""
+            p = re.search("\|publisher ?= ?\*?([\[\]A-Za-z., 0-9/]+)", text)
+            pub = ("; " + p.group(1)) if p else ""
+            for i in re.findall("\|isbn[23]? ?= ?([0-9-]+)", text):
+                lines.append(f"\n*{{{{ISBN|{i}}}}}{date}{pub}")
+
+            for e in entries:
+                template = "{{" + f"Edelweiss|url=#sku={e['sku']}|text={e['title']}|nobackup=1" + "}}"
+                lines.append(f"\n*{{{{ISBN|{e['isbn']}}}}}; {e['publicationDate']}; {e['publisher']}; {e['format']}<ref name=\"Edelweiss-{e['sku']}\">{template}</ref>")
+            lines.append("")
+            lines.append("===Cover gallery===")
+        new_text = "".join([before, "\n".join(lines), after])
+        page.put(new_text, f"Creating Editions section and adding {len(entries)} new reprints")
+
+    else:
+        return f"- Cannot add {len(entries)} new reprints to {page.title()} due to lack of Editions and/or Media subsection"
