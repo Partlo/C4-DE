@@ -69,3 +69,11 @@
 **Various bug fixes
 **Stopping repeat archiving of URLs already recorded in the archive
 **Further reporting of CSDs
+*'''3.0.0''': June 22, 2023
+**First build of the appearances/sources analyzer
+*'''3.0.1''': June 29, 2023
+**Further refinements of the Source Engine
+*'''3.0.2''': June 30, 2023
+**Second beta of the Source Engine, opening it up for use on Canon articles
+*'''3.0.3''': June 30, 2023
+**Fixed handling of SWCT, and added (untested) support for oldversion links

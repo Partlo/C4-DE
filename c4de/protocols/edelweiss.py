@@ -153,7 +153,7 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
                 else:
                     sku_list.append(sku)
                 title = item.find_element_by_css_selector(".pve_title span.textLarge").text
-                if search_term not in item.get_attribute("innerHTML"):
+                if search_term.lower() not in item.get_attribute("innerHTML").lower():
                     log(f"{search_term} not mentioned in {title}; skipping")
                     continue
 

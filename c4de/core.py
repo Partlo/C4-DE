@@ -27,6 +27,8 @@ from c4de.protocols.cleanup import archive_stagnant_senate_hall_threads, remove_
 from c4de.protocols.edelweiss import run_edelweiss_protocol, calculate_isbns_for_all_pages
 from c4de.protocols.rss import check_rss_feed, check_latest_url, check_wookieepedia_feeds, check_sw_news_page, \
     check_review_board_nominations, check_policy, check_consensus_track_duration, check_user_rights_nominations
+from c4de.sources.analysis import analyze_target_page
+from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap
 from c4de.data.filenames import INTERNAL_RSS_CACHE, EXTERNAL_RSS_CACHE, BOARD_CACHE
 
 
@@ -112,6 +114,10 @@ class C4DE_Bot(commands.Bot):
         self.project_data = {}
         self.files_to_be_renamed = []
 
+        self.appearances = None
+        self.sources = None
+        self.remap = None
+
     def reload_site(self):
         self.site = Site(user="C4-DE Bot")
         self.site.login()
@@ -156,6 +162,7 @@ class C4DE_Bot(commands.Bot):
             self.check_spoiler_templates.start()
             self.load_isbns.start()
             self.check_edelweiss.start()
+            await self.build_sources()
             log("Startup process completed.")
             self.ready = True
 
@@ -279,6 +286,16 @@ class C4DE_Bot(commands.Bot):
 
         if "ghost touch" in message.content.lower():
             await self.ghost_touch(message)
+            return
+
+        if "rebuild sources" in message.content.lower():
+            await self.build_sources()
+            await message.add_reaction(THUMBS_UP)
+            return
+
+        match = self.is_analyze_source_command(message)
+        if match:
+            await self.handle_analyze_source_command(message, match)
             return
 
         if "spoiler" in message.content.lower():
@@ -485,6 +502,46 @@ class C4DE_Bot(commands.Bot):
         await message.remove_reaction(TIMER, self.user)
         await message.add_reaction(THUMBS_UP)
 
+    async def build_sources(self):
+        try:
+            self.appearances = load_full_appearances(self.site, True)
+            self.sources = load_full_sources(self.site, True)
+            self.remap = load_remap(self.site)
+        except Exception as e:
+            await self.report_error("Sources rebuild", type(e), e)
+
+    @staticmethod
+    def is_analyze_source_command(message: Message):
+        match = re.search("(analy[zs]e|build) sources (for )?(?P<article>.*?)$", message.content)
+        if match:
+            return match.groupdict()
+        return None
+
+    async def handle_analyze_source_command(self, message: Message, command: dict):
+        target = Page(self.site, command['article'])
+        if not target.exists():
+            await message.add_reaction(EXCLAMATION)
+            await message.channel.send(f"{command['article']} cannot be found")
+            return
+        # cats = [c.title() for c in target.categories()]
+        # if "Category:Legends articles" not in cats:
+        #     await message.add_reaction(EXCLAMATION)
+        #     await message.channel.send(f"{command['article']} is not a Legends article; cannot analyze yet.")
+        #     return
+
+        try:
+            await message.add_reaction(TIMER)
+            results = analyze_target_page(self.site, target, self.appearances, self.sources, self.remap, save=True, include_date=False)
+            await message.remove_reaction(TIMER, self.user)
+            await message.add_reaction(THUMBS_UP)
+            for o in results:
+                await message.channel.send(o)
+        except Exception as e:
+            await self.report_error("Sources rebuild", type(e), e)
+            await message.remove_reaction(TIMER, self.user)
+            await message.add_reaction(EXCLAMATION)
+            await message.channel.send("Encountered error while analyzing page")
+
     @tasks.loop(hours=4)
     async def check_senate_hall_threads(self):
         archive_stagnant_senate_hall_threads(self.site, self.timezone_offset)
@@ -638,10 +695,13 @@ class C4DE_Bot(commands.Bot):
                     update.append(message_id)
 
             for message in await self.text_channel(ADMIN_HELP).history(limit=200).flatten():
-                if message.id in update:
-                    await message.edit(content=f"~~{message.content}~~ (completed)")
-                    self.admin_messages.pop(message.id)
-                    update.remove(message.id)
+                try:
+                    if message.id in update:
+                        await message.edit(content=f"~~{message.content}~~ (completed)")
+                        self.admin_messages.pop(message.id)
+                        update.remove(message.id)
+                except Exception as e:
+                    await self.report_error(f"Deleted Pages: {e}", type(e), e)
 
             if update:
                 log(f"Could not find messages {update} in #admin-help to update")
