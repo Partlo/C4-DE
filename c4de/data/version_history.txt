@@ -27,6 +27,7 @@
 **Fixing an issue with Spoiler template removal
 *'''1.3.2''': February 10, 2022
 **Fixing issues with Edelweiss protocol
+
 *'''2.0.0''': November 5, 2022
 **Incorporated Wookieepedia RSS feeds as a replacement for RSSBot
 *'''2.0.1''': November 5, 2022
@@ -69,6 +70,7 @@
 **Various bug fixes
 **Stopping repeat archiving of URLs already recorded in the archive
 **Further reporting of CSDs
+
 *'''3.0.0''': June 22, 2023
 **First build of the appearances/sources analyzer
 *'''3.0.1''': June 29, 2023
@@ -77,3 +79,5 @@
 **Second beta of the Source Engine, opening it up for use on Canon articles
 *'''3.0.3''': June 30, 2023
 **Fixed handling of SWCT, and added (untested) support for oldversion links
+*'''3.0.4''': June 30, 2023
+**Removing date comments, minor tweaks, and replacing dashes with unicode

@@ -157,15 +157,22 @@ def has_month_in_date(x: ItemId):
 def build_new_section(found: List[ItemId], cards: Dict[str, List[ItemId]], set_ids: Dict[str, str], should_sort: bool,
                       dates: list, include_date: bool, log):
     source_names = {}
+    urls = {}
     by_original_index = {o.current.index: o for o in found if o.current.index is not None}
     missing = []
     new_found = []
     for o in found:
-        t = o.current.target.split("(")[0].strip() if o.current.target else None
-        if t and t not in source_names:
-            source_names[t] = []
         if o.current.target:
+            t = o.current.target.split("(")[0].strip() if o.current.target else None
+            if t and t not in source_names:
+                source_names[t] = []
             source_names[t].append(o)
+        if o.current.url:
+            u = f"{o.current.template}|{o.current.url}"
+            if u in urls:
+                print(f"Skipping duplicate entry: {u}")
+            else:
+                urls[u] = o
         if o.master.has_date():
             if o.current.index is None:
                 print(f"No index? {o.current.original}, {o.master.original}")
@@ -182,7 +189,7 @@ def build_new_section(found: List[ItemId], cards: Dict[str, List[ItemId]], set_i
             missing.append(o)
 
     if should_sort:
-        found = sorted(new_found, key=lambda a: (a.master.date, (a.current.text if a.current.mode == "DB" else a.current.original).replace("''", "").replace("|", " |")))
+        found = sorted(new_found, key=lambda a: (a.master.date, (a.current.text if a.current.mode == "DB" else a.current.original).replace("''", "").replace("|", " |").replace("}}", " }}").lower()))
         for m in missing:
             if m.master.date == "Canceled":
                 found.append(m)
@@ -247,13 +254,13 @@ def build_new_section(found: List[ItemId], cards: Dict[str, List[ItemId]], set_i
             if len(set_cards) > 1:
                 new_text.append("}}")
         else:
-            if o.use_original_text:
-                z = f"*{d}{o.current.original}{o.current.extra}"
-            else:
-                z = f"*{d}{o.master.original}{o.current.extra}"
+            zt = o.current.original if o.use_original_text else o.master.original
+            zt = re.sub("<!--[ 0-9/X-]+-->", "", zt)
+            z = f"*{d}{zt}{o.current.extra}"
             if z.startswith("**"):
                 z = z[1:]
             z = re.sub("(\|book=.*?)(\|story=.*?)(\|.*?)?}}", "\\2\\1\\3}}", z)
+            z = z.replace("–", "&ndash;").replace("—", "&mdash;")
             if z in new_text:
                 if log:
                     print(f"Skipping duplicate {z}")
@@ -325,7 +332,7 @@ def analyze_target_page(site: Site, target: Page, appearances: FullListData, sou
             nc_sources_pieces = nc_sources_section.split("==", 1)
             nc_sources_section = nc_sources_pieces[0]
             ncs_after = ("==" + nc_sources_pieces[1]) if len(nc_sources_pieces) > 1 else ''
-            ncs, ncs_pre, ncs_pre = parse_section(nc_sources_section, False, unknown, log)
+            ncs, ncs_pre, ncs_suf = parse_section(nc_sources_section, False, unknown, log)
             if log:
                 print(f"Non-Canon Sources: {len(ncs)} --> {len(set(i.unique_id() for i in ncs))}")
 

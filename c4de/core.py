@@ -512,28 +512,25 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def is_analyze_source_command(message: Message):
-        match = re.search("(analy[zs]e|build) sources (for )?(?P<article>.*?)$", message.content)
+        match = re.search("(analy[zs]e|build) sources (for )?(?P<article>.*?)(?P<date> with dates?)?$", message.content)
         if match:
             return match.groupdict()
         return None
 
     async def handle_analyze_source_command(self, message: Message, command: dict):
         target = Page(self.site, command['article'])
+        rev_id = target.latest_revision_id
+        use_date = command.get('date') is not None
         if not target.exists():
             await message.add_reaction(EXCLAMATION)
             await message.channel.send(f"{command['article']} cannot be found")
             return
-        # cats = [c.title() for c in target.categories()]
-        # if "Category:Legends articles" not in cats:
-        #     await message.add_reaction(EXCLAMATION)
-        #     await message.channel.send(f"{command['article']} is not a Legends article; cannot analyze yet.")
-        #     return
 
         try:
             await message.add_reaction(TIMER)
-            results = analyze_target_page(self.site, target, self.appearances, self.sources, self.remap, save=True, include_date=False)
+            results = analyze_target_page(self.site, target, self.appearances, self.sources, self.remap, save=True, include_date=use_date)
             await message.remove_reaction(TIMER, self.user)
-            await message.add_reaction(THUMBS_UP)
+            await message.channel.send(f"Completed: <{target.full_url()}?diff=next&oldid={rev_id}>")
             for o in results:
                 await message.channel.send(o)
         except Exception as e:

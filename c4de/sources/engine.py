@@ -433,9 +433,13 @@ def determine_id_for_item(o: Item, data: Dict[str, Item], by_target: Dict[str, L
 
     # Template-specific matching
     if o.template == "SWCT" and o.card:
+        matches = []
         for s, x in data.items():
             if x.template == "SWCT" and x.card and x.card in o.card:
-                return ItemId(o, x, True, False)
+                matches.append(x)
+        if matches:
+            x = sorted(matches, key=lambda a: len(a.card))[-1]
+            return ItemId(o, x, True, False)
     elif o.template == "LEGOCite" and o.special:
         for s, x in data.items():
             if o.template == "LEGOCite" and x.special == o.special:
