@@ -81,3 +81,8 @@
 **Fixed handling of SWCT, and added (untested) support for oldversion links
 *'''3.0.4''': June 30, 2023
 **Removing date comments, minor tweaks, and replacing dashes with unicode
+*'''3.0.5''': July 1, 2023
+**Relying on Masterlist index for sorting, and other minor tweaks
+*'''3.1.0''': July 1, 2023
+**News feed coverage of AtomicMassGames.com
+**The Sources Engine will now automatically scan Category:Future products every day at 7 AM, and update the Sources Project pages with new items and changed ates. As always, let Cade know if you see anything weird.

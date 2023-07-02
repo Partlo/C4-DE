@@ -172,6 +172,9 @@ class ItemId:
         self.from_other_data = from_other_data
         self.wrong_continuity = wrong_continuity
 
+    def sort_text(self):
+        return (self.current.text if self.current.mode == "DB" else self.current.original).replace("''", "").replace('"', '').replace("|", " |").replace("}}", " }}").lower()
+
 
 def extract_item(z: str, a: bool, page, master=False):
     """ Extracts an Item object from the given source/appearance line, parsing out the target article and all other
@@ -631,7 +634,7 @@ def load_appearances(site, log):
                 x = re.search("[\*#](.*?): (.*?)$", line)
                 if x:
                     i += 1
-                    data.append({"page": sp, "date": x.group(1), "item": x.group(2), "canon": "/Canon" in sp, "extra": "/Extra" in sp})
+                    data.append({"index": i, "page": sp, "date": x.group(1), "item": x.group(2), "canon": "/Canon" in sp, "extra": "/Extra" in sp})
                 else:
                     print(f"Cannot parse line: {line}")
         if log:
@@ -650,7 +653,7 @@ def load_source_lists(site, log):
                 x = re.search("[\*#](.*?): (D: )?(.*?)( {{C\|d: .*?}})?$", line)
                 if x:
                     i += 1
-                    data.append({"page": sp, "date": x.group(1), "item": x.group(3), "canon": None if sp == "CardSets" else "Canon" in sp})
+                    data.append({"index": i, "page": sp, "date": x.group(1), "item": x.group(3), "canon": None if sp == "CardSets" else "Canon" in sp})
                 else:
                     print(f"Cannot parse line: {line}")
         if log:
@@ -666,7 +669,7 @@ def load_source_lists(site, log):
                 x = re.search("\*(.*?): (.*?)( †)?( {{C\|alternate: (.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
                 if x:
                     i += 1
-                    data.append({"page": f"Web/{y}", "date": x.group(1), "item": x.group(2), "alternate": x.group(5)})
+                    data.append({"index": i, "page": f"Web/{y}", "date": x.group(1), "item": x.group(2), "alternate": x.group(5)})
                 else:
                     print(f"Cannot parse line: {line}")
             if log:
@@ -680,7 +683,7 @@ def load_source_lists(site, log):
         x = re.search("\*Current: (.*?)( †)?( {{C\|alternate: (.*?)}})?$", line)
         if x:
             i += 1
-            data.append({"page": "Web/Current", "date": "Current", "item": x.group(1), "alternate": x.group(4)})
+            data.append({"index": i, "page": "Web/Current", "date": "Current", "item": x.group(1), "alternate": x.group(4)})
         else:
             print(f"Cannot parse line: {line}")
     if log:
@@ -694,7 +697,7 @@ def load_source_lists(site, log):
         x = re.search("\*.*?:( [0-9:-]+)? (.*?)( †)?( {{C\|alternate: (.*?)}})?$", line)
         if x:
             i += 1
-            data.append({"page": "Web/Unknown", "date": "Unknown", "item": x.group(2), "alternate": x.group(5)})
+            data.append({"index": i, "page": "Web/Unknown", "date": "Unknown", "item": x.group(2), "alternate": x.group(5)})
         else:
             print(f"Cannot parse line: {line}")
     if log:
@@ -708,7 +711,7 @@ def load_source_lists(site, log):
             if line.startswith("*{{"):
                 x = line.strip()[1:]
                 i += 1
-                data.append({"page": f"Web/{template}", "date": date, "item": x})
+                data.append({"index": 0, "page": f"Web/{template}", "date": date, "item": x})
             else:
                 print(f"Cannot parse line: {line}")
         if log:
@@ -755,6 +758,7 @@ def load_full_sources(site, log) -> FullListData:
                     x.target = x.card
                 x.canon = i.get('canon')
                 x.date = i['date']
+                x.index = i['index']
                 x.extra = c
                 x.alternate_url = i.get('alternate')
                 full_sources[x.full_id()] = x
@@ -790,6 +794,7 @@ def load_full_appearances(site, log) -> FullListData:
             if x:
                 x.canon = i.get('canon')
                 x.date = i['date']
+                x.index = i['index']
                 x.extra = c
                 full_appearances[x.full_id()] = x
                 unique_appearances[x.unique_id()] = x

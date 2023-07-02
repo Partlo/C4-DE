@@ -310,33 +310,39 @@ def analyze_products(site, products: List[dict], search_terms):
                 title = f"*{page.title()}*"
 
             text = page.get()
-            date_str = None
-            m = re.search("\|(publish date|publication date|release date|released|published)=(.*?)[<\n{]", text)
+            date_strs = []
+            m = re.search("\|(publish date|publication date|release date|released|published)=(.*?)(<.*?)?\n(\*(.*?)(<.*?)?\n)*", text)
             if m:
-                date_str = m.group(2).replace("[", "").replace("]", "").replace("*", "").strip()
-                date_str = re.sub("([A-z]+ [0-9]+) ([0-9]+)", "\\1, \\2", date_str)
+                date1 = m.group(2).replace("[", "").replace("]", "").replace("*", "").strip()
+                date_strs.append(re.sub("([A-z]+ [0-9]+) ([0-9]+)", "\\1, \\2", date1))
+                if m.group(5):
+                    date2 = m.group(5).replace("[", "").replace("]", "").replace("*", "").strip()
+                    date_strs.append(re.sub("([A-z]+ [0-9]+) ([0-9]+)", "\\1, \\2", date2))
 
-            if not date_str and " 202" not in item.get("publicationDate", ""):
+            if not date_strs and " 202" not in item.get("publicationDate", ""):
                 log(f"{page.title()} has a release date of {item.get('publicationDate')}")
                 continue
-            elif not date_str:
+            elif not date_strs:
                 log(f"No release date found in {page.title()}")
                 continue
             elif not item.get("publicationDate"):
                 log(f"No publication date found for {item['title']}")
                 continue
-            page_date = datetime.strptime(date_str, "%B %d, %Y")
+            page_dates = []
+            for d in date_strs:
+                page_dates.append(datetime.strptime(d, "%B %d, %Y"))
             item_date = datetime.strptime(item["publicationDate"], "%B %d, %Y")
 
+            past = any([d < datetime.now() for d in page_dates])
             if item["sku"] in missing_images and item["hasImage"]:
                 results["newImages"].append(f"{title} - {url}{archive_sku(item['sku'])}")
-            elif page_date == item_date:
+            elif any([d == item_date for d in page_dates]):
                 log(f"No date changes found for {page.title()}")
-            elif page_date < datetime.now() and by_isbn:
+            elif past and by_isbn:
                 log(f"Reprint {item['isbn']} already recorded on {page.title()}")
             else:
                 arc = archive_sku(item['sku'])
-                if page_date < datetime.now():
+                if past:
                     results["reprints"].append(f"{title}: {item['isbn']} - {url}{arc}")
                     if page.title() not in reprints:
                         reprints[page.title()] = []
@@ -344,7 +350,7 @@ def analyze_products(site, products: List[dict], search_terms):
                 elif by_isbn and dupe:
                     log(f"{title}: Duplicate listing {item['isbn']} has publication date {item['publicationDate']}")
                 elif by_isbn:
-                    results["newDates"].append(f"{title}: {item['publicationDate']} (formerly {date_str}){arc}")
+                    results["newDates"].append(f"{title}: {item['publicationDate']} (formerly {date_strs[0]}){arc}")
                 else:
                     results["unknown"].append(f"Different publication dates found for {title}, but no ISBN - {url}{arc}")
         except Exception as e:

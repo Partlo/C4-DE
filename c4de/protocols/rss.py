@@ -188,7 +188,8 @@ def check_sw_news_page(feed_url, cache: Dict[str, List[str]], title_regex):
     page_html = requests.get(feed_url).content
     soup = BeautifulSoup(page_html, "html.parser")
 
-    site_cache = cache.get("StarWars.com")
+    site = "StarWars.com"
+    site_cache = cache.get(site)
     today = datetime.now().strftime("%B %d, %Y")
 
     initial_entries = []
@@ -231,18 +232,51 @@ def check_sw_news_page(feed_url, cache: Dict[str, List[str]], title_regex):
                 if e.get("date") and today not in e["date"]:
                     continue
             else:
-                cache["StarWars.com"].append(e["url"])
+                cache[site].append(e["url"])
 
+            d = None
+            try:
+                d = datetime.strptime("%B %d, %Y", e['date']).strftime("%Y-%m-%d") if e.get('date') else None
+            except Exception:
+                pass
             content = get_content_from_sw_article(r_text)
-            u = e["url"].split("starwars.com/", 1)[1]
-            cite = f"*{d}: {{{{SW|url={u}|text={e['title']}}}}}"
-            final_entries.append({"site": "StarWars.com", "title": title, "url": e["url"], "content": content,
-                                  "cite": cite})
+            final_entries.append({"site": site, "title": title, "url": e["url"], "content": content, "date": d})
         except Exception as e:
             error_log(type(e), e)
 
     # cache["StarWars.com"] = cache["StarWars.com"][-100:]
     return final_entries
+
+
+def check_blog_list(url, feed_url, cache: Dict[str, List[str]]):
+    site = "AtomicMassGames.com"
+    x = None
+    try:
+        x = requests.get(feed_url, timeout=15).text
+    except Exception as e:
+        error_log(e)
+    if not x:
+        return []
+
+    soup = BeautifulSoup(x, "html.parser")
+    results = []
+
+    for article in reversed(soup.find_all("article")):
+        link = article.find("a", class_="u-url")
+        if not link:
+            continue
+        u = url + link.get('href')
+        if cache[site] and u in cache[site]:
+            continue
+
+        d = article.find("time", class_="dt-published")
+        results.append({"site": site, "title": link.text, "url": u, "content": "", "date": d.get('href') if d else None})
+        cache[site].append(u)
+
+    if cache.get(site):
+        cache[site] = cache[site][-20:]
+
+    return results
 
 
 def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, check_star_wars):
@@ -290,7 +324,7 @@ def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, che
             log(f"Skipping non-Star Wars post: {title} --> {e.link}")
             continue
         template = None
-        if content and "This week in Star Wars" in content:
+        if content and "this week in" in content.lower():
             template = "ThisWeek"
 
         entries_to_report.append({"site": site, "title": title, "url": e.link, "content": content,

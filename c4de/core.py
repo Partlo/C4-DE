@@ -26,10 +26,12 @@ from c4de.protocols.cleanup import archive_stagnant_senate_hall_threads, remove_
     check_preload_for_missing_fields, check_infobox_category
 from c4de.protocols.edelweiss import run_edelweiss_protocol, calculate_isbns_for_all_pages
 from c4de.protocols.rss import check_rss_feed, check_latest_url, check_wookieepedia_feeds, check_sw_news_page, \
-    check_review_board_nominations, check_policy, check_consensus_track_duration, check_user_rights_nominations
+    check_review_board_nominations, check_policy, check_consensus_track_duration, check_user_rights_nominations, \
+    check_blog_list
+
 from c4de.sources.analysis import analyze_target_page
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap
-from c4de.data.filenames import INTERNAL_RSS_CACHE, EXTERNAL_RSS_CACHE, BOARD_CACHE
+from c4de.sources.updates import get_future_products_list, handle_results
 
 
 SELF = 880096997217013801
@@ -113,6 +115,7 @@ class C4DE_Bot(commands.Bot):
         self.overdue_cts = []
         self.project_data = {}
         self.files_to_be_renamed = []
+        self.source_rev_ids = {}
 
         self.appearances = None
         self.sources = None
@@ -146,6 +149,7 @@ class C4DE_Bot(commands.Bot):
             info = report_version_info(self.site, self.version)
             if info:
                 await self.text_channel(ANNOUNCEMENTS).send(info)
+                await self.text_channel(COMMANDS).send(info)
         except Exception as e:
             error_log(type(e), e)
 
@@ -160,6 +164,8 @@ class C4DE_Bot(commands.Bot):
             self.check_external_rss.start()
             self.check_senate_hall_threads.start()
             self.check_spoiler_templates.start()
+            self.check_future_products.start()
+            self.check_for_sources_rebuild.start()
             self.load_isbns.start()
             self.check_edelweiss.start()
             await self.build_sources()
@@ -322,6 +328,11 @@ class C4DE_Bot(commands.Bot):
     def list_commands(self):
         text = [
             f"Current C4DE Commands (v. {self.version}):",
+            f"- **@C4-DE analyze sources for <article> (with date)** - runs the target article through the Source "
+            f"Engine, sorting sources and appearances and standardizing formatting. Including 'with date' will cause it"
+            f"it include the release date in comments.",
+            f"- **@C4-DE rebuild sources** - rebuilds the Source Engine's internal data from the Sources Project pages "
+            f"on Wookieepedia."
             f"- **@C4-DE reload data** - reloads data from User:C4-DE/RSS and User:JocastaBot/Project Data",
             f"- **@C4-DE Edelweiss** - analyzes Edelweiss publishing catalog and reports new items or changes"
             f" (runs at 8 AM CST)",
@@ -504,15 +515,30 @@ class C4DE_Bot(commands.Bot):
 
     async def build_sources(self):
         try:
-            self.appearances = load_full_appearances(self.site, True)
-            self.sources = load_full_sources(self.site, True)
+            for p in Category(self.site, "Category:Wookieepedia Sources Project").articles():
+                self.source_rev_ids[p.title()] = p.latest_revision_id
+            self.appearances = load_full_appearances(self.site, False)
+            self.sources = load_full_sources(self.site, False)
             self.remap = load_remap(self.site)
+        except Exception as e:
+            await self.report_error("Sources rebuild", type(e), e)
+
+    def have_sources_changed(self):
+        for p in Category(self.site, "Category:Wookieepedia Sources Project").articles():
+            if p.title() in self.source_rev_ids and p.latest_revision_id != self.source_rev_ids[p.title()]:
+                return True
+
+    @tasks.loop(minutes=30)
+    async def check_for_sources_rebuild(self):
+        try:
+            if self.have_sources_changed():
+                await self.build_sources()
         except Exception as e:
             await self.report_error("Sources rebuild", type(e), e)
 
     @staticmethod
     def is_analyze_source_command(message: Message):
-        match = re.search("(analy[zs]e|build) sources (for )?(?P<article>.*?)(?P<date> with dates?)?$", message.content)
+        match = re.search("(analy[zs]e|build) sources (for )?(?P<article>.*?)(?P<date> with dates?)?(?P<text> (by|and|with) text)?$", message.content)
         if match:
             return match.groupdict()
         return None
@@ -521,6 +547,7 @@ class C4DE_Bot(commands.Bot):
         target = Page(self.site, command['article'])
         rev_id = target.latest_revision_id
         use_date = command.get('date') is not None
+        use_index = command.get('text') is None
         if not target.exists():
             await message.add_reaction(EXCLAMATION)
             await message.channel.send(f"{command['article']} cannot be found")
@@ -528,16 +555,33 @@ class C4DE_Bot(commands.Bot):
 
         try:
             await message.add_reaction(TIMER)
-            results = analyze_target_page(self.site, target, self.appearances, self.sources, self.remap, save=True, include_date=use_date)
+            results = analyze_target_page(self.site, target, self.appearances, self.sources, self.remap, save=True,
+                                          include_date=use_date, use_index=use_index)
             await message.remove_reaction(TIMER, self.user)
-            await message.channel.send(f"Completed: <{target.full_url()}?diff=next&oldid={rev_id}>")
+
+            rev = next(target.revisions(content=False, total=1))
+            if rev.revid == rev_id:
+                await message.channel.send(f"No changes made to article")
+            else:
+                await message.channel.send(f"Completed: <{target.full_url()}?diff=next&oldid={rev_id}>")
             for o in results:
                 await message.channel.send(o)
         except Exception as e:
-            await self.report_error("Sources rebuild", type(e), e)
+            await self.report_error("Analyze sources", type(e), e)
             await message.remove_reaction(TIMER, self.user)
             await message.add_reaction(EXCLAMATION)
             await message.channel.send("Encountered error while analyzing page")
+
+    @tasks.loop(hours=1)
+    async def check_future_products(self):
+        if datetime.now().hour != 5:
+            return
+        try:
+            results = get_future_products_list(self.site)
+            handle_results(self.site, results)
+            await self.build_sources()
+        except Exception as e:
+            await self.report_error("Future products", type(e), e)
 
     @tasks.loop(hours=4)
     async def check_senate_hall_threads(self):
@@ -762,6 +806,8 @@ class C4DE_Bot(commands.Bot):
             try:
                 if site == "StarWars.com":
                     messages = check_sw_news_page(site_data["url"], self.external_rss_cache["sites"], site_data["title"])
+                elif site == "AtomicMassGames.com":
+                    messages = check_blog_list(site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
                 elif site_data.get("url"):
                     messages = check_latest_url(site_data["url"], self.external_rss_cache["sites"], site, site_data["title"])
                 else:
@@ -770,9 +816,9 @@ class C4DE_Bot(commands.Bot):
 
                 archive = self.parse_archive(site_data.get("addToArchive"), site_data["template"])
                 for m in reversed(messages):
-                    msg, template = await self.prepare_new_rss_message(m, site_data["baseUrl"], site_data, False, archive)
+                    msg, d, template = await self.prepare_new_rss_message(m, site_data["baseUrl"], site_data, False, archive)
                     messages_to_post += msg
-                    templates.append(template)
+                    templates.append((d, template))
             except Exception as e:
                 error_log(f"Encountered {type(e)} while checking RSS for {site}", e)
 
@@ -782,9 +828,9 @@ class C4DE_Bot(commands.Bot):
                 f"https://www.youtube.com/feeds/videos.xml?channel_id={site_data['channelId']}",
                 self.external_rss_cache["YouTube"], site, "<h1 class=\"title.*?><.*?>(.*?)</.*?></h1>", site_data.get("sw"))
             for m in reversed(messages):
-                msg, template = await self.prepare_new_rss_message(m, "https://www.youtube.com", site_data, True, archive)
+                msg, d, template = await self.prepare_new_rss_message(m, "https://www.youtube.com", site_data, True, archive)
                 messages_to_post += msg
-                templates.append(template)
+                templates.append((d, template))
 
         for channel, message in messages_to_post:
             try:
@@ -795,19 +841,19 @@ class C4DE_Bot(commands.Bot):
         with open(EXTERNAL_RSS_CACHE, "w") as f:
             f.writelines(json.dumps({k: {i: c[-150:] for i, c in v.items()} for k, v in self.external_rss_cache.items()}, indent=4))
 
-        d = datetime.now().strftime("%Y-%m-%d")
+        nd = datetime.now().strftime("%Y-%m-%d")
         try:
             page = Page(self.site, f"Wookieepedia:Sources/Web/{datetime.now().year}")
             text = page.get()
-            for t in templates:
-                text += f"\n*{d}: {t}"
+            for d, t in templates:
+                text += f"\n*{d or nd}: {t}"
             if text != page.get():
                 page.put(text, "Adding new sources")
         except Exception as e:
             await self.report_error(f"RSS: Saving sources", type(e), e)
         log("Completed external RSS check")
 
-    async def prepare_new_rss_message(self, m: dict, base_url: str, site_data: dict, youtube: bool, archive: dict) -> Tuple[List[Tuple[str, str]], str]:
+    async def prepare_new_rss_message(self, m: dict, base_url: str, site_data: dict, youtube: bool, archive: dict) -> Tuple[List[Tuple[str, str]], str, str]:
         target = m["url"].replace(base_url + "/", "")
         already_archived = archive and archive.get(target)
         if already_archived:
@@ -832,7 +878,7 @@ class C4DE_Bot(commands.Bot):
             except Exception as e:
                 await self.report_error(m["url"], type(e), e)
 
-        template = self.build_citation_template(m, youtube, site_data, archivedate if include_archivedate else None)
+        template = self.build_citation_template(m, youtube, site_data, archivedate if include_archivedate and not already_archived else None)
         msg += f"\n- `{template}`"
 
         if success:
@@ -850,7 +896,7 @@ class C4DE_Bot(commands.Bot):
                     if f in msg.replace("-", "").lower() or f in m["content"].lower():
                         results.append((data["channel"], msg))
 
-        return results, template
+        return results, m.get('date'), template
 
     @staticmethod
     def build_citation_template(msg: dict, youtube, site_data: dict, archivedate):

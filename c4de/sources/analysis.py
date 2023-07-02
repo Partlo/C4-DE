@@ -155,7 +155,7 @@ def has_month_in_date(x: ItemId):
 
 
 def build_new_section(found: List[ItemId], cards: Dict[str, List[ItemId]], set_ids: Dict[str, str], should_sort: bool,
-                      dates: list, include_date: bool, log):
+                      dates: list, include_date: bool, log, use_index):
     source_names = {}
     urls = {}
     by_original_index = {o.current.index: o for o in found if o.current.index is not None}
@@ -189,7 +189,10 @@ def build_new_section(found: List[ItemId], cards: Dict[str, List[ItemId]], set_i
             missing.append(o)
 
     if should_sort:
-        found = sorted(new_found, key=lambda a: (a.master.date, (a.current.text if a.current.mode == "DB" else a.current.original).replace("''", "").replace("|", " |").replace("}}", " }}").lower()))
+        if use_index:
+            found = sorted(new_found, key=lambda a: (a.master.date, a.sort_text(), a.master.index))
+        else:
+            found = sorted(new_found, key=lambda a: (a.master.date, a.master.index, a.sort_text()))
         for m in missing:
             if m.master.date == "Canceled":
                 found.append(m)
@@ -317,7 +320,7 @@ def build_section_from_pieces(header: str, preceding: List[str], items: str, tra
 
 
 def analyze_target_page(site: Site, target: Page, appearances: FullListData, sources: FullListData, remap: dict,
-                        save: bool, include_date: bool, log=True):
+                        save: bool, include_date: bool, log=True, use_index=True):
     before = target.get()
     if "‎" in before:
         before = before.replace("‎", "")
@@ -397,10 +400,10 @@ def analyze_target_page(site: Site, target: Page, appearances: FullListData, sou
         else:
             found_apps += wrong_ncs
 
-    new_apps = build_new_section(found_apps, apps_cards, apps_sets, False, dates, include_date, log)
-    new_nca = build_new_section(found_nca, nca_cards, nca_sets, False, dates, include_date, log)
-    new_sources = build_new_section(found_src, src_cards, src_sets, True, dates, include_date, log)
-    new_ncs = build_new_section(found_ncs, ncs_cards, ncs_sets, True, dates, include_date, log)
+    new_apps = build_new_section(found_apps, apps_cards, apps_sets, False, dates, include_date, log, use_index)
+    new_nca = build_new_section(found_nca, nca_cards, nca_sets, False, dates, include_date, log, use_index)
+    new_sources = build_new_section(found_src, src_cards, src_sets, True, dates, include_date, log, use_index)
+    new_ncs = build_new_section(found_ncs, ncs_cards, ncs_sets, True, dates, include_date, log, use_index)
 
     pieces = [before.strip(), ""]
     if new_apps:
