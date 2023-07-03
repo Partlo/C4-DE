@@ -4,7 +4,8 @@ import re
 from pywikibot import Site, Page
 from typing import List, Dict, Tuple
 
-from c4de.sources.engine import extract_item, determine_id_for_item, FullListData, Item, ItemId, PARAN
+from c4de.sources.engine import extract_item, determine_id_for_item, FullListData, Item, ItemId, PARAN, \
+    convert_issue_to_template
 
 
 KEEP_TEMPLATES = ["TCWA", "Twitter", "FacebookCite"]
@@ -19,8 +20,9 @@ def analyze_body(text, appearances: FullListData, sources: FullListData, remap: 
     new_text = text
     for full_ref, ref in references:
         try:
-            new_ref = ref.replace("&ndash;", '–').replace('&mdash;', '—')
-            links = re.findall("('*\[\[.*?(\|.*?)?\]\]'*)", new_ref)
+            new_ref = re.sub("<!--[ 0-9/X-]+-->", "", ref.replace("&ndash;", '–').replace('&mdash;', '—'))
+            new_ref = convert_issue_to_template(new_ref)
+            links = re.findall("(['\"]*\[\[.*?(\|.*?)?\]\]['\"]*)", new_ref)
             templates = re.findall("(\{\{[^\{\}\n]+\}\})", new_ref)
             templates += re.findall("(\{\{[^\{\}\n]+\{\{[^\{\}\n]+\}\}[^\{\}\n]+\}\})", new_ref)
             templates += re.findall("(\{\{[^\{\}\n]+\{\{[^\{\}\n]+\}\}[^\{\}\n]+\{\{[^\{\}\n]+\}\}[^\{\}\n]+\}\})", new_ref)
@@ -31,11 +33,13 @@ def analyze_body(text, appearances: FullListData, sources: FullListData, remap: 
                 if x:
                     o = determine_id_for_item(x, appearances.unique, appearances.target, sources.unique, sources.target, remap, log)
                     if o and not o.use_original_text:
-                        if "{{" in o.master.original and len(templates) > 0:
+                        if link[0].startswith('"') and link[0].startswith('"') and (len(ref) - len(link[0])) > 5:
+                            print(f"Skipping quote-enclosed link {link[0]} (likely an episode name)")
+                        elif "{{" in o.master.original and len(templates) > 0:
                             print(f"Skipping {link[0]} due to presence of other templates in ref note")
                         elif o.master.original.isnumeric():
                             print(f"Skipping {link[0]} due to numeric text")
-                        elif x.text and o.master.target and "(" in o.master.target and o.master.target.split("(")[0].strip() not in x.text:
+                        elif x.format_text and o.master.target and "(" in o.master.target and o.master.target.split("(")[0].strip() not in x.format_text:
                             print(f"Skipping {link[0]} due to non-standard pipelink")
                         elif x.target in SPECIAL and x.text and x.text.replace("''", "") in SPECIAL[x.target]:
                             print(f"Skipping exempt {link[0]}")
@@ -66,6 +70,8 @@ def analyze_body(text, appearances: FullListData, sources: FullListData, remap: 
                 z = nt.master.original
                 if extra:
                     z = z[:-2] + "".join(extra) + "}}"
+                if "|d=y" in nt.current.original:
+                    z = z[:-2] + "|d=y}}"
                 new_ref = new_ref.replace(ot, z)
 
             final_ref = full_ref.replace(ref, new_ref).replace('–', '&ndash;').replace('—', '&mdash;')
@@ -91,13 +97,13 @@ def parse_section(section: str, is_appearances: bool, unknown: list, log) -> Tup
             cs += 1
         if s.strip().startswith("*"):
             start = False
-            s = s[1:].replace("&ndash;", '–').replace('&mdash;', '—')
-            ex = re.search('( ?(<small>)? ?\{+ ?(1st[A-z]*|[A-z][od]|[Ff]act|[Ll]n|[Nn]cm?|[Cc]|[Aa]mbig|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Nn]cs?|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene) ?[\|\}].*?$)', s)
+            z = s[1:].replace("&ndash;", '–').replace('&mdash;', '—')
+            ex = re.search('( ?(<small>)? ?\{+ ?(1st[A-z]*|[A-z][od]|[Ff]act|[Ll]n|[Nn]cm?|[Cc]|[Aa]mbig|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Nn]cs?|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene) ?[\|\}].*?$)', z)
             extra = ex.group(1) if ex else ''
             if extra:
-                s = s.replace(extra, '').strip()
+                z = z.replace(extra, '').strip()
 
-            t = extract_item(s, is_appearances, "target")
+            t = extract_item(convert_issue_to_template(z), is_appearances, "target")
             if t:
                 data.append(t)
                 t.extra = extra
@@ -258,9 +264,9 @@ def build_new_section(found: List[ItemId], cards: Dict[str, List[ItemId]], set_i
 
     if should_sort:
         if use_index:
-            found = sorted(new_found, key=lambda a: (a.master.date, a.master.index, a.sort_text()))
+            found = sorted(new_found, key=lambda a: (a.master.date, a.master.mode == "DB", a.master.index, a.sort_text()))
         else:
-            found = sorted(new_found, key=lambda a: (a.master.date, a.sort_text(), a.master.index))
+            found = sorted(new_found, key=lambda a: (a.master.date, a.master.mode == "DB", a.sort_text(), a.master.index))
         for m in missing:
             if m.master.date == "Canceled":
                 found.append(m)
@@ -487,6 +493,11 @@ def analyze_target_page(site: Site, target: Page, appearances: FullListData, sou
         pieces.append(build_section_from_pieces("===Non-canon sources===", ncs_pre, new_ncs, ncs_suf, ncs_after, log))
 
     new_txt = re.sub("(?<![\n=])\n==", "\n\n==", re.sub("\n\n+", "\n\n", "\n".join(pieces))).strip()
+    replace = True
+    while replace:
+        new_txt2 = re.sub("(\[\[[^\n\[\]\r\n]+)&ndash;", "\\1–", re.sub("(\[\[[^\[\]\n]+)&mdash;", "\\1—", new_txt))
+        replace = new_txt != new_txt2
+        new_txt = new_txt2
     with codecs.open("C:/Users/Michael/Documents/projects/C4DE/c4de/protocols/test_text.txt", mode="w", encoding="utf-8") as f:
         f.writelines(new_txt)
 

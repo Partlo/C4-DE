@@ -38,6 +38,7 @@ CADE = 346767878005194772
 MONITOR = 268478587651358721
 MAIN = "wookieepedia"
 COMMANDS = "bot-commands"
+REQUESTS = "bot-requests"
 ANNOUNCEMENTS = "announcements"
 ADMIN_HELP = "admin-help"
 NOM_CHANNEL = "status-article-nominations"
@@ -162,6 +163,7 @@ class C4DE_Bot(commands.Bot):
             self.check_rights_nominations.start()
             self.check_consensus_track_statuses.start()
             self.check_policy.start()
+            self.check_bot_requests.start()
             self.check_deleted_pages.start()
             self.check_files_to_be_renamed.start()
             self.check_internal_rss.start()
@@ -594,7 +596,7 @@ class C4DE_Bot(commands.Bot):
 
             await message.add_reaction(TIMER)
             results = analyze_target_page(self.site, target, self.appearances, self.sources, self.remap, save=True,
-                                          include_date=False, use_index=True)
+                                          include_date=False, use_index=True, handle_references=True)
             await message.remove_reaction(TIMER, self.user)
             await message.add_reaction(self.emoji_by_name("bb8thumbsup"))
 
@@ -614,19 +616,19 @@ class C4DE_Bot(commands.Bot):
     async def handle_analyze_source_command(self, message: Message, command: dict):
         try:
             target = Page(self.site, command['article'])
+            if not target.exists():
+                await message.add_reaction(EXCLAMATION)
+                await message.channel.send(f"{command['article']} cannot be found")
+                return
             if target.isRedirectPage():
                 target = target.getRedirectTarget()
             rev_id = target.latest_revision_id
             use_date = command.get('date') is not None
             use_index = command.get('text') is None
-            if not target.exists():
-                await message.add_reaction(EXCLAMATION)
-                await message.channel.send(f"{command['article']} cannot be found")
-                return
 
             await message.add_reaction(TIMER)
             results = analyze_target_page(self.site, target, self.appearances, self.sources, self.remap, save=True,
-                                          include_date=use_date, use_index=use_index)
+                                          include_date=use_date, use_index=use_index, handle_references=True)
             await message.remove_reaction(TIMER, self.user)
 
             rev = next(target.revisions(content=False, total=1))
@@ -794,6 +796,44 @@ class C4DE_Bot(commands.Bot):
         "the-high-republic": ["high republic"],
         "galaxys-edge": ["galaxys edge", "galaxy's edge", "halcyon", "galactic starcruiser"]
     }
+
+    @tasks.loop(minutes=30)
+    async def check_bot_requests(self):
+        log("Checking bot requests")
+        try:
+            messages = []
+            for m in await self.text_channel(REQUESTS).history(limit=250).flatten():
+                try:
+                    if m.author != self.user and any("bb8thumbsup" in str(r.emoji) for r in m.reactions):
+                        messages.append(m)
+                except Exception as e:
+                    await self.report_error(f"Bot Request Archival: {e}", type(e), e)
+
+            if messages:
+                page = Page(self.site, "Wookieepedia:Bot requests/Archive/Discord")
+                text = page.get() if page.exists() else ""
+                today = datetime.now().strftime("%B %d, %Y")
+                if f"=={today}==" not in text:
+                    text += f"\n\n=={today}=="
+                users = {}
+                for m in reversed(messages):
+                    if m.author.display_name != "Wiki-Bot":
+                        if m.author.display_name not in users:
+                            if Page(self.site, f"User:{m.author.display_name}").exists():
+                                users[m.author.display_name] = "{{U|" + m.author.display_name + "}}"
+                            else:
+                                users[m.author.display_name] = m.author.display_name
+                        d = m.created_at.strftime("%H:%M, %B %d %Y")
+                        t = f"*'''{users[m.author.display_name]}''': {m.content} ({d})".replace("[[Category:", "[[:Category:")
+                        t = re.sub("({{.*?}})", "<nowiki>\\1</nowiki>", t)
+                        text += f"\n{t}"
+                page.put(text, "Archiving completed bot requests from Discord", force=True)
+
+                for m in messages:
+                    await m.delete()
+
+        except Exception as e:
+            await self.report_error(f"Bot Request Archival: {e}", type(e), e)
 
     @tasks.loop(minutes=15)
     async def check_deleted_pages(self):

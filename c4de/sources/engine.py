@@ -111,10 +111,20 @@ def grouping_type(t):
     return "General"
 
 
+def convert_issue_to_template(s):
+    m = re.search("(\[\[(.*?) ([0-9]+)(\|.*?)?\]\]'* ?{{C\|(.*?)\}\})", s)
+    if m:
+        for template, v in ISSUES.items():
+            if m.group(2) == v[0]:
+                t = f"{{{{{template}|{m.group(3)}|{m.group(5)}}}}}"
+                return s.replace(m.group(1), t.replace("\\|", "|"))
+    return s
+
+
 class Item:
     def __init__(self, original: str, is_app: bool, *, invalid=False, target: str = None, text: str = None,
                  parent: str = None, mode: str = None, template: str = None, url: str = None, issue: str = None,
-                 card: str = None, special=None, collapsed=False, format_text: str=None):
+                 card: str = None, special=None, collapsed=False, format_text: str = None, no_issue=False):
         self.is_appearance = is_app
         self.mode = mode or grouping_type(template or '')
         self.invalid = invalid
@@ -133,6 +143,7 @@ class Item:
             self.text = None
 
         self.format_text = format_text
+        self.no_issue = no_issue
         self.old_version = self.original and "oldversion" in self.original
         self.index = None
         self.date = None
@@ -182,12 +193,12 @@ def extract_item(z: str, a: bool, page, master=False):
 
     :rtype: Item
     """
-    z = z.replace("|1=", "|").replace("|d=y", "").replace("|s=y", "").replace("{{'s}}", "'s").replace("{{'}}", "'").replace("{{!}}", "|")
-    z = re.sub("{{([A-z]+)\]\]", "{{\\1}}", re.sub("\|[a-z ]+=\|", "|", z)).replace("|official=true|", "|").replace(" ", " ")
+    z = z.replace("|1=", "|").replace("|s=y", "").replace("{{'s}}", "'s").replace("{{'}}", "'").replace("{{!}}", "|")
+    z = re.sub("{{([A-z]+)\]\]", "{{\\1}}", re.sub("\|[a-z ]+=\|", "|", z)).replace(" ", " ")
     while re.search("\[\[([^\]\|\n]+)_", z):
         z = re.sub("\[\[([^\]\|\n]+)_", "[[\\1 ", z)
 
-    s = re.sub("^(.*?\[\[.*?[^ ])#(.*?)(\|.*?\]\].*?)$", "\\1\\3", z)
+    s = re.sub("^(.*?\[\[.*?[^ ])#(.*?)(\|.*?\]\].*?)$", "\\1\\3", z).replace("|d=y", "").replace("Star Wars Ships and Vehicles", "Star Wars Starships & Vehicles")
     if s.count("{") == 2 and s.count("}") == 1:
         s += "}"
     if s.count("{{") > s.count("}}"):
@@ -253,9 +264,9 @@ def extract_item(z: str, a: bool, page, master=False):
             return Item(z, a, target=None, template=template, parent="Homing Beacon (newsletter)", issue=m.group(1))
     # Blog template - first two parameters combined are the URL
     elif template == "Blog":
-        m = re.search("{{[^\|\[\}\n]+\|(.*?\|.*?)\|(.*?)(\|.*?)?}}", s)
+        m = re.search("{{[^\|\[\}\n]+\|(official=true\|)?(.*?\|.*?)\|(.*?)(\|.*?)?}}", s)
         if m:
-            return Item(z, a, target=None, template=template, url=m.group(1).replace("|", "/"), text=m.group(2))
+            return Item(z, a, target=None, template=template, url=m.group(2).replace("|", "/"), text=m.group(2))
     elif template == "LEGOCite":
         m = re.search("{{LEGOCite\|(theme=)?(.*?)\|(num=)?(.*?)\|(name=)?(.*?)(\|.*?)?}}", s)
         if m:
@@ -336,10 +347,10 @@ def extract_item(z: str, a: bool, page, master=False):
         return Item(z, a, target=m.groupdict()['set'], template=template, text=m.groupdict()['scenario'])
 
     # Magazine articles with issue as second parameter
-    m = re.search("{{[^\|\[\}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(issue[0-9]?=)?(?P<issue>(Special Edition )?H?S? ?[0-9\.]+)(\|issue[0-9]=.*?)?\|(story=)?(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?(\|.*?)?}}", s)
+    m = re.search("{{[^\|\[\}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(issue[0-9]?=)?(?P<issue>(Special Edition )?H?S? ?[0-9\.]*)(\|issue[0-9]=.*?)?\|(story=)?(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?(\|.*?)?}}", s)
     if m:
         return Item(z, a, target=m.groupdict()['article'], template=template, issue=m.groupdict()['issue'],
-                    special=m.group('year') or m.group('vol'), format_text=m.groupdict()['text'])
+                    special=m.group('year') or m.group('vol'), format_text=m.groupdict()['text'], no_issue=m.groupdict()['issue'] is None)
 
     # Second parameter is formatted version of the target article
     m = re.search("\{\{[^\|\]\n]+\|([^\|\n=\}\]]+)\|([^\|\n=\}\]]+)\}\}", s)
@@ -492,7 +503,7 @@ def determine_id_for_item(o: Item, data: Dict[str, Item], by_target: Dict[str, L
     if (o.mode == "Cards" or o.mode == "Toys") and (o.card or o.special):
         return ItemId(o, o, True, False)
 
-    if o.issue:
+    if o.issue or o.no_issue:
         t = f"{o.mode}|None|{o.target}|None|None|None|None|None"
         if t in data:
             return ItemId(o, data[t], o.collapsed, False)
