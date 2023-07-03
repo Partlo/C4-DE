@@ -114,7 +114,7 @@ def grouping_type(t):
 class Item:
     def __init__(self, original: str, is_app: bool, *, invalid=False, target: str = None, text: str = None,
                  parent: str = None, mode: str = None, template: str = None, url: str = None, issue: str = None,
-                 card: str = None, special=None, collapsed=False):
+                 card: str = None, special=None, collapsed=False, format_text: str=None):
         self.is_appearance = is_app
         self.mode = mode or grouping_type(template or '')
         self.invalid = invalid
@@ -132,13 +132,13 @@ class Item:
         if self.card:
             self.text = None
 
+        self.format_text = format_text
         self.old_version = self.original and "oldversion" in self.original
         self.index = None
         self.date = None
         self.canon = None
         self.alternate_url = None
         self.extra = ''
-        self.is_card_set = False
 
     def __str__(self):
         return f"Item[{self.full_id()}]"
@@ -199,10 +199,10 @@ def extract_item(z: str, a: bool, page, master=False):
 
     if s.count("[[") == 1 and s.count("{{") == 0:
         if s.count("]") == 0:
-            r = re.sub("^.*\[\[(.*?)(\|.*?)*?$", '\\1', s)
+            x = re.search("\[\[(.*?)(\|(.*?))?$", s)
         else:
-            r = re.sub("^.*\[\[(.*?)(\|.*?)?\]+.*$", '\\1', s)
-        return Item(z, a, target=r, mode="General")
+            x = re.search("\[\[(.*?)(\|(.*?))?\]+", s)
+        return Item(z, a, target=x.group(1), format_text=x.group(3), mode="General")
 
     o = f"{s}"
     s = re.sub("(\]+'*?) \(.*?\)", "\\1", s)
@@ -221,9 +221,11 @@ def extract_item(z: str, a: bool, page, master=False):
     for i, (k, o) in ISSUES.items():
         m = re.search("\{\{" + i + "\|([0-9]+)(\|(multiple=\[*?)?(.*?))?(\|(.*?))?(\|.*?)?}}", s)
         if m and ((o == "2014" and m.group(1) in ['1', '2', '3', '4', '5']) or (o and o != "2014")):
-            return Item(z, a, target=f"{k} {m.group(1)} ({o})", template=i.split("\|")[0], issue=m.group(1), text=m.group(4) or m.group(6), collapsed=True)
+            return Item(z, a, target=f"{k} {m.group(1)} ({o})", template=i.split("\|")[0], issue=m.group(1),
+                        text=m.group(4) or m.group(6), collapsed=True)
         elif m:
-            return Item(z, a, target=f"{k} {m.group(1)}", template=i.split("\|")[0], issue=m.group(1), text=m.group(4) or m.group(6), collapsed=True)
+            return Item(z, a, target=f"{k} {m.group(1)}", template=i.split("\|")[0], issue=m.group(1),
+                        text=m.group(4) or m.group(6), collapsed=True)
 
     m = re.search('{{([^\|\[\}\n]+)[\|\}]', s)
     template = m.group(1) if m else ''
@@ -319,9 +321,9 @@ def extract_item(z: str, a: bool, page, master=False):
             print(s)
 
     # InsiderCite - link= parameter
-    m = re.search("{{[^\|\[\}\n]+\|link=(.*?)\|.*?\|(.*?)(\|.*?)?}}", s)
+    m = re.search("{{[^\|\[\}\n]+\|link=(.*?)\|.*?\|(.*?)(\|(.*?))?}}", s)
     if m:
-        return Item(z, a, target=m.group(2), template=template, issue=m.group(1))
+        return Item(z, a, target=m.group(2), template=template, issue=m.group(1), format_text=m.group(4))
 
     # Episode/Featurette parameter
     m = re.search("\{+[^\|\}\]]+?\|(set=)?(.*?)(\|.*?)?(episode|featurette)=\[*?(.*?)\]*?(\|.*?)?\}+", s)
@@ -337,7 +339,7 @@ def extract_item(z: str, a: bool, page, master=False):
     m = re.search("{{[^\|\[\}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(issue[0-9]?=)?(?P<issue>(Special Edition )?H?S? ?[0-9\.]+)(\|issue[0-9]=.*?)?\|(story=)?(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?(\|.*?)?}}", s)
     if m:
         return Item(z, a, target=m.groupdict()['article'], template=template, issue=m.groupdict()['issue'],
-                    special=m.group('year') or m.group('vol'))
+                    special=m.group('year') or m.group('vol'), format_text=m.groupdict()['text'])
 
     # Second parameter is formatted version of the target article
     m = re.search("\{\{[^\|\]\n]+\|([^\|\n=\}\]]+)\|([^\|\n=\}\]]+)\}\}", s)
@@ -463,7 +465,7 @@ def determine_id_for_item(o: Item, data: Dict[str, Item], by_target: Dict[str, L
                 return ItemId(o, other_data[t], True, True)
 
         for s, x in data.items():
-            if x.template == o.template and x.is_card_set and x.target and (x.target.startswith(set_name) or set_name in x.target):
+            if x.template == o.template and x.target and (x.target.startswith(set_name) or set_name in x.target):
                 return ItemId(o, x, True, False)
 
     # Find a match by URL
@@ -561,6 +563,9 @@ def determine_id_for_item(o: Item, data: Dict[str, Item], by_target: Dict[str, L
                 return ItemId(o, by_target[t][0], o.collapsed, False)
             if log:
                 print(f"Multiple matches found for {t}")
+            for x in by_target[t]:
+                if x.format_text and o.format_text and x.format_text.replace("''", "") == o.format_text.replace("''", ""):
+                    return ItemId(o, x, o.collapsed, False)
             return ItemId(o, by_target[t][0], o.collapsed, False)
         elif other_targets and t in other_targets:
             # print(f"Other Target: {o.full_id()}")
@@ -568,6 +573,9 @@ def determine_id_for_item(o: Item, data: Dict[str, Item], by_target: Dict[str, L
                 return ItemId(o, other_targets[t][0], o.collapsed, True)
             if log:
                 print(f"Multiple matches found for {t}")
+            for x in other_targets[t]:
+                if x.format_text and o.format_text and x.format_text.replace("''", "") == o.format_text.replace("''", ""):
+                    return ItemId(o, x, o.collapsed, False)
             return ItemId(o, other_targets[t][0], o.collapsed, False)
 
     return None
@@ -631,6 +639,8 @@ def load_appearances(site, log):
         p = Page(site, f"Wookieepedia:{sp}")
         for line in p.get().splitlines():
             if line and not line.startswith("=="):
+                if "/Header}}" in line:
+                    continue
                 x = re.search("[\*#](.*?): (.*?)$", line)
                 if x:
                     i += 1

@@ -2,6 +2,7 @@ import codecs
 import re
 import json
 import sys
+import time
 from urllib import parse
 from typing import List, Tuple
 from datetime import datetime, timedelta
@@ -9,15 +10,13 @@ from discord import Message, Game, Intents
 from discord.abc import GuildChannel
 from discord.channel import TextChannel, DMChannel
 from discord.ext import commands, tasks
+from asyncio.exceptions import TimeoutError
 import ssl
-
-import time
-from pywikibot import Page, Category
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
-import pywikibot
-from pywikibot import Site
+from pywikibot import Site, Page, Category
+from pywikibot.exceptions import NoPageError, LockedPageError, OtherPageSaveError
 from c4de.common import log, error_log, archive_url
 from c4de.data.filenames import *
 from c4de.version_reader import report_version_info
@@ -342,7 +341,7 @@ class C4DE_Bot(commands.Bot):
             return
 
         if "spoiler" in message.content.lower():
-            for page in pywikibot.Category(self.site, "Articles with expired spoiler notices").articles(namespaces=0):
+            for page in Category(self.site, "Articles with expired spoiler notices").articles(namespaces=0):
                 try:
                     remove_spoiler_tags_from_page(self.site, page, offset=self.timezone_offset)
                 except Exception as e:
@@ -351,7 +350,7 @@ class C4DE_Bot(commands.Bot):
             return
 
         if "isbn" in message.content.lower():
-            page = pywikibot.Page(self.site, "Template:ISBN/data")
+            page = Page(self.site, "Template:ISBN/data")
             last_revision = next(r for r in page.revisions(reverse=True, total=10) if r["user"] == "JocastaBot")
             time_since_last_edit = (datetime.now() + timedelta(hours=self.timezone_offset)) - last_revision['timestamp']
             if time_since_last_edit.total_seconds() < (60 * 60 * 6):
@@ -454,9 +453,9 @@ class C4DE_Bot(commands.Bot):
                 try:
                     text = page.get()
                     page.put(text, "Bot: Ghost edit to update WhatLinksHere. Tell Cade if you see this.")
-                except pywikibot.exceptions.NoPageError:
+                except NoPageError:
                     continue
-                except pywikibot.exceptions.LockedPageError:
+                except LockedPageError:
                     continue
             await message.remove_reaction(TIMER, self.user)
             await message.add_reaction(THUMBS_UP)
@@ -474,7 +473,7 @@ class C4DE_Bot(commands.Bot):
 
     async def reload_rss_data(self):
         log("Loading RSS data")
-        page = pywikibot.Page(self.site, "User:C4-DE Bot/RSS")
+        page = Page(self.site, "User:C4-DE Bot/RSS")
         data = {}
         for rev in page.revisions(content=True, total=5):
             try:
@@ -490,7 +489,7 @@ class C4DE_Bot(commands.Bot):
 
     async def reload_project_data(self):
         log("Loading news filters")
-        page = pywikibot.Page(self.site, "User:JocastaBot/Project Data")
+        page = Page(self.site, "User:JocastaBot/Project Data")
         data = {}
         for rev in page.revisions(content=True, total=5):
             try:
@@ -664,14 +663,14 @@ class C4DE_Bot(commands.Bot):
         if datetime.now().hour != 6:
             return
         log("Scheduled Operation: Checking {{Spoiler}} templates")
-        for page in pywikibot.Category(self.site, "Articles with expired spoiler notices").articles(namespaces=0):
+        for page in Category(self.site, "Articles with expired spoiler notices").articles(namespaces=0):
             remove_spoiler_tags_from_page(self.site, page, offset=self.timezone_offset)
 
     @tasks.loop(hours=1)
     async def load_isbns(self):
         if datetime.now().hour != 7:
             return
-        page = pywikibot.Page(self.site, "Template:ISBN/data")
+        page = Page(self.site, "Template:ISBN/data")
         last_revision = next(r for r in page.revisions(reverse=True, total=10) if r["user"] == "JocastaBot")
         time_since_last_edit = (datetime.now() + timedelta(hours=self.timezone_offset)) - last_revision['timestamp']
         if time_since_last_edit.total_seconds() < (60 * 60 * 6):
@@ -818,6 +817,8 @@ class C4DE_Bot(commands.Bot):
 
             if update:
                 log(f"Could not find messages {update} in #admin-help to update")
+        except TimeoutError:
+            pass
         except Exception as e:
             await self.report_error(f"Deleted Pages: {e}", type(e), e)
 
@@ -984,10 +985,10 @@ class C4DE_Bot(commands.Bot):
         return "{{" + result + "}}"
 
     def get_archive_for_site(self, template):
-        page = pywikibot.Page(self.site, f"Template:{template}/Archive")
+        page = Page(self.site, f"Template:{template}/Archive")
         if page.exists():
             return page
-        return pywikibot.Page(self.site, f"Module:ArchiveAccess/{template}")
+        return Page(self.site, f"Module:ArchiveAccess/{template}")
 
     def add_urls_to_archive(self, template, new_url, archivedate):
         page = self.get_archive_for_site(template)
@@ -999,7 +1000,7 @@ class C4DE_Bot(commands.Bot):
 
         try:
             page.put("\n".join(new_text), f"Archiving {archivedate} for new URL: {new_url}")
-        except pywikibot.exceptions.OtherPageSaveError:
+        except OtherPageSaveError:
             self.site.login()
             page.put("\n".join(new_text), f"Archiving {archivedate} for new URL: {new_url}")
 

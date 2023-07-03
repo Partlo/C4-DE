@@ -9,6 +9,72 @@ from c4de.sources.engine import extract_item, determine_id_for_item, FullListDat
 
 KEEP_TEMPLATES = ["TCWA", "Twitter", "FacebookCite"]
 
+SPECIAL = {
+    "Star Wars: X-Wing vs. TIE Fighter": ["Star Wars: X-Wing vs. TIE Fighter: Balance of Power"]
+}
+
+
+def analyze_body(text, appearances: FullListData, sources: FullListData, remap: dict, log: bool):
+    references = re.findall("(<ref name=.*?[^/]>(.*?)</ref>)", text)
+    new_text = text
+    for full_ref, ref in references:
+        try:
+            new_ref = ref.replace("&ndash;", '–').replace('&mdash;', '—')
+            links = re.findall("('*\[\[.*?(\|.*?)?\]\]'*)", new_ref)
+            templates = re.findall("(\{\{[^\{\}\n]+\}\})", new_ref)
+            templates += re.findall("(\{\{[^\{\}\n]+\{\{[^\{\}\n]+\}\}[^\{\}\n]+\}\})", new_ref)
+            templates += re.findall("(\{\{[^\{\}\n]+\{\{[^\{\}\n]+\}\}[^\{\}\n]+\{\{[^\{\}\n]+\}\}[^\{\}\n]+\}\})", new_ref)
+
+            new_links = []
+            for link in links:
+                x = extract_item(link[0], False, "reference")
+                if x:
+                    o = determine_id_for_item(x, appearances.unique, appearances.target, sources.unique, sources.target, remap, log)
+                    if o and not o.use_original_text:
+                        if "{{" in o.master.original and len(templates) > 0:
+                            print(f"Skipping {link[0]} due to presence of other templates in ref note")
+                        elif o.master.original.isnumeric():
+                            print(f"Skipping {link[0]} due to numeric text")
+                        elif x.text and o.master.target and "(" in o.master.target and o.master.target.split("(")[0].strip() not in x.text:
+                            print(f"Skipping {link[0]} due to non-standard pipelink")
+                        elif x.target in SPECIAL and x.text and x.text.replace("''", "") in SPECIAL[x.target]:
+                            print(f"Skipping exempt {link[0]}")
+                        else:
+                            new_links.append((link[0], o))
+
+            for ot, nt in new_links:
+                new_ref = new_ref.replace(ot, nt.master.original)
+
+            new_templates = []
+            for t in templates:
+                if t == "{{'s}}":
+                    continue
+                x = extract_item(t, False, "reference")
+                if x:
+                    o = determine_id_for_item(x, appearances.unique, appearances.target, sources.unique, sources.target, remap, log)
+                    if o and not o.use_original_text:
+                        ex = []
+                        if "|author=" in t:
+                            ex += re.findall("(\|author=.*?)[\|\}]", t)
+                        if "|date=" in t:
+                            ex += re.findall("(\|date=.*?)[\|\}]", t)
+                        if "|quote=" in t:
+                            ex += re.findall("(\|quote=.*?)[\|\}]", t)
+                        new_templates.append((t, o, ex))
+
+            for ot, nt, extra in new_templates:
+                z = nt.master.original
+                if extra:
+                    z = z[:-2] + "".join(extra) + "}}"
+                new_ref = new_ref.replace(ot, z)
+
+            final_ref = full_ref.replace(ref, new_ref).replace('–', '&ndash;').replace('—', '&mdash;')
+            new_text = new_text.replace(full_ref, final_ref)
+        except Exception as e:
+            print(f"Encountered {e} while handling reference", type(e))
+
+    return new_text
+
 
 def parse_section(section: str, is_appearances: bool, unknown: list, log) -> Tuple[List[Item], List[str], List[str]]:
     """ Parses an article's Appearances, Non-canon appearances, Sources, or External Links section, extracting an Item
@@ -20,9 +86,8 @@ def parse_section(section: str, is_appearances: bool, unknown: list, log) -> Tup
     start = True
     cs = 0
     for s in section.splitlines():
-        is_set = s.strip().startswith("{{CardGameSet")
-        if is_set:
-            s = s.replace("{{CardGameSet|set=", "*")
+        if "CardGameSet" in s:
+            s = re.sub("{{CardGameSet\|(set=)?.*?\|cards=", "", s)
             cs += 1
         if s.strip().startswith("*"):
             start = False
@@ -36,7 +101,6 @@ def parse_section(section: str, is_appearances: bool, unknown: list, log) -> Tup
             if t:
                 data.append(t)
                 t.extra = extra
-                t.is_card_set = is_set
                 unique_ids[t.unique_id()] = t
             else:
                 unknown.append(s)
@@ -66,6 +130,7 @@ def build_item_ids_for_section(site, name, original: List[Item], data: FullListD
     found = []
     wrong = []
     cards = {}
+    extra = {}
     for i, o in enumerate(original):
         o.index = i
         d = determine_id_for_item(o, data.unique, data.target, other.unique, other.target, remap, log)
@@ -103,7 +168,7 @@ def build_item_ids_for_section(site, name, original: List[Item], data: FullListD
             else:
                 if log:
                     print(f"No cards found for {parent_set}")
-                found.append(d)
+                extra[d.master.target] = d
         elif d and d.current.template in KEEP_TEMPLATES:
             found.append(d)
         elif d and d.from_other_data:
@@ -144,8 +209,11 @@ def build_item_ids_for_section(site, name, original: List[Item], data: FullListD
             t[0].index = c[0].current.index
             found.append(ItemId(t[0], t[0], False))
             set_ids[t[0].full_id()] = s
+            if t[0].target in extra:
+                extra.pop(t[0].target)
         else:
             print(f"ERROR: Cannot find item for parent/target set: [{s}]: {c[0].current.full_id()}")
+    found += list(extra.values())
 
     return found, wrong, cards, set_ids
 
@@ -320,7 +388,7 @@ def build_section_from_pieces(header: str, preceding: List[str], items: str, tra
 
 
 def analyze_target_page(site: Site, target: Page, appearances: FullListData, sources: FullListData, remap: dict,
-                        save: bool, include_date: bool, log=True, use_index=True):
+                        save: bool, include_date: bool, log=True, use_index=True, handle_references=False):
     before = target.get()
     if "‎" in before:
         before = before.replace("‎", "")
@@ -383,6 +451,9 @@ def analyze_target_page(site: Site, target: Page, appearances: FullListData, sou
     found_ncs, wrong_ncs, ncs_cards, ncs_sets = build_item_ids_for_section(
         site, "Non-canon sources", ncs, sources, appearances, remap, unknown_src, log)
 
+    if handle_references:
+        before = analyze_body(before, appearances, sources, remap, log)
+
     if wrong_apps or wrong_nca:
         if log:
             print(f"Moving {len(wrong_apps) + len(wrong_nca)} sources from Appearances to Sources")
@@ -431,7 +502,7 @@ def analyze_target_page(site: Site, target: Page, appearances: FullListData, sou
 
     # showDiff(target.get(), new_txt)
     if save:
-        target.put(new_txt, "Source Engine analysis of Appearances & Sources")
+        target.put(new_txt, "Source Engine analysis of Appearances, Sources and references")
 
     results = []
     with codecs.open("C:/Users/Michael/Documents/projects/C4DE/c4de/protocols/unknown.txt", mode="a",

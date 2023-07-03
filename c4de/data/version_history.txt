@@ -88,3 +88,7 @@
 **The Sources Engine will now automatically scan Category:Future products every day at 7 AM, and update the Sources Project pages with new items and changed ates. As always, let Cade know if you see anything weird.
 *'''3.1.1''': July 2, 2023
 **New nominations reported by JocastaBot will be run through the Source Engine, and results will be posted in reply to the nomination report
+*'''3.1.2''': July 3, 2023
+**Expanded Source Engine analysis to cover references
+*'''3.1.3''': July 3, 2023
+**Fixed various Source Engine bugs, and further refined reference handling

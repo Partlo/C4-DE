@@ -39,7 +39,8 @@ def analyze(*args):
             print(i, page.title())
         i += 1
         try:
-            analyze_target_page(gen_factory.site, page, appearances, sources, remap, save, include_date, log=False)
+            analyze_target_page(gen_factory.site, page, appearances, sources, remap, save, include_date, log=False,
+                                handle_references=True)
         except Exception as e:
             print(e)
 
