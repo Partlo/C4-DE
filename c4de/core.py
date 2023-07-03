@@ -85,6 +85,11 @@ class C4DE_Bot(commands.Bot):
         self.site = self.reload_site()
         self.refresh = 0
 
+        self.admin_users = {
+            "Imperators II": "Imperators",
+            "Master Fredcerique": "MasterFred",
+            "Zed42": "Zed"
+        }
         self.bots = ["01miki10-bot", "C4-DE Bot", "EcksBot", "JocastaBot", "RoboCade", "PLUMEBOT", "TOM-E Macaron.ii"]
 
         self.channels = {}
@@ -199,8 +204,16 @@ class C4DE_Bot(commands.Bot):
     def get_user_ids(self):
         results = {}
         for user in self.text_channel(MAIN).guild.members:
-            results[user.name] = user.id
+            results[user.name.lower()] = user.id
         return results
+
+    def get_user_id(self, editor, user_ids=None):
+        if not user_ids:
+            user_ids = self.get_user_ids()
+        for k, v in user_ids.items():
+            print(editor, k, v)
+        user_id = user_ids.get(self.admin_users.get(editor, editor.lower()), user_ids.get(editor.lower()))
+        return f"<@{user_id}>" if user_id else editor
 
     async def report_error(self, command, text, *args):
         try:
@@ -215,11 +228,25 @@ class C4DE_Bot(commands.Bot):
         "is_preload_command": "handle_preload_command"
     }
 
+    @staticmethod
+    def is_new_nomination_message(message: Message):
+        m = re.search("New .*? article nomination.*? by \**(.*?)\**\n", message.content)
+        if m:
+            u = re.search("/wiki/Wookieepedia:.*?_article_nominations/(.*?)(_\(.*?nomination\))?>", message.content)
+            if u:
+                return {"user": m.group(1), "article": u.group(1)}
+        return None
+
     async def on_message(self, message: Message):
         if message.author == self.user:
             return
         elif isinstance(message.channel, DMChannel):
             await self.handle_direct_message(message)
+            return
+        elif message.author.id == 863199002614956043 and message.channel.name == NOM_CHANNEL:
+            nom = self.is_new_nomination_message(message)
+            if nom:
+                await self.handle_new_nomination(message, nom)
             return
         elif not (self.is_mention(message) or "@C4DE" in message.content or "@C4-DE" in message.content):
             return
@@ -244,6 +271,16 @@ class C4DE_Bot(commands.Bot):
 
         if message.content == "end" or message.content == "kill":
             sys.exit()
+
+        match = re.search("analyze message: ([0-9]+)", message.content)
+        if match:
+            message_id = int(match.group(1))
+            for m in await self.text_channel(NOM_CHANNEL).history(limit=200).flatten():
+                if m.id == message_id:
+                    nom = self.is_new_nomination_message(m)
+                    if nom:
+                        await self.handle_new_nomination(m, nom)
+                    break
 
         await self.handle_commands(message, True)
 
@@ -543,17 +580,51 @@ class C4DE_Bot(commands.Bot):
             return match.groupdict()
         return None
 
-    async def handle_analyze_source_command(self, message: Message, command: dict):
-        target = Page(self.site, command['article'])
-        rev_id = target.latest_revision_id
-        use_date = command.get('date') is not None
-        use_index = command.get('text') is None
-        if not target.exists():
-            await message.add_reaction(EXCLAMATION)
-            await message.channel.send(f"{command['article']} cannot be found")
-            return
-
+    async def handle_new_nomination(self, message: Message, command: dict):
         try:
+            target = Page(self.site, command['article'])
+            if not target.exists():
+                await message.add_reaction(EXCLAMATION)
+                await message.reply(f"{command['article']} does not exist, cannot run source analysis")
+                return
+            if any(c.title() == "Category:Real-world articles" for c in target.categories()):
+                log(f"Skipping Source Engine processing of real-world article {command['article']}")
+                return
+
+            rev_id = target.latest_revision_id
+
+            await message.add_reaction(TIMER)
+            results = analyze_target_page(self.site, target, self.appearances, self.sources, self.remap, save=True,
+                                          include_date=False, use_index=True)
+            await message.remove_reaction(TIMER, self.user)
+            await message.add_reaction(self.emoji_by_name("bb8thumbsup"))
+
+            rev = next(target.revisions(content=False, total=1))
+            if rev.revid != rev_id:
+                user_ids = self.get_user_ids()
+                user_str = self.get_user_id(command['user'], user_ids)
+                await message.reply(f"{user_str}: Sources Engine found changes needed for this article; please review when you get a chance:\n<{target.full_url()}?diff=next&oldid={rev_id}>")
+            for o in results:
+                await message.reply(o)
+        except Exception as e:
+            await self.report_error("Analyze sources on new nomination", type(e), e)
+            await message.remove_reaction(TIMER, self.user)
+            await message.add_reaction(EXCLAMATION)
+            await message.channel.send("Encountered error while analyzing page")
+
+    async def handle_analyze_source_command(self, message: Message, command: dict):
+        try:
+            target = Page(self.site, command['article'])
+            if target.isRedirectPage():
+                target = target.getRedirectTarget()
+            rev_id = target.latest_revision_id
+            use_date = command.get('date') is not None
+            use_index = command.get('text') is None
+            if not target.exists():
+                await message.add_reaction(EXCLAMATION)
+                await message.channel.send(f"{command['article']} cannot be found")
+                return
+
             await message.add_reaction(TIMER)
             results = analyze_target_page(self.site, target, self.appearances, self.sources, self.remap, save=True,
                                           include_date=use_date, use_index=use_index)
@@ -567,6 +638,7 @@ class C4DE_Bot(commands.Bot):
             for o in results:
                 await message.channel.send(o)
         except Exception as e:
+            print(e.__traceback__)
             await self.report_error("Analyze sources", type(e), e)
             await message.remove_reaction(TIMER, self.user)
             await message.add_reaction(EXCLAMATION)
@@ -742,7 +814,7 @@ class C4DE_Bot(commands.Bot):
                         self.admin_messages.pop(message.id)
                         update.remove(message.id)
                 except Exception as e:
-                    await self.report_error(f"Deleted Pages: {e}", type(e), e)
+                    await self.report_error(f"Deleted Pages (messages): {message.content} -> {e}", type(e), e)
 
             if update:
                 log(f"Could not find messages {update} in #admin-help to update")
@@ -779,7 +851,7 @@ class C4DE_Bot(commands.Bot):
 
         for channel, message, d_page in messages_to_post:
             try:
-                m = await self.text_channel(channel).send(message)
+                m = await self.text_channel(channel).send(message[:4000])
                 if d_page:
                     self.admin_messages[m.id] = d_page
             except Exception as e:

@@ -190,9 +190,9 @@ def build_new_section(found: List[ItemId], cards: Dict[str, List[ItemId]], set_i
 
     if should_sort:
         if use_index:
-            found = sorted(new_found, key=lambda a: (a.master.date, a.sort_text(), a.master.index))
-        else:
             found = sorted(new_found, key=lambda a: (a.master.date, a.master.index, a.sort_text()))
+        else:
+            found = sorted(new_found, key=lambda a: (a.master.date, a.sort_text(), a.master.index))
         for m in missing:
             if m.master.date == "Canceled":
                 found.append(m)
@@ -304,7 +304,7 @@ def is_number(d):
 
 def build_section_from_pieces(header: str, preceding: List[str], items: str, trailing: List[str], after: str, log):
     if log:
-        print(f"Creating {header} section with {len(items)} items")
+        print(f"Creating {header} section with {len(items.splitlines())} items")
     pieces = [header]
     pieces += preceding
     pieces.append(items)

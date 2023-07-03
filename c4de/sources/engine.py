@@ -88,7 +88,7 @@ CARDS = ["forcecollection", "armada", "ccg", "destiny", "ffgtcg", "ffgxw", "ffgx
          "soteemcc", "swct", "swgtcg", "swia", "swor", "swpm", "smith's", "tcg", "topps", "toptrumps", "yjccg", "swr", "swu"]
 DB = ["db", "databank", "swe"]
 VIDEO = ["youtube", "youtube", "swyoutube", "swkidsyoutube", "ilmvfxyoutube", "ilmxlabyoutube", "legoyoutube", "easwyoutube",
-        "disneyplusyt", "disneyxdyoutube", "disneyyoutube", "starwarsshow", "thisweek", "toryoutube"]
+         "disneyplusyoutube", "disneyxdyoutube", "disneyyoutube", "starwarsshow", "thisweek", "toryoutube"]
 WEB = ["torweb", "twitter", "sonycite", "swarchive", "sw", "holonet", "hunters", "ilm", "ilmxlab",
        "legowebcite", "ffgweb", "facebookcite", "ea", "disney", "darkhorse", "d23", "dpb", "cite web", "cn", "blog",
        "blogspot", "amgweb", "asmodee", "marvel", "lucasfilm", "swkids", "bficite", "cardcon", "celebration",
@@ -708,6 +708,8 @@ def load_source_lists(site, log):
         p = Page(site, f"Wookieepedia:Sources/Web/{template}")
         i = 0
         for line in p.get().splitlines():
+            if "/Header}}" in line:
+                continue
             if line.startswith("*{{"):
                 x = line.strip()[1:]
                 i += 1
