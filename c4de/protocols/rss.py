@@ -379,6 +379,7 @@ def check_title_formatting(text, title_regex, title):
     title = re.sub(r"<span[^>]*?italic.*?>(.*?)( )?</span>", r"''\1''\2", title)
     title = re.sub(r"<span[^>]*?italic.*?>(.*?)( )?</span>", r"''\1''\2", title)
     title = title.replace("“", '"').replace("”", '"').replace("’", "'").replace("‘", "'")
+    title = re.sub(" \| ?Disney ?(\+|Plus)[ ]*$", "", title)
 
     return html.unescape(title).replace("’", "'")
 

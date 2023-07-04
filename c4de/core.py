@@ -6,7 +6,7 @@ import time
 from urllib import parse
 from typing import List, Tuple
 from datetime import datetime, timedelta
-from discord import Message, Game, Intents
+from discord import Message, Game, Intents, HTTPException
 from discord.abc import GuildChannel
 from discord.channel import TextChannel, DMChannel
 from discord.ext import commands, tasks
@@ -37,7 +37,7 @@ SELF = 880096997217013801
 CADE = 346767878005194772
 MONITOR = 268478587651358721
 MAIN = "wookieepedia"
-COMMANDS = "bot-commands"
+COMMANDS = "other-commands"
 REQUESTS = "bot-requests"
 ANNOUNCEMENTS = "announcements"
 ADMIN_HELP = "admin-help"
@@ -200,7 +200,7 @@ class C4DE_Bot(commands.Bot):
         for mention in message.mentions:
             if mention == self.user:
                 return True
-        return False
+        return "@C4-DE" in message.content or "<@&884871018567573605>" in message.content
 
     def get_user_ids(self):
         results = {}
@@ -334,6 +334,11 @@ class C4DE_Bot(commands.Bot):
 
         if "rebuild sources" in message.content.lower():
             await self.build_sources()
+            await message.add_reaction(THUMBS_UP)
+            return
+
+        if "clean bot requests" in message.content.lower() or "clear bot requests" in message.content.lower():
+            await self.check_bot_requests()
             await message.add_reaction(THUMBS_UP)
             return
 
@@ -576,7 +581,7 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def is_analyze_source_command(message: Message):
-        match = re.search("(analy[zs]e|build) sources (for )?(?P<article>.*?)(?P<date> with dates?)?(?P<text> (by|and|with) text)?$", message.content)
+        match = re.search("(analy[zs]e|build) sources? (for )?(?P<article>.*?)(?P<date> with dates?)?(?P<text> (by|and|with) text)?$", message.content)
         if match:
             return match.groupdict()
         return None
@@ -635,7 +640,7 @@ class C4DE_Bot(commands.Bot):
             if rev.revid == rev_id:
                 await message.channel.send(f"No changes made to article")
             else:
-                await message.channel.send(f"Completed: <{target.full_url()}?diff=next&oldid={rev_id}>")
+                await message.channel.send(f"Completed: <{target.full_url().replace('%2F', '/')}?diff=next&oldid={rev_id}>")
             for o in results:
                 await message.channel.send(o)
         except Exception as e:
@@ -824,13 +829,20 @@ class C4DE_Bot(commands.Bot):
                             else:
                                 users[m.author.display_name] = m.author.display_name
                         d = m.created_at.strftime("%H:%M, %B %d %Y")
-                        t = f"*'''{users[m.author.display_name]}''': {m.content} ({d})".replace("[[Category:", "[[:Category:")
-                        t = re.sub("({{.*?}})", "<nowiki>\\1</nowiki>", t)
+                        t = f"*{d}: '''{users[m.author.display_name]}''': <nowiki>{m.content}</nowiki>"
                         text += f"\n{t}"
                 page.put(text, "Archiving completed bot requests from Discord", force=True)
 
                 for m in messages:
-                    await m.delete()
+                    try:
+                        await m.delete()
+                        time.sleep(2)
+                    except HTTPException:
+                        time.sleep(5)
+                        try:
+                            await m.delete()
+                        except Exception:
+                            log(f"Cannot delete message {m.id}")
 
         except Exception as e:
             await self.report_error(f"Bot Request Archival: {e}", type(e), e)

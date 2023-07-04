@@ -21,7 +21,7 @@ COLLAPSE = {
     "DatapadCite": "Star Wars: Datapad",  # "[[Star Wars: Datapad|''Star Wars'': Datapad]]"
 }
 
-ISSUES = {
+REFERENCE_MAGAZINES = {
     "BuildFalconCite": ("Star Wars: Build the Millennium Falcon", ""),
     "BuildR2Cite": ("Star Wars: Build Your Own R2-D2", ""),
     "BuildXWingCite": ("Star Wars: Build Your Own X-Wing", ""),
@@ -29,6 +29,7 @@ ISSUES = {
     "FFCite": ("The Official Star Wars Fact File", ""),
     "FFCite\|y=2013": ("The Official Star Wars Fact File Part", "2013"),
     "FFCite\|y=2014": ("The Official Star Wars Fact File Part", "2014"),
+    "FigurineCite": ("Star Wars: The Official Figurine Collection", ""),
     "HelmetCollectionCite": ("Star Wars Helmet Collection", ""),
     "ShipsandVehiclesCite": ("Star Wars Starships & Vehicles", ""),
     "StarshipsVehiclesCite": ("Star Wars: The Official Starships & Vehicles Collection", "")
@@ -114,7 +115,7 @@ def grouping_type(t):
 def convert_issue_to_template(s):
     m = re.search("(\[\[(.*?) ([0-9]+)(\|.*?)?\]\]'* ?{{C\|(.*?)\}\})", s)
     if m:
-        for template, v in ISSUES.items():
+        for template, v in REFERENCE_MAGAZINES.items():
             if m.group(2) == v[0]:
                 t = f"{{{{{template}|{m.group(3)}|{m.group(5)}}}}}"
                 return s.replace(m.group(1), t.replace("\\|", "|"))
@@ -229,7 +230,7 @@ def extract_item(z: str, a: bool, page, master=False):
     for i, j in COLLAPSE.items():
         if "{{" + i + "|" in s or "{{" + i + "}}" in s:
             return Item(z, a, target=COLLAPSE[i], template=i, collapsed=True)
-    for i, (k, o) in ISSUES.items():
+    for i, (k, o) in REFERENCE_MAGAZINES.items():
         m = re.search("\{\{" + i + "\|([0-9]+)(\|(multiple=\[*?)?(.*?))?(\|(.*?))?(\|.*?)?}}", s)
         if m and ((o == "2014" and m.group(1) in ['1', '2', '3', '4', '5']) or (o and o != "2014")):
             return Item(z, a, target=f"{k} {m.group(1)} ({o})", template=i.split("\|")[0], issue=m.group(1),
@@ -339,7 +340,7 @@ def extract_item(z: str, a: bool, page, master=False):
     # Episode/Featurette parameter
     m = re.search("\{+[^\|\}\]]+?\|(set=)?(.*?)(\|.*?)?(episode|featurette)=\[*?(.*?)\]*?(\|.*?)?\}+", s)
     if m:
-        return Item(z, a, target=None, template=template, parent=m.group(2), issue=m.group(5))
+        return Item(z, a, target=None, template=template, parent=m.group(2), issue=m.group(5), collapsed=True)
 
     # Miniatures, toys or cards with set= parameter
     m = re.search("\{\{[^\|\[\}\n]+\|(.*?\|)?set=(?P<set>.*?)\|(.*?\|)?(scenario=(?P<scenario>.*?)\|?)?(.*?)}}", s)
@@ -776,7 +777,7 @@ def load_full_sources(site, log) -> FullListData:
                     c = ' ' + cr.group(1)
                     i['item'] = i['item'].replace(cr.group(1), '').strip()
             x = extract_item(i['item'], False, i['page'], master=True)
-            if x:
+            if x and not x.invalid:
                 if x.template == "SWCT" and not x.target:
                     x.target = x.card
                 x.canon = i.get('canon')
@@ -801,6 +802,8 @@ def load_full_sources(site, log) -> FullListData:
 
 def load_full_appearances(site, log) -> FullListData:
     appearances = load_appearances(site, log)
+    _, canon = parse_timeline(Page(site, "Timeline of canon media").get())
+    _, legends = parse_timeline(Page(site, "Timeline of Legends media").get())
     count = 0
     unique_appearances = {}
     full_appearances = {}
@@ -817,7 +820,10 @@ def load_full_appearances(site, log) -> FullListData:
             if x:
                 x.canon = i.get('canon')
                 x.date = i['date']
-                x.index = i['index']
+                if x.target in canon:
+                    x.index = canon[x.target]
+                elif x.target in legends:
+                    x.index = legends[x.target]
                 x.extra = c
                 full_appearances[x.full_id()] = x
                 unique_appearances[x.unique_id()] = x
@@ -829,8 +835,28 @@ def load_full_appearances(site, log) -> FullListData:
                 print(f"Unrecognized: {i['item']}")
                 count += 1
         except Exception as e:
-            print(f"{e}: {i['item']}")
+            print(f"{type(e)}: {e}: {i['item']}")
     print(f"{count} out of {len(appearances)} unmatched: {count / len(appearances) * 100}")
     return FullListData(unique_appearances, full_appearances, target_appearances)
+
+
+def parse_timeline(text):
+    results = []
+    unique = {}
+    index = 0
+    for line in text.splitlines():
+        if "==page.get() placement==" in line:
+            break
+        line = re.sub("<\!--.*?-->", "", line).strip()
+        m = re.search(
+            "^\|(data-sort-value=.*?\|)?(?P<date>.*?)\|(\|?style.*?\|)? ?[A-Z]+ ?\r?\n?\|.*?\|+[\* ]*?(['\"]*\[\[(?P<target>.*?)(\|.*?)?\]\]['\"]*) ?†?$",
+            line)
+        if m:
+            results.append({"index": index, "target": m.groupdict()['target'], "date": m.groupdict()["date"]})
+            if m.groupdict()['target'] not in unique:
+                unique[m.groupdict()['target']] = index
+            index += 1
+
+    return results, unique
 
 # TODO: handle dupes between Legends/Canon

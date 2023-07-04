@@ -31,7 +31,7 @@ def analyze_body(text, appearances: FullListData, sources: FullListData, remap: 
             for link in links:
                 x = extract_item(link[0], False, "reference")
                 if x:
-                    o = determine_id_for_item(x, appearances.unique, appearances.target, sources.unique, sources.target, remap, log)
+                    o = determine_id_for_item(x, appearances.unique, appearances.target, sources.unique, sources.target, {}, log)
                     if o and not o.use_original_text:
                         if link[0].startswith('"') and link[0].startswith('"') and (len(ref) - len(link[0])) > 5:
                             print(f"Skipping quote-enclosed link {link[0]} (likely an episode name)")
@@ -39,11 +39,13 @@ def analyze_body(text, appearances: FullListData, sources: FullListData, remap: 
                             print(f"Skipping {link[0]} due to presence of other templates in ref note")
                         elif o.master.original.isnumeric():
                             print(f"Skipping {link[0]} due to numeric text")
-                        elif x.format_text and o.master.target and "(" in o.master.target and o.master.target.split("(")[0].strip() not in x.format_text:
-                            print(f"Skipping {link[0]} due to non-standard pipelink")
+                        elif x.format_text and o.master.target and "(" in o.master.target and o.master.target.split("(")[0].strip().lower() not in x.format_text.replace("''", "").lower():
+                            print(f"Skipping {link[0]} due to non-standard pipelink: {x.format_text}")
                         elif x.target in SPECIAL and x.text and x.text.replace("''", "") in SPECIAL[x.target]:
                             print(f"Skipping exempt {link[0]}")
                         else:
+                            if "TODO" in o.master.original:
+                                print(link[0], x.full_id(), o.master.original, o.current.original)
                             new_links.append((link[0], o))
 
             for ot, nt in new_links:
@@ -55,7 +57,8 @@ def analyze_body(text, appearances: FullListData, sources: FullListData, remap: 
                     continue
                 x = extract_item(t, False, "reference")
                 if x:
-                    o = determine_id_for_item(x, appearances.unique, appearances.target, sources.unique, sources.target, remap, log)
+                    o = determine_id_for_item(x, appearances.unique, appearances.target, sources.unique, sources.target,
+                                              {}, log)
                     if o and not o.use_original_text:
                         ex = []
                         if "|author=" in t:
@@ -64,6 +67,8 @@ def analyze_body(text, appearances: FullListData, sources: FullListData, remap: 
                             ex += re.findall("(\|date=.*?)[\|\}]", t)
                         if "|quote=" in t:
                             ex += re.findall("(\|quote=.*?)[\|\}]", t)
+                        if "TODO" in o.master.original:
+                            print(t, x.full_id(), o.master.original, o.current.original)
                         new_templates.append((t, o, ex))
 
             for ot, nt, extra in new_templates:
@@ -95,6 +100,8 @@ def parse_section(section: str, is_appearances: bool, unknown: list, log) -> Tup
         if "CardGameSet" in s:
             s = re.sub("{{CardGameSet\|(set=)?.*?\|cards=", "", s)
             cs += 1
+        if s.strip().startswith("<!-"):
+            s = re.sub("<\!--.*?-->", "", s)
         if s.strip().startswith("*"):
             start = False
             z = s[1:].replace("&ndash;", '–').replace('&mdash;', '—')
@@ -116,7 +123,7 @@ def parse_section(section: str, is_appearances: bool, unknown: list, log) -> Tup
             other1.append(s)
         elif s == "}}" and cs > 0:
             cs = 0
-        elif re.match("^<!--.*?-->$", s):
+        elif re.match("^<\!--.*?-->$", s):
             continue
         elif start and s.strip():
             other1.append(s)
@@ -228,7 +235,12 @@ def has_month_in_date(x: ItemId):
     return x and x.master and x.master.has_date() and "-XX-XX" not in x.master.date
 
 
-def build_new_section(found: List[ItemId], cards: Dict[str, List[ItemId]], set_ids: Dict[str, str], should_sort: bool,
+BY_INDEX = "Use Master Index"
+UNCHANGED = "Leave As Is"
+BY_DATE = "Use Master Date"
+
+
+def build_new_section(found: List[ItemId], cards: Dict[str, List[ItemId]], set_ids: Dict[str, str], mode: str,
                       dates: list, include_date: bool, log, use_index):
     source_names = {}
     urls = {}
@@ -247,7 +259,11 @@ def build_new_section(found: List[ItemId], cards: Dict[str, List[ItemId]], set_i
                 print(f"Skipping duplicate entry: {u}")
             else:
                 urls[u] = o
-        if o.master.has_date():
+        if mode == BY_INDEX and o.master.index is None:
+            missing.append(o)
+        elif mode == BY_INDEX:
+            new_found.append(o)
+        elif o.master.has_date():
             if o.current.index is None:
                 print(f"No index? {o.current.original}, {o.master.original}")
             elif "-XX" in o.master.date:
@@ -262,58 +278,26 @@ def build_new_section(found: List[ItemId], cards: Dict[str, List[ItemId]], set_i
         else:
             missing.append(o)
 
-    if should_sort:
-        if use_index:
-            found = sorted(new_found, key=lambda a: (a.master.date, a.master.mode == "DB", a.master.index, a.sort_text()))
-        else:
-            found = sorted(new_found, key=lambda a: (a.master.date, a.master.mode == "DB", a.sort_text(), a.master.index))
-        for m in missing:
-            if m.master.date == "Canceled":
-                found.append(m)
-                continue
-            ix = None
-            for i, o in enumerate(found):
-                if o.current.index is not None and m.current.index == o.current.index + 1:
-                    ix = i
-                    break
-            if ix:
-                d1 = found[ix - 1].master.date if ix > 0 else None
-                d2 = found[ix + 1].master.date if (ix + 1) < len(found) else None
-                if log:
-                    print(f"Using {ix} as index (between {d1} | {d2}) for missing-date entry: {m.current.original}")
-                found.insert(ix, m)
-                dates.append((True, m, d1, d2))
-            elif m.current.index == 0:
-                d2 = found[1].master.date if len(found) > 1 else None
-                if log:
-                    print(f"Using 0 as index (between start | {d2}) for missing-date entry: {m.current.original}")
-                found.insert(0, m)
-                dates.append((True, m, None, d2))
-            else:
-                print(f"Cannot find index {m.current.index} {m.current.original}")
-
-        for o in found:
-            if o.current.index is None:
-                if log:
-                    print(f"No index? {o.current.original}, {o.master.original}")
-                continue
-            elif o.current.is_appearance:
-                continue
-            elif o.master.has_date() and ("-XX" in o.master.date or o.master.date.startswith("Unknown")):
-                n1 = by_original_index.get(o.current.index - 1)
-                n2 = by_original_index.get(o.current.index + 1)
-                if (n1 and n1.master.has_date()) or (n2 and n2.master.has_date()):
-                    d1 = n1.master.date if n1 else None
-                    t1 = n1.current.original if n1 else None
-                    d2 = n2.master.date if n2 else None
-                    t2 = n2.current.original if n2 else None
-                    if compare_partial_dates(o.master.date, d1, d2, o.current.mode):
-                        if log:
-                            print(f"Partial date {o.master.date} found between {d1} and {d2}: {o.current.original} ({t1} & {t2})")
-                        dates.append((False, o, d1, d2))
+    found = handle_sorting(mode, new_found, missing, dates, use_index=use_index, log=log)
 
     new_text = []
     for o in found:
+        if mode == BY_DATE and o.current.index is None:
+            if log:
+                print(f"No index? {o.current.original}, {o.master.original}")
+        elif mode == BY_DATE and not o.current.is_appearance and o.master.has_date() and ("-XX" in o.master.date or o.master.date.startswith("Unknown")):
+            n1 = by_original_index.get(o.current.index - 1)
+            n2 = by_original_index.get(o.current.index + 1)
+            if (n1 and n1.master.has_date()) or (n2 and n2.master.has_date()):
+                d1 = n1.master.date if n1 else None
+                t1 = n1.current.original if n1 else None
+                d2 = n2.master.date if n2 else None
+                t2 = n2.current.original if n2 else None
+                if compare_partial_dates(o.master.date, d1, d2, o.current.mode):
+                    if log:
+                        print(f"Partial date {o.master.date} found between {d1} and {d2}: {o.current.original} ({t1} & {t2})")
+                    dates.append((False, o, d1, d2))
+
         t = o.current.target.split("(")[0] if o.current.target else None
         if t and t in source_names and len(source_names[t]) > 1:
             if o.current.target.count("(") > 0 and o.current.original.count("[[") == 1:
@@ -324,11 +308,16 @@ def build_new_section(found: List[ItemId], cards: Dict[str, List[ItemId]], set_i
         d = f"<!-- {o.master.date} -->" if include_date else ''
         if o.current.full_id() in set_ids:
             set_cards = cards[set_ids[o.current.full_id()]]
+            ct = 0
             if len(set_cards) > 1:
                 new_text.append(f"{{{{CardGameSet|set={o.current.original}|cards=")
+                ct = 2
             for c in sorted(set_cards, key=lambda a: a.current.original):
-                new_text.append(f"*{d}{c.current.original}{c.current.extra}")
-            if len(set_cards) > 1:
+                zt = re.sub("<!--[ 0-9/X-]+-->", "", f"*{d}{c.current.original}{c.current.extra}")
+                ct += zt.count("{{")
+                ct -= zt.count("}}")
+                new_text.append(zt)
+            if ct > 0:
                 new_text.append("}}")
         else:
             zt = o.current.original if o.use_original_text else o.master.original
@@ -346,6 +335,60 @@ def build_new_section(found: List[ItemId], cards: Dict[str, List[ItemId]], set_i
     # TODO: Canon/Legends check
 
     return "\n".join(new_text)
+
+
+def handle_sorting(mode, new_found: List[ItemId], missing: List[ItemId], dates: list, use_index: bool, log: bool):
+    if mode == UNCHANGED:
+        return new_found
+    elif mode == BY_INDEX:
+        found = sorted(new_found, key=lambda a: (a.master.index, a.sort_text()))
+    elif use_index:
+        found = sorted(new_found, key=lambda a: (a.master.date, a.master.mode == "DB", a.master.index, a.sort_text()))
+    else:
+        found = sorted(new_found, key=lambda a: (a.master.date, a.master.mode == "DB", a.sort_text(), a.master.index))
+
+    index_shift = -1 if mode == BY_INDEX else 1
+    for m in missing:
+        if m.master.date == "Canceled":
+            found.append(m)
+            continue
+        ix1 = None
+        ix2 = None
+        for i, o in enumerate(found):
+            if o.current.index is not None and m.current.index == o.current.index + index_shift:
+                ix1 = i
+            elif o.current.index is not None and m.current.index == o.current.index - index_shift:
+                ix2 = i
+            if ix1 is not None and ix2 is not None:
+                break
+        # print(f"Missing master index for current index {m.current.index} -> {ix1}, {ix2}: {m.current.original}")
+        if ix1:
+            found.insert(ix1, m)
+            if mode == BY_DATE:
+                d1 = found[ix1 - 1].master.date if ix1 > 0 else None
+                d2 = found[ix1 + 1].master.date if (ix1 + 1) < len(found) else None
+                if log:
+                    print(f"Using {ix1} as index (between {d1} | {d2}) for missing-date entry: {m.current.original}")
+                dates.append((True, m, d1, d2))
+        elif ix2:
+            found.insert(ix2, m)
+            if mode == BY_DATE:
+                d1 = found[ix2 - 1].master.date if ix2 > 0 else None
+                d2 = found[ix2 + 1].master.date if (ix2 + 1) < len(found) else None
+                if log:
+                    print(f"Using {ix2} as index (between {d1} | {d2}) for missing-date entry: {m.current.original}")
+                dates.append((True, m, d1, d2))
+        elif m.current.index == 0:
+            found.insert(0, m)
+            if mode == BY_DATE:
+                d2 = found[1].master.date if len(found) > 1 else None
+                if log:
+                    print(f"Using 0 as index (between start | {d2}) for missing-date entry: {m.current.original}")
+                dates.append((True, m, None, d2))
+        else:
+            print(f"Cannot find index {m.current.index} {m.current.original}")
+
+    return found
 
 
 def compare_partial_dates(o: str, d1: str, d2: str, mode: str):
@@ -395,7 +438,7 @@ def build_section_from_pieces(header: str, preceding: List[str], items: str, tra
 
 def analyze_target_page(site: Site, target: Page, appearances: FullListData, sources: FullListData, remap: dict,
                         save: bool, include_date: bool, log=True, use_index=True, handle_references=False):
-    before = target.get()
+    before = re.sub("({{[Ss]croll[_ ]box\|)\*", "{{Scroll_box|\n*", target.get())
     if "‎" in before:
         before = before.replace("‎", "")
         print(f"Found ‎ in {target.title()}")
@@ -477,10 +520,12 @@ def analyze_target_page(site: Site, target: Page, appearances: FullListData, sou
         else:
             found_apps += wrong_ncs
 
-    new_apps = build_new_section(found_apps, apps_cards, apps_sets, False, dates, include_date, log, use_index)
-    new_nca = build_new_section(found_nca, nca_cards, nca_sets, False, dates, include_date, log, use_index)
-    new_sources = build_new_section(found_src, src_cards, src_sets, True, dates, include_date, log, use_index)
-    new_ncs = build_new_section(found_ncs, ncs_cards, ncs_sets, True, dates, include_date, log, use_index)
+    app_mode = UNCHANGED if any("Legends articles" in c.title() for c in target.categories()) else BY_INDEX
+    print(f"Sorting appearances by mode={app_mode}")
+    new_apps = build_new_section(found_apps, apps_cards, apps_sets, app_mode, dates, include_date, log, use_index)
+    new_nca = build_new_section(found_nca, nca_cards, nca_sets, UNCHANGED, dates, include_date, log, use_index)
+    new_sources = build_new_section(found_src, src_cards, src_sets, BY_DATE, dates, include_date, log, use_index)
+    new_ncs = build_new_section(found_ncs, ncs_cards, ncs_sets, BY_DATE, dates, include_date, log, use_index)
 
     pieces = [before.strip(), ""]
     if new_apps:
