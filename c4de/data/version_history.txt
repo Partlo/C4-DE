@@ -98,3 +98,8 @@
 **Variety of minor Source Engine issues found by Uber
 *'''3.2.2''': July 3, 2023
 **Incorporated the timeline of canon media into the Source Engine, allowing for sorting of Appearances on Canon articles by their in-universe chronology. Unfortunately, the Legends media timeline is too incomplete at this time to allow for the same functionality on Legends articles.
+*'''3.3.0''': July 6, 2023
+**Alpha launch of the create-index command. May break.
+**Extensive rewrites of the appearance-sorting logic
+**Added RSS logic for Galaxy of Heroes, and any EA game news site in the future
+**Various other Source Engine bug fixes

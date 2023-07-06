@@ -192,24 +192,24 @@ def archive_url(url):
         error_log(url, type(e), e)
 
     err_msg = None
-    try:
-        log(f"Archiving in the wayback: {url}")
-        wayback = waybackpy.Url(url, USER_AGENT)
-        archive = wayback.save()
-        return True, archive.archive_url.split("/web/", 1)[1].split("/", 1)[0]
-    except RedirectSaveError:
-        err_msg = "URL cannot be archived by wayback machine as it is a redirect"
-    except Exception as e:
-        error_log(url, type(e), e)
-        err_msg = str(e)
-
-    try:
-        r = requests.get(f"https://web.archive.org/web/{url}")
-        if re.search("/web/([0-9]+)/", r.url):
-            log(f"URL is archived already: {url}")
-            return True, r.url.split("/web/", 1)[1].split("/", 1)[0]
-    except Exception as e:
-        error_log(url, type(e), e)
-        return False, err_msg or str(e)
+    # try:
+    #     log(f"Archiving in the wayback: {url}")
+    #     wayback = waybackpy.Url(url, USER_AGENT)
+    #     archive = wayback.save()
+    #     return True, archive.archive_url.split("/web/", 1)[1].split("/", 1)[0]
+    # except RedirectSaveError:
+    #     err_msg = "URL cannot be archived by wayback machine as it is a redirect"
+    # except Exception as e:
+    #     error_log(url, type(e), e)
+    #     err_msg = str(e)
+    #
+    # try:
+    #     r = requests.get(f"https://web.archive.org/web/{url}")
+    #     if re.search("/web/([0-9]+)/", r.url):
+    #         log(f"URL is archived already: {url}")
+    #         return True, r.url.split("/web/", 1)[1].split("/", 1)[0]
+    # except Exception as e:
+    #     error_log(url, type(e), e)
+    #     return False, err_msg or str(e)
 
     return False, err_msg or ""

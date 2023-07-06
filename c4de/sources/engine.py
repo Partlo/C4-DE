@@ -97,6 +97,11 @@ WEB = ["torweb", "twitter", "sonycite", "swarchive", "sw", "holonet", "hunters",
        "holonetnews", "imdb", "jcfcite", "kobo", "lccn", "lucasartscite", "mobygames", "swkids", "sonyforumscite",
        "spotify", "suvudu", "tvcom", "unbound", "wizardscite", "wookcite", "hbcite"]
 
+SELF_CITE = ["torweb", "twitter", "sonycite", "hunters", "ilm", "ilmxlab", "ffgweb", "facebookcite", "ea", "disney",
+             "darkhorse", "d23", "dpb", "cite web", "blog", "blogspot", "amgweb", "asmodee", "marvel", "lucasfilm",
+             "swkids", "dhboards", "dailyswcite", "disneynow", "disneyplus", "endorexpress", "faraway", "gamespot",
+             "holonetnews", "jcfcite","lucasartscite", "mobygames", "swkids", "sonyforumscite", "suvudu", "wizardscite"]
+
 
 def grouping_type(t):
     if t.lower() in TOYS:
@@ -123,6 +128,9 @@ def convert_issue_to_template(s):
 
 
 class Item:
+    """
+    :type date: str
+    """
     def __init__(self, original: str, is_app: bool, *, invalid=False, target: str = None, text: str = None,
                  parent: str = None, mode: str = None, template: str = None, url: str = None, issue: str = None,
                  card: str = None, special=None, collapsed=False, format_text: str = None, no_issue=False):
@@ -147,10 +155,18 @@ class Item:
         self.no_issue = no_issue
         self.old_version = self.original and "oldversion" in self.original
         self.index = None
-        self.date = None
+        self.canon_index = None
+        self.legends_index = None
+        self.date = ''
         self.canon = None
+        self.unlicensed = False
+        self.non_canon = False
         self.alternate_url = None
+        self.self_cite = False
         self.extra = ''
+
+    def sort_index(self, canon):
+        return (self.canon_index if canon else self.legends_index) or self.index
 
     def __str__(self):
         return f"Item[{self.full_id()}]"
@@ -174,6 +190,15 @@ class Item:
         i = f"{self.mode}|{self.template}|{self.target}|{self.url}|{self.parent}|{self.issue}|{s}|{self.text}"
         return f"{i}|True" if self.old_version else i
 
+    def can_self_cite(self):
+        if self.mode == "YT":
+            return True
+        elif self.template in SELF_CITE:
+            return True
+        elif self.template == "SW" and self.url.startswith("news/"):
+            return True
+        return self.self_cite
+
 
 class ItemId:
     def __init__(self, current: Item, master: Item, use_original_text: bool,
@@ -188,7 +213,7 @@ class ItemId:
         return (self.current.text if self.current.mode == "DB" else self.current.original).replace("''", "").replace('"', '').replace("|", " |").replace("}}", " }}").lower()
 
 
-def extract_item(z: str, a: bool, page, master=False):
+def extract_item(z: str, a: bool, page, master=False) -> Item:
     """ Extracts an Item object from the given source/appearance line, parsing out the target article and all other
     relevant information.
 
@@ -644,9 +669,14 @@ def match_url(o: Item, url: str, data: Dict[str, Item]):
             return ItemId(o, d, False, False)
 
 
-def load_appearances(site, log):
+def load_appearances(site, log, canon_only=False, legends_only=False):
     data = []
-    for sp in ["Appearances/Legends", "Appearances/Canon", "Appearances/Extra"]:
+    pages = ["Appearances/Legends", "Appearances/Canon", "Appearances/Extra"]
+    if canon_only:
+        pages = ["Appearances/Canon"]
+    elif legends_only:
+        pages = ["Appearances/Legends"]
+    for sp in pages:
         i = 0
         p = Page(site, f"Wookieepedia:{sp}")
         for line in p.get().splitlines():
@@ -770,9 +800,11 @@ def load_full_sources(site, log) -> FullListData:
     target_sources = {}
     for i in sources:
         try:
+            unlicensed = "{{c|unlicensed" in i['item'].lower()
+            non_canon = ("{{c|non-canon" in i['item'].lower() or "{{nc" in i['item'].lower())
             c = ''
             if "{{C|" in i['item']:
-                cr = re.search("({{C\|([Rr]epublished|[Uu]nlicensed)}})", i['item'])
+                cr = re.search("({{C\|([Rr]epublished|[Uu]nlicensed|[Nn]on[ -]?canon)}})", i['item'])
                 if cr:
                     c = ' ' + cr.group(1)
                     i['item'] = i['item'].replace(cr.group(1), '').strip()
@@ -784,6 +816,8 @@ def load_full_sources(site, log) -> FullListData:
                 x.date = i['date']
                 x.index = i['index']
                 x.extra = c
+                x.unlicensed = unlicensed
+                x.non_canon = non_canon
                 x.alternate_url = i.get('alternate')
                 full_sources[x.full_id()] = x
                 unique_sources[x.unique_id()] = x
@@ -800,8 +834,8 @@ def load_full_sources(site, log) -> FullListData:
     return FullListData(unique_sources, full_sources, target_sources)
 
 
-def load_full_appearances(site, log) -> FullListData:
-    appearances = load_appearances(site, log)
+def load_full_appearances(site, log, canon_only=False, legends_only=False) -> FullListData:
+    appearances = load_appearances(site, log, canon_only=canon_only, legends_only=legends_only)
     _, canon = parse_timeline(Page(site, "Timeline of canon media").get())
     _, legends = parse_timeline(Page(site, "Timeline of Legends media").get())
     count = 0
@@ -810,9 +844,11 @@ def load_full_appearances(site, log) -> FullListData:
     target_appearances = {}
     for i in appearances:
         try:
+            unlicensed = "{{c|unlicensed" in i['item'].lower()
+            non_canon = ("{{c|non-canon" in i['item'].lower() or "{{nc" in i['item'].lower())
             c = ''
             if "{{C|" in i['item']:
-                cr = re.search("({{C\|([Rr]epublished|[Uu]nlicensed)}})", i['item'])
+                cr = re.search("({{C\|([Rr]epublished|[Uu]nlicensed|[Nn]on[ -]?canon)}})", i['item'])
                 if cr:
                     c = ' ' + cr.group(1)
                     i['item'] = i['item'].replace(cr.group(1), '').strip()
@@ -821,10 +857,12 @@ def load_full_appearances(site, log) -> FullListData:
                 x.canon = i.get('canon')
                 x.date = i['date']
                 if x.target in canon:
-                    x.index = canon[x.target]
-                elif x.target in legends:
-                    x.index = legends[x.target]
+                    x.canon_index = canon[x.target]
+                if x.target in legends:
+                    x.legends_index = legends[x.target]
                 x.extra = c
+                x.unlicensed = unlicensed
+                x.non_canon = non_canon
                 full_appearances[x.full_id()] = x
                 unique_appearances[x.unique_id()] = x
                 if x.target:
@@ -844,17 +882,20 @@ def parse_timeline(text):
     results = []
     unique = {}
     index = 0
+    repl = True
+    text = re.sub("(\| ?[A-Z]+ ?)\n\|", "\\1|", text)
     for line in text.splitlines():
         if "==page.get() placement==" in line:
             break
         line = re.sub("<\!--.*?-->", "", line).strip()
         m = re.search(
-            "^\|(data-sort-value=.*?\|)?(?P<date>.*?)\|(\|?style.*?\|)? ?[A-Z]+ ?\r?\n?\|.*?\|+[\* ]*?(['\"]*\[\[(?P<target>.*?)(\|.*?)?\]\]['\"]*) ?†?$",
+            "^\|(data-sort-value=.*?\|)?(?P<date>.*?)\|(\|?style.*?\|)? ?[A-Z]+ ?\n?\|.*?\|+[\* ]*?(['\"]*\[\[(?P<target>.*?)(\|.*?)?\]\]['\"]*) ?†?$",
             line)
         if m:
-            results.append({"index": index, "target": m.groupdict()['target'], "date": m.groupdict()["date"]})
-            if m.groupdict()['target'] not in unique:
-                unique[m.groupdict()['target']] = index
+            t = m.groupdict()['target'].replace("&ndash;", '–').replace('&mdash;', '—').strip()
+            results.append({"index": index, "target": t, "date": m.groupdict()["date"]})
+            if t not in unique:
+                unique[t] = index
             index += 1
 
     return results, unique

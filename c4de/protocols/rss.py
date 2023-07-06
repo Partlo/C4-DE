@@ -270,11 +270,48 @@ def check_blog_list(url, feed_url, cache: Dict[str, List[str]]):
             continue
 
         d = article.find("time", class_="dt-published")
-        results.append({"site": site, "title": link.text, "url": u, "content": "", "date": d.get('href') if d else None})
+        results.append({"site": site, "title": link.text, "url": u, "content": "", "date": d.get('datetime') if d else None})
         cache[site].append(u)
 
     if cache.get(site):
-        cache[site] = cache[site][-20:]
+        cache[site] = cache[site][:20]
+
+    return results
+
+
+def check_ea_news(site, url, feed_url, cache: Dict[str, List[str]]):
+    x = None
+    try:
+        x = requests.get(feed_url, timeout=15).text
+    except Exception as e:
+        error_log(e)
+    if not x:
+        return []
+
+    soup = BeautifulSoup(x, "html.parser")
+    results = []
+
+    for article in reversed(soup.find_all("ea-tile")):
+        link = article.find("ea-cta")
+        if not link:
+            continue
+        link = link.find("a")
+        if not link:
+            continue
+        u = url + link.get('href')
+        if site not in cache:
+            cache[site] = []
+        if cache[site] and u in cache[site]:
+            continue
+
+        d = article['eyebrow-secondary-text']
+        try:
+            d = datetime.strptime(d, "%b %d, %Y").strftime("%Y-%m-%d")
+        except Exception:
+            pass
+
+        results.append({"site": site, "title": article['title-text'], "url": u, "content": "", "date": d})
+        cache[site].append(u)
 
     return results
 

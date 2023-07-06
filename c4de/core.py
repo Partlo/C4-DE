@@ -26,10 +26,11 @@ from c4de.protocols.cleanup import archive_stagnant_senate_hall_threads, remove_
 from c4de.protocols.edelweiss import run_edelweiss_protocol, calculate_isbns_for_all_pages
 from c4de.protocols.rss import check_rss_feed, check_latest_url, check_wookieepedia_feeds, check_sw_news_page, \
     check_review_board_nominations, check_policy, check_consensus_track_duration, check_user_rights_nominations, \
-    check_blog_list
+    check_blog_list, check_ea_news
 
-from c4de.sources.analysis import analyze_target_page
+from c4de.sources.analysis import analyze_target_page, get_analysis_from_page
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap
+from c4de.sources.index import create_index
 from c4de.sources.updates import get_future_products_list, handle_results
 
 
@@ -347,6 +348,11 @@ class C4DE_Bot(commands.Bot):
             await self.handle_analyze_source_command(message, match)
             return
 
+        match = self.is_create_index_command(message)
+        if match:
+            await self.handle_create_index_command(message, match)
+            return
+
         if "spoiler" in message.content.lower():
             for page in Category(self.site, "Articles with expired spoiler notices").articles(namespaces=0):
                 try:
@@ -580,6 +586,13 @@ class C4DE_Bot(commands.Bot):
             await self.report_error("Sources rebuild", type(e), e)
 
     @staticmethod
+    def is_create_index_command(message: Message):
+        match = re.search("create index (for )?(?P<article>.*?)$", message.content)
+        if match:
+            return match.groupdict()
+        return None
+
+    @staticmethod
     def is_analyze_source_command(message: Message):
         match = re.search("(analy[zs]e|build) sources? (for )?(?P<article>.*?)(?P<date> with dates?)?(?P<text> (by|and|with) text)?$", message.content)
         if match:
@@ -643,6 +656,32 @@ class C4DE_Bot(commands.Bot):
                 await message.channel.send(f"Completed: <{target.full_url().replace('%2F', '/')}?diff=next&oldid={rev_id}>")
             for o in results:
                 await message.channel.send(o)
+        except Exception as e:
+            print(e.__traceback__)
+            await self.report_error("Analyze sources", type(e), e)
+            await message.remove_reaction(TIMER, self.user)
+            await message.add_reaction(EXCLAMATION)
+            await message.channel.send("Encountered error while analyzing page")
+
+    async def handle_create_index_command(self, message: Message, command: dict):
+        try:
+            target = Page(self.site, command['article'])
+            if not target.exists():
+                await message.add_reaction(EXCLAMATION)
+                await message.channel.send(f"{command['article']} cannot be found")
+                return
+            if target.isRedirectPage():
+                target = target.getRedirectTarget()
+
+            await message.add_reaction(TIMER)
+            analysis = get_analysis_from_page(self.site, target, self.appearances, self.sources, self.remap, False)
+            result = create_index(self.site, target, analysis, True)
+            await message.remove_reaction(TIMER, self.user)
+
+            if result.exists():
+                await message.channel.send(f"Completed: <{result.full_url().replace('%2F', '/')}")
+            else:
+                await message.channel.send(f"Could not create index page")
         except Exception as e:
             print(e.__traceback__)
             await self.report_error("Analyze sources", type(e), e)
@@ -933,6 +972,8 @@ class C4DE_Bot(commands.Bot):
                     messages = check_sw_news_page(site_data["url"], self.external_rss_cache["sites"], site_data["title"])
                 elif site == "AtomicMassGames.com":
                     messages = check_blog_list(site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
+                elif site_data["template"] == "EA":
+                    messages = check_ea_news(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
                 elif site_data.get("url"):
                     messages = check_latest_url(site_data["url"], self.external_rss_cache["sites"], site, site_data["title"])
                 else:
@@ -1009,7 +1050,7 @@ class C4DE_Bot(commands.Bot):
         if success:
             msg += f"\n- Wayback Archive Date: {archivedate}"
         else:
-            msg += f"\n- Unable to archive URL: {archivedate.splitlines()[0]}"
+            msg += f"\n- Unable to archive URL: {archivedate.splitlines()[0] if archivedate else ''}"
 
         results = [(UPDATES, msg)]
         for c in site_data.get("channels", []):

@@ -10,25 +10,25 @@ from c4de.sources.engine import extract_item, FullListData
 
 def extract_release_date(title, text):
     date_strs = []
-    m = re.search("\|(publish date|publication date|airdate|release date|released|published)=(?P<d1>.*?)(<.*?)?\n(\*(?P<d2>.*?)(<.*?)?\n)?(\*(?P<d3>.*?)(<.*?)?\n)?",
-                  text)
+    m = re.search("\|(publish date|publication date|airdate|release date|released|published)=(?P<d1>.*?)(?P<r1><ref.*?)?\n(\*(?P<d2>.*?)(?P<r2><ref.*?)?\n)?(\*(?P<d3>.*?)(?P<r3><ref.*?)?\n)?",
+            text)
     if m:
-        for k in ['d1', 'd2', 'd3']:
-            if m.groupdict()[k]:
-                d = m.groupdict()[k].replace("[", "").replace("]", "").replace("*", "").strip().replace(',', '')
+        for i in range(1, 4):
+            if m.groupdict()[f"d{i}"]:
+                d = m.groupdict()[f"d{i}"].replace("[", "").replace("]", "").replace("*", "").strip().replace(',', '')
                 d = re.sub("&ndash;[A-z]+ [0-9\|]+", "", d)
                 d = re.sub("([A-z]+ ?[0-9]*) ([0-9]{4})( .*?)$", "\\1 \\2", d)
-                date_strs.append(d.split("-")[0])
+                date_strs.append((d.split("-")[0], m.groupdict().get(f"r{i}")))
 
     page_dates = []
-    for d in date_strs:
+    for d, r in date_strs:
         if d:
             t, z = None, None
             for x, df in {"day": "%B %d %Y", "month": "%B %Y", "year": "%Y"}.items():
                 try:
                     z = datetime.strptime(d, df)
                     t = x
-                    page_dates.append((t, z))
+                    page_dates.append((t, z, r))
                     break
                 except Exception:
                     pass
@@ -78,7 +78,7 @@ def analyze_page(page, category):
 
 
 class FutureProduct:
-    def __init__(self, page: Page, category: str, dates: List[Tuple[str, datetime]], infobox: str, canon_type: str, item_type: str):
+    def __init__(self, page: Page, category: str, dates: List[Tuple[str, datetime, str]], infobox: str, canon_type: str, item_type: str):
         self.page = page
         self.category = category
         self.dates = dates
@@ -141,8 +141,8 @@ def parse_page(p: Page):
     return FullListData(unique, full, target)
 
 
-def dates_match(dates: List[Tuple[str, datetime]], master):
-    for t, d in dates:
+def dates_match(dates: List[Tuple[str, datetime, str]], master):
+    for t, d, r in dates:
         if t == "day":
             if master == d.strftime("%Y-%m-%d"):
                 return True
