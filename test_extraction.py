@@ -1,4 +1,5 @@
 import sys
+import traceback
 from datetime import datetime
 
 from pywikibot import Site, Page, handle_args, pagegenerators
@@ -42,6 +43,7 @@ def analyze(*args):
             analyze_target_page(gen_factory.site, page, appearances, sources, remap, save, include_date, log=False,
                                 handle_references=True)
         except Exception as e:
+            traceback.print_exc()
             print(e)
 
 

@@ -1,6 +1,7 @@
 from typing import Dict, List
 import xml.etree.ElementTree as ET
 import feedparser
+import json
 import re
 import requests
 import html
@@ -160,7 +161,7 @@ def parse_bot_request_diff(description):
                 else:
                     print(f"No new section detected for the following text: {cells[1].text}")
 
-    return "\n".join([f"`{r.strip()}`" for r in results])
+    return "\n".join([f"```{r.strip()}```" for r in results if r])
 
 
 def check_entry(*, entries, title_regex, site, link, title, content, check_star_wars, video_id):
@@ -215,7 +216,6 @@ def check_sw_news_page(feed_url, cache: Dict[str, List[str]], title_regex):
             error_log(type(e), e)
 
     final_entries = []
-    d = datetime.now().strftime("%Y-%m-%d")
     for e in initial_entries:
         try:
             if site_cache and e["url"] in site_cache:
@@ -234,7 +234,7 @@ def check_sw_news_page(feed_url, cache: Dict[str, List[str]], title_regex):
             else:
                 cache[site].append(e["url"])
 
-            d = None
+            d = datetime.now().strftime("%Y-%m-%d")
             try:
                 d = datetime.strptime("%B %d, %Y", e['date']).strftime("%Y-%m-%d") if e.get('date') else None
             except Exception:
@@ -248,8 +248,7 @@ def check_sw_news_page(feed_url, cache: Dict[str, List[str]], title_regex):
     return final_entries
 
 
-def check_blog_list(url, feed_url, cache: Dict[str, List[str]]):
-    site = "AtomicMassGames.com"
+def check_blog_list(site, url, feed_url, cache: Dict[str, List[str]]):
     x = None
     try:
         x = requests.get(feed_url, timeout=15).text
@@ -266,6 +265,8 @@ def check_blog_list(url, feed_url, cache: Dict[str, List[str]]):
         if not link:
             continue
         u = url + link.get('href')
+        if site not in cache:
+            cache[site] = []
         if cache[site] and u in cache[site]:
             continue
 
@@ -273,8 +274,39 @@ def check_blog_list(url, feed_url, cache: Dict[str, List[str]]):
         results.append({"site": site, "title": link.text, "url": u, "content": "", "date": d.get('datetime') if d else None})
         cache[site].append(u)
 
-    if cache.get(site):
-        cache[site] = cache[site][:20]
+    return results
+
+
+def check_unlimited(site, url, feed_url, cache: Dict[str, List[str]]):
+    x = None
+    try:
+        x = requests.get(feed_url, timeout=15).text
+    except Exception as e:
+        error_log(e)
+    if not x:
+        return []
+
+    soup = BeautifulSoup(x, "html.parser")
+    results = []
+    if site not in cache:
+        cache[site] = []
+
+    script = soup.find("script", id="__NEXT_DATA__")
+    if script and any(s and "dehydratedState" in s for s in script.contents):
+        target = next(s for s in script.contents if s and "dehydratedState" in s)
+        data = json.loads(target)
+        articles = data["props"]["pageProps"]["dehydratedState"]["queries"][0]["state"]["data"]["data"]
+        for a in articles:
+            u = f"{url}/articles/{a['attributes']['slug']}"
+            if cache[site] and u in cache[site]:
+                continue
+            d = None
+            if a["attributes"]["publishedAt"]:
+                d = a["attributes"]["publishedAt"].split("T")[0]
+            t = re.sub("'*Star Wars'*", "''Star Wars''", a["attributes"]["title"])
+
+            results.append({"site": site, "title": t, "url": u, "content": "", "date": d})
+            cache[site].append(u)
 
     return results
 
@@ -417,6 +449,7 @@ def check_title_formatting(text, title_regex, title):
     title = re.sub(r"<span[^>]*?italic.*?>(.*?)( )?</span>", r"''\1''\2", title)
     title = title.replace("“", '"').replace("”", '"').replace("’", "'").replace("‘", "'")
     title = re.sub(" \| ?Disney ?(\+|Plus)[ ]*$", "", title)
+    title = title.replace("|", "&verbar;")
 
     return html.unescape(title).replace("’", "'")
 

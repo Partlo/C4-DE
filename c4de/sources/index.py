@@ -44,7 +44,7 @@ def convert_date_str(date):
     if not (date and date[0].isnumeric()):
         return date, None
     elif date.endswith("-XX-XX"):
-        return date[:4], datetime(date[:4], 1, 1)
+        return date[:4], datetime(int(date[:4]), 1, 1)
     elif date.endswith("-XX"):
         try:
             d = datetime.strptime(date, "%Y-%m-XX")
@@ -61,7 +61,7 @@ def convert_date_str(date):
         return date, None
 
 
-def get_reference_for_release_date(site, target, date, refs: dict):
+def get_reference_for_release_date(site, target, date, refs: dict, contents: dict):
     try:
         if not date:
             print(f"No release date found for {target}")
@@ -71,10 +71,13 @@ def get_reference_for_release_date(site, target, date, refs: dict):
             return f'<ref name="{t}" />'
 
         ref_text, other_date = extract_release_date_reference(site, target, date)
-        if ref_text:
+        if ref_text and ref_text in contents:
+            return f'<ref name="{contents[ref_text]} />'
+        elif ref_text:
             if other_date:
                 print(f"Could not find exact match for {date}; using closest date match: {other_date}")
             refs[t] = ref_text
+            contents[ref_text] = t
             return f'<ref name="{t}">{ref_text}</ref>'
     except Exception as e:
         print(f"Encountered {type(e)} while extracting release date for {target}: {e}")
@@ -129,6 +132,7 @@ def create_index(site, page: Page, results: AnalysisResults, save: bool):
 
     lines = ["This is the media index page for [[{{PAGENAME}}]].", "", "==Media index=="]
     refs = {}
+    contents = {}
     for i in found:
         date_str, parsed_date = convert_date_str(i.master.date)
         date_ref = ''
@@ -136,16 +140,16 @@ def create_index(site, page: Page, results: AnalysisResults, save: bool):
             date_str = date_str.replace(" 0", " ")
 
             if i.master.target:
-                date_ref = get_reference_for_release_date(site, i.master.target, parsed_date, refs)
+                date_ref = get_reference_for_release_date(site, i.master.target, parsed_date, refs, contents)
             if i.master.parent and not date_ref:
-                date_ref = get_reference_for_release_date(site, i.master.parent, parsed_date, refs)
+                date_ref = get_reference_for_release_date(site, i.master.parent, parsed_date, refs, contents)
             if not date_ref and i.master.url and i.master.can_self_cite():
                 t = f"{i.master.template}: {i.master.text}".replace('"', '')
                 if t in refs:
+                    date_ref = f'<ref name="{t}" />'
+                else:
                     refs[t] = i.master.original
                     date_ref = f'<ref name="{t}">{refs[t]}</ref>'
-                else:
-                    date_ref = f'<ref name="{t}" />'
 
         zt = i.current.original if i.use_original_text else i.master.original
         xt = f"*{date_str}:{date_ref} {zt}{i.current.extra}"
@@ -155,7 +159,11 @@ def create_index(site, page: Page, results: AnalysisResults, save: bool):
 
     if refs:
         lines.append("\n==Notes and references==")
+        if len(refs) > 20:
+            lines.append("{{Scroll_box|content=")
         lines.append("{{Reflist}}")
+        if len(refs) > 20:
+            lines.append("}}")
         lines.append("\n[[Category:Index pages]]")
 
     index = None

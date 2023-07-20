@@ -170,6 +170,12 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
                 no_image = bool(item.find_elements_by_class_name("noThumbImageScroll"))
                 categories = [c.text for c in item.find_elements_by_css_selector(".pve_categories ul.categories li")]
 
+                if any("CANCELED" in s.text for s in sub_names):
+                    print(f"Skipping canceled product: {title}")
+                    continue
+                elif "Thomas Kinkade Studios" in title:
+                    continue
+
                 results.append({
                     "title": title,
                     "subTitle": sub_names[0].text if sub_names else "",
@@ -246,6 +252,8 @@ def determine_page(site: Site, title: str, item: dict, pages_by_isbn: Dict[str, 
     m = re.search("Star Wars: (.*?) \((.*?)\)", title)
     if m:
         titles = [f"{m.group(2)}: {m.group(1)}", f"Star Wars: {m.group(2)}: {m.group(1)}"]
+        if re.search(".*?: .*?", m.group(1)):
+            titles.append(m.group(1))
         if subtitle:
             titles += [f"{m.group(2)}: {m.group(1)}: {subtitle}", f"{m.group(2)}: {m.group(1)} — {subtitle}"]
         for t in titles:
@@ -292,7 +300,7 @@ def analyze_products(site, products: List[dict], search_terms):
             if not item["hasImage"]:
                 new_missing_images.append(item["sku"])
 
-            if not page and item["title"] in false_positives:
+            if not page and (item["title"] in false_positives or "t-shirt" in item["title"].lower()):
                 continue
             elif not page and not any(s.lower() in item["title"].lower() for s in search_terms):
                 results["newItems"].append(f"(Potential False Positive): {item['title']} - {url}{archive_sku(item['sku'])}")
@@ -319,6 +327,14 @@ def analyze_products(site, products: List[dict], search_terms):
                     date2 = m.group(5).replace("[", "").replace("]", "").replace("*", "").strip()
                     date_strs.append(re.sub("([A-z]+ [0-9]+) ([0-9]+)", "\\1, \\2", date2))
 
+            if "isbn=none" in text:
+                print(f"Saving new ISBN {item['isbn']} for {page.title()}")
+                text = text.replace("isbn=none", f"isbn={item['isbn']}")
+                page.put(text, f"Saving new ISBN {item['isbn']} from Edelweiss")
+                if page.title() not in pages_by_isbn:
+                    pages_by_isbn[page.title()] = []
+                pages_by_isbn[page.title()].append(item['isbn'])
+
             if not date_strs and " 202" not in item.get("publicationDate", ""):
                 log(f"{page.title()} has a release date of {item.get('publicationDate')}")
                 continue
@@ -330,7 +346,12 @@ def analyze_products(site, products: List[dict], search_terms):
                 continue
             page_dates = []
             for d in date_strs:
-                page_dates.append(datetime.strptime(d, "%B %d, %Y"))
+                c = d.split("{{C|")[0].strip()
+                if c:
+                    try:
+                        page_dates.append(datetime.strptime(c, "%B %d, %Y"))
+                    except Exception as e:
+                        print(e)
             item_date = datetime.strptime(item["publicationDate"], "%B %d, %Y")
 
             past = any([d < datetime.now() for d in page_dates])
@@ -389,11 +410,13 @@ def run_edelweiss_protocol(site, scheduled=False):
     for key, header in headers.items():
         if not analysis_results.get(key):
             continue
-        m = [header]
+        m = [[header]]
         for item in analysis_results[key]:
-            m.append(f"- {item}")
+            if sum(len(x) for x in m[-1]) + len(item) + 2 >= 2000:
+                m.append([])
+            m[-1].append(f"- {item}")
             log(f"{header} {item}")
-        messages.append("\n".join(m))
+        messages += ["\n".join(x) for x in m]
 
     if messages:
         messages.insert(0, ":book: Edelweiss Catalog Report:")

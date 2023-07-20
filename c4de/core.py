@@ -2,6 +2,8 @@ import codecs
 import re
 import json
 import sys
+import traceback
+
 import time
 from urllib import parse
 from typing import List, Tuple
@@ -26,7 +28,7 @@ from c4de.protocols.cleanup import archive_stagnant_senate_hall_threads, remove_
 from c4de.protocols.edelweiss import run_edelweiss_protocol, calculate_isbns_for_all_pages
 from c4de.protocols.rss import check_rss_feed, check_latest_url, check_wookieepedia_feeds, check_sw_news_page, \
     check_review_board_nominations, check_policy, check_consensus_track_duration, check_user_rights_nominations, \
-    check_blog_list, check_ea_news
+    check_blog_list, check_ea_news, check_unlimited
 
 from c4de.sources.analysis import analyze_target_page, get_analysis_from_page
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap
@@ -151,6 +153,8 @@ class C4DE_Bot(commands.Bot):
 
         await self.reload_rss_data()
 
+        self.get_user_ids()
+
         try:
             info = report_version_info(self.site, self.version)
             if info:
@@ -206,14 +210,12 @@ class C4DE_Bot(commands.Bot):
     def get_user_ids(self):
         results = {}
         for user in self.text_channel(MAIN).guild.members:
-            results[user.name.lower()] = user.id
+            results[user.display_name.lower()] = user.id
         return results
 
     def get_user_id(self, editor, user_ids=None):
         if not user_ids:
             user_ids = self.get_user_ids()
-        for k, v in user_ids.items():
-            print(editor, k, v)
         user_id = user_ids.get(self.admin_users.get(editor, editor.lower()), user_ids.get(editor.lower()))
         return f"<@{user_id}>" if user_id else editor
 
@@ -306,6 +308,7 @@ class C4DE_Bot(commands.Bot):
         for message in await self.text_channel(channel).history(limit=30).flatten():
             if str(message.id) in message_ids:
                 await message.delete()
+                time.sleep(2)
 
     async def handle_commands(self, message: Message, dm):
         channel = self.text_channel("bot-requests") if dm else message.channel
@@ -570,6 +573,7 @@ class C4DE_Bot(commands.Bot):
             self.sources = load_full_sources(self.site, False)
             self.remap = load_remap(self.site)
         except Exception as e:
+            traceback.print_exc()
             await self.report_error("Sources rebuild", type(e), e)
 
     def have_sources_changed(self):
@@ -587,7 +591,7 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def is_create_index_command(message: Message):
-        match = re.search("create index (for )?(?P<article>.*?)$", message.content)
+        match = re.search("create [iI]ndex (for )?(?P<article>.*?)$", message.content)
         if match:
             return match.groupdict()
         return None
@@ -632,7 +636,7 @@ class C4DE_Bot(commands.Bot):
             await message.channel.send("Encountered error while analyzing page")
 
     async def handle_analyze_source_command(self, message: Message, command: dict):
-        try:
+        # try:
             target = Page(self.site, command['article'])
             if not target.exists():
                 await message.add_reaction(EXCLAMATION)
@@ -656,12 +660,12 @@ class C4DE_Bot(commands.Bot):
                 await message.channel.send(f"Completed: <{target.full_url().replace('%2F', '/')}?diff=next&oldid={rev_id}>")
             for o in results:
                 await message.channel.send(o)
-        except Exception as e:
-            print(e.__traceback__)
-            await self.report_error("Analyze sources", type(e), e)
-            await message.remove_reaction(TIMER, self.user)
-            await message.add_reaction(EXCLAMATION)
-            await message.channel.send("Encountered error while analyzing page")
+        # except Exception as e:
+        #     print(e.__traceback__)
+        #     await self.report_error("Analyze sources", type(e), e)
+        #     await message.remove_reaction(TIMER, self.user)
+        #     await message.add_reaction(EXCLAMATION)
+        #     await message.channel.send("Encountered error while analyzing page")
 
     async def handle_create_index_command(self, message: Message, command: dict):
         try:
@@ -679,12 +683,20 @@ class C4DE_Bot(commands.Bot):
             await message.remove_reaction(TIMER, self.user)
 
             if result.exists():
-                await message.channel.send(f"Completed: <{result.full_url().replace('%2F', '/')}")
+                await message.channel.send(f"Completed: <{result.full_url().replace('%2F', '/').replace('%3A', ':')}>")
+                text = target.get()
+                if "{{Indexpage}}" not in text:
+                    if "==Appearances==" in text:
+                        target.put(text.replace("==Appearances==", "==Appearances==\n{{Indexpage}}"), "Adding Index")
+                    elif "==Appearances==" in text:
+                        target.put(text.replace("==Sources==", "==Sources==\n{{Indexpage}}"), "Adding Index")
+                    else:
+                        await message.channel.send("Could not locate Appearances or Sources header in target article, so {Indexpage} has not been added")
             else:
                 await message.channel.send(f"Could not create index page")
         except Exception as e:
-            print(e.__traceback__)
-            await self.report_error("Analyze sources", type(e), e)
+            print(traceback.format_exc())
+            await self.report_error("Create index", type(e), e)
             await message.remove_reaction(TIMER, self.user)
             await message.add_reaction(EXCLAMATION)
             await message.channel.send("Encountered error while analyzing page")
@@ -883,6 +895,8 @@ class C4DE_Bot(commands.Bot):
                         except Exception:
                             log(f"Cannot delete message {m.id}")
 
+        except TimeoutError:
+            pass
         except Exception as e:
             await self.report_error(f"Bot Request Archival: {e}", type(e), e)
 
@@ -970,8 +984,10 @@ class C4DE_Bot(commands.Bot):
             try:
                 if site == "StarWars.com":
                     messages = check_sw_news_page(site_data["url"], self.external_rss_cache["sites"], site_data["title"])
-                elif site == "AtomicMassGames.com":
-                    messages = check_blog_list(site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
+                elif site_data["template"] == "Unlimitedweb":
+                    messages = check_unlimited(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
+                elif site_data["template"] == "AMGweb":
+                    messages = check_blog_list(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
                 elif site_data["template"] == "EA":
                     messages = check_ea_news(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
                 elif site_data.get("url"):
@@ -1024,19 +1040,20 @@ class C4DE_Bot(commands.Bot):
         already_archived = archive and archive.get(target)
         if already_archived:
             log(f"URL already archived and recorded: {m['url']}")
-            success, archivedate = True, archive[target]
+            success, include_archivedate, archivedate = True, False, archive[target]
         else:
             log(f"Archiving URL: {m['url']}")
             success, archivedate = archive_url(m["url"])
+            include_archivedate = success
 
         if youtube:
             t = f"New Video on the official {m['site']} YouTube channel"
         else:
-            t = f"New Article on {m['site']}"
+            s = (m['site'].split('.com:')[0] + '.com') if '.com:' in m['site'] else m['site']
+            t = f"New Article on {s}"
         f = m["title"].replace("''", "*")
         msg = "{0} **{1}:**    {2}\n- <{3}>".format(self.emoji_by_name(site_data["emoji"]), t, f, m["url"])
 
-        include_archivedate = success
         if success and site_data.get("addToArchive") and not already_archived:
             try:
                 self.add_urls_to_archive(site_data["template"], target, archivedate)

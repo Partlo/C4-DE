@@ -1,4 +1,5 @@
 import re
+import traceback
 from datetime import datetime
 from typing import List, Dict
 
@@ -100,7 +101,7 @@ WEB = ["torweb", "twitter", "sonycite", "swarchive", "sw", "holonet", "hunters",
 SELF_CITE = ["torweb", "twitter", "sonycite", "hunters", "ilm", "ilmxlab", "ffgweb", "facebookcite", "ea", "disney",
              "darkhorse", "d23", "dpb", "cite web", "blog", "blogspot", "amgweb", "asmodee", "marvel", "lucasfilm",
              "swkids", "dhboards", "dailyswcite", "disneynow", "disneyplus", "endorexpress", "faraway", "gamespot",
-             "holonetnews", "jcfcite","lucasartscite", "mobygames", "swkids", "sonyforumscite", "suvudu", "wizardscite"]
+             "holonetnews", "jcfcite", "lucasartscite", "mobygames", "swkids", "sonyforumscite", "suvudu", "wizardscite"]
 
 
 def grouping_type(t):
@@ -160,13 +161,16 @@ class Item:
         self.date = ''
         self.canon = None
         self.unlicensed = False
+        self.abridged = False
         self.non_canon = False
         self.alternate_url = None
+        self.date_ref = None
+        self.extra_date = None
         self.self_cite = False
         self.extra = ''
 
     def sort_index(self, canon):
-        return (self.canon_index if canon else self.legends_index) or self.index
+        return ((self.canon_index if canon else self.legends_index) or self.index) or 100000
 
     def __str__(self):
         return f"Item[{self.full_id()}]"
@@ -193,7 +197,7 @@ class Item:
     def can_self_cite(self):
         if self.mode == "YT":
             return True
-        elif self.template in SELF_CITE:
+        elif self.template.lower() in SELF_CITE:
             return True
         elif self.template == "SW" and self.url.startswith("news/"):
             return True
@@ -208,6 +212,8 @@ class ItemId:
         self.use_original_text = use_original_text
         self.from_other_data = from_other_data
         self.wrong_continuity = wrong_continuity
+
+        self.replace_references = master.original and "]]'' ([[" not in master.original
 
     def sort_text(self):
         return (self.current.text if self.current.mode == "DB" else self.current.original).replace("''", "").replace('"', '').replace("|", " |").replace("}}", " }}").lower()
@@ -224,7 +230,8 @@ def extract_item(z: str, a: bool, page, master=False) -> Item:
     while re.search("\[\[([^\]\|\n]+)_", z):
         z = re.sub("\[\[([^\]\|\n]+)_", "[[\\1 ", z)
 
-    s = re.sub("^(.*?\[\[.*?[^ ])#(.*?)(\|.*?\]\].*?)$", "\\1\\3", z).replace("|d=y", "").replace("Star Wars Ships and Vehicles", "Star Wars Starships & Vehicles")
+    s = re.sub("\|volume=([0-9])\|([0-9]+)\|", "|\\1.\\2|", z)
+    s = re.sub("^(.*?\[\[.*?[^ ])#(.*?)(\|.*?\]\].*?)$", "\\1\\3", s).replace("|d=y", "").replace("Star Wars Ships and Vehicles", "Star Wars Starships & Vehicles")
     if s.count("{") == 2 and s.count("}") == 1:
         s += "}"
     if s.count("{{") > s.count("}}"):
@@ -373,7 +380,7 @@ def extract_item(z: str, a: bool, page, master=False) -> Item:
         return Item(z, a, target=m.groupdict()['set'], template=template, text=m.groupdict()['scenario'])
 
     # Magazine articles with issue as second parameter
-    m = re.search("{{[^\|\[\}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(issue[0-9]?=)?(?P<issue>(Special Edition )?H?S? ?[0-9\.]*)(\|issue[0-9]=.*?)?\|(story=)?(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?(\|.*?)?}}", s)
+    m = re.search("{{[^\|\[\}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(issue[0-9]?=)?(?P<issue>(Special Edition |Souvenir Special)?H?S? ?[0-9\.]*)(\|issue[0-9]=.*?)?\|(story=)?(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?(\|.*?)?}}", s)
     if m:
         return Item(z, a, target=m.groupdict()['article'], template=template, issue=m.groupdict()['issue'],
                     special=m.group('year') or m.group('vol'), format_text=m.groupdict()['text'], no_issue=m.groupdict()['issue'] is None)
@@ -416,7 +423,7 @@ def extract_item(z: str, a: bool, page, master=False) -> Item:
         return Item(z, a, target=m.groupdict()['story'], template=template, parent=m.groupdict()['book'])
 
     # Web article with int= parameter
-    m = re.search("{{[^\|\[\}\n]+\|(.*?\|)?url=(?P<url>.*?)\|(.*?\|)?(text=(?P<t1>.*?)\|)?(.*?\|)?int=(?P<int>.*?)(\|.*?)?(text=(?P<t2>.*?)\|)?(.*?\|)?}}", s)
+    m = re.search("{{[^\|\[\}\n]+\|(.*?\|)?url=(?P<url>.*?)\|.*?(text=(?P<t1>.*?)\|)?(.*?\|)?int=(?P<int>.*?)(\|.*?text=(?P<t2>.*?))?(\|.*?)?}}", s)
     if m:
         text = m.groupdict()['t1'] or m.groupdict()['t2']
         return Item(z, a, target=m.groupdict()['int'], template=template, url=m.groupdict()['url'], text=text)
@@ -702,10 +709,11 @@ def load_source_lists(site, log):
         p = Page(site, f"Wookieepedia:Sources/{sp}")
         for line in p.get().splitlines():
             if line and not line.startswith("==") and not "/Header}}" in line:
-                x = re.search("[\*#](.*?): (D: )?(.*?)( {{C\|d: .*?}})?$", line)
+                x = re.search("[\*#](?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (D: )?(?P<t>.*?)( {{C\|d: .*?}})?$", line)
                 if x:
                     i += 1
-                    data.append({"index": i, "page": sp, "date": x.group(1), "item": x.group(3), "canon": None if sp == "CardSets" else "Canon" in sp})
+                    data.append({"index": i, "page": sp, "date": x.groupdict()["d"], "item": x.groupdict()["t"],
+                                 "canon": None if sp == "CardSets" else "Canon" in sp, "ref": x.groupdict()["r"]})
                 else:
                     print(f"Cannot parse line: {line}")
         if log:
@@ -718,10 +726,11 @@ def load_source_lists(site, log):
             for line in p.get().splitlines():
                 if "/Header}}" in line:
                     continue
-                x = re.search("\*(.*?): (.*?)( †)?( {{C\|alternate: (.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
+                x = re.search("\*(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?) ?†?( {{C\|alternate: (?P<a>.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
                 if x:
                     i += 1
-                    data.append({"index": i, "page": f"Web/{y}", "date": x.group(1), "item": x.group(2), "alternate": x.group(5)})
+                    data.append({"index": i, "page": f"Web/{y}", "date": x.groupdict()["d"], "item": x.groupdict()["t"],
+                                 "alternate": x.groupdict()["a"], "ref": x.groupdict()["r"]})
                 else:
                     print(f"Cannot parse line: {line}")
             if log:
@@ -732,10 +741,11 @@ def load_source_lists(site, log):
     for line in p.get().splitlines():
         if "/Header}}" in line:
             continue
-        x = re.search("\*Current: (.*?)( †)?( {{C\|alternate: (.*?)}})?$", line)
+        x = re.search("\*Current:(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?)( †)?( {{C\|alternate: (?P<a>.*?)}})?$", line)
         if x:
             i += 1
-            data.append({"index": i, "page": "Web/Current", "date": "Current", "item": x.group(1), "alternate": x.group(4)})
+            data.append({"index": i, "page": "Web/Current", "date": "Current", "item": x.groupdict()["t"],
+                         "alternate": x.groupdict()["a"], "ref": x.groupdict()["r"]})
         else:
             print(f"Cannot parse line: {line}")
     if log:
@@ -762,10 +772,11 @@ def load_source_lists(site, log):
         for line in p.get().splitlines():
             if "/Header}}" in line:
                 continue
-            if line.startswith("*{{"):
-                x = line.strip()[1:]
+            x = re.search("\*((?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? )?(?P<t>{{.*?)$", line)
+            if x:
                 i += 1
-                data.append({"index": 0, "page": f"Web/{template}", "date": date, "item": x})
+                data.append({"index": 0, "page": f"Web/{template}", "date": date, "item": x.groupdict()["t"],
+                             "extraDate": x.groupdict()["d"], "ref": x.groupdict()["r"]})
             else:
                 print(f"Cannot parse line: {line}")
         if log:
@@ -775,10 +786,11 @@ def load_source_lists(site, log):
 
 
 class FullListData:
-    def __init__(self, unique: Dict[str, Item], full: Dict[str, Item], target: Dict[str, List[Item]]):
+    def __init__(self, unique: Dict[str, Item], full: Dict[str, Item], target: Dict[str, List[Item]], parantheticals: set):
         self.unique = unique
         self.full = full
         self.target = target
+        self.parantheticals = parantheticals
 
 
 def load_remap(site) -> dict:
@@ -804,7 +816,7 @@ def load_full_sources(site, log) -> FullListData:
             non_canon = ("{{c|non-canon" in i['item'].lower() or "{{nc" in i['item'].lower())
             c = ''
             if "{{C|" in i['item']:
-                cr = re.search("({{C\|([Rr]epublished|[Uu]nlicensed|[Nn]on[ -]?canon)}})", i['item'])
+                cr = re.search("({{C\|([Aa]bridged|[Rr]epublished|[Uu]nlicensed|[Nn]on[ -]?canon)}})", i['item'])
                 if cr:
                     c = ' ' + cr.group(1)
                     i['item'] = i['item'].replace(cr.group(1), '').strip()
@@ -819,6 +831,8 @@ def load_full_sources(site, log) -> FullListData:
                 x.unlicensed = unlicensed
                 x.non_canon = non_canon
                 x.alternate_url = i.get('alternate')
+                x.date_ref = i.get('ref')
+                x.extra_date = i.get('extraDate')
                 full_sources[x.full_id()] = x
                 unique_sources[x.unique_id()] = x
                 if x.target:
@@ -831,7 +845,7 @@ def load_full_sources(site, log) -> FullListData:
         except Exception as e:
             print(f"{e}: {i['item']}")
     print(f"{count} out of {len(sources)} unmatched: {count / len(sources) * 100}")
-    return FullListData(unique_sources, full_sources, target_sources)
+    return FullListData(unique_sources, full_sources, target_sources, set())
 
 
 def load_full_appearances(site, log, canon_only=False, legends_only=False) -> FullListData:
@@ -842,13 +856,14 @@ def load_full_appearances(site, log, canon_only=False, legends_only=False) -> Fu
     unique_appearances = {}
     full_appearances = {}
     target_appearances = {}
+    parantheticals = set()
     for i in appearances:
         try:
             unlicensed = "{{c|unlicensed" in i['item'].lower()
             non_canon = ("{{c|non-canon" in i['item'].lower() or "{{nc" in i['item'].lower())
             c = ''
             if "{{C|" in i['item']:
-                cr = re.search("({{C\|([Rr]epublished|[Uu]nlicensed|[Nn]on[ -]?canon)}})", i['item'])
+                cr = re.search("({{C\|([Aa]bridged|[Rr]epublished|[Uu]nlicensed|[Nn]on[ -]?canon)}})", i['item'])
                 if cr:
                     c = ' ' + cr.group(1)
                     i['item'] = i['item'].replace(cr.group(1), '').strip()
@@ -856,16 +871,30 @@ def load_full_appearances(site, log, canon_only=False, legends_only=False) -> Fu
             if x:
                 x.canon = i.get('canon')
                 x.date = i['date']
-                if x.target in canon:
-                    x.canon_index = canon[x.target]
-                if x.target in legends:
-                    x.legends_index = legends[x.target]
                 x.extra = c
                 x.unlicensed = unlicensed
                 x.non_canon = non_canon
+                x.abridged = "abridged audiobook" in x.original and "unabridged" not in x.original
                 full_appearances[x.full_id()] = x
                 unique_appearances[x.unique_id()] = x
                 if x.target:
+                    if x.target in canon:
+                        x.canon_index = canon[x.target]
+                    elif x.target.replace(" (audiobook)", "") in canon:
+                        x.canon_index = canon[x.target.replace(" (audiobook)", "")] + 0.1
+                    elif x.target.replace("(audiobook)", "(novel)") in canon:
+                        x.canon_index = canon[x.target.replace("(audiobook)", "(novel)")] + 0.1
+
+                    if x.target in legends:
+                        x.legends_index = legends[x.target]
+                    elif x.target.replace(" (audiobook)", "") in legends:
+                        x.legends_index = legends[x.target.replace(" (audiobook)", "")] + 0.1
+                    elif x.target.replace("(audiobook)", "(novel)") in legends:
+                        x.legends_index = legends[x.target.replace("(audiobook)", "(novel)")] + 0.1
+
+                    if x.target.endswith(")"):
+                        parantheticals.add(x.target.rsplit(" (", 1)[0])
+
                     if x.target not in target_appearances:
                         target_appearances[x.target] = []
                     target_appearances[x.target].append(x)
@@ -873,9 +902,10 @@ def load_full_appearances(site, log, canon_only=False, legends_only=False) -> Fu
                 print(f"Unrecognized: {i['item']}")
                 count += 1
         except Exception as e:
+            traceback.print_exc()
             print(f"{type(e)}: {e}: {i['item']}")
     print(f"{count} out of {len(appearances)} unmatched: {count / len(appearances) * 100}")
-    return FullListData(unique_appearances, full_appearances, target_appearances)
+    return FullListData(unique_appearances, full_appearances, target_appearances, parantheticals)
 
 
 def parse_timeline(text):

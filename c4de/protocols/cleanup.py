@@ -42,12 +42,12 @@ def archive_senate_hall_thread(site, page, offset):
 def remove_spoiler_tags_from_page(site, page, limit=30, offset=5):
     text = page.get()
 
-    line = re.findall("\n\{\{[Ss]poiler\|(.*?)\}\}.*?\n", text)
+    line = re.search("\n\{\{(Movie|Show)?[Ss]poiler\|(.*?)\}\}.*?\n", text)
     if not line:
         print(f"Cannot find spoiler tag on {page.title()}")
         return "no-tag"
 
-    target = line[0].replace("||", "|").split("|")
+    target = line.group(0).replace("||", "|").split("|")
     fields = []
     named = {}
     for field in target:
@@ -70,7 +70,7 @@ def remove_spoiler_tags_from_page(site, page, limit=30, offset=5):
         if time > (datetime.now() + timedelta(hours=offset)):
             print(f"{page.title()}: Spoilers for {t} do not expire until {time}")
             return time
-        new_text = re.sub("\{\{Spoiler.*?\}\}.*?\n", "", text)
+        new_text = re.sub("\{\{(Movie|Show)?[Ss]poiler.*?\}\}.*?\n", "", text)
     else:
         time, new_text = remove_expired_fields(site, text, fields, named, limit=limit)
 

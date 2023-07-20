@@ -26,12 +26,13 @@ class PageComponents:
 
 
 class AnalysisResults:
-    def __init__(self, apps: List[ItemId], nca: List[ItemId], src: List[ItemId], ncs: List[ItemId], canon: bool):
+    def __init__(self, apps: List[ItemId], nca: List[ItemId], src: List[ItemId], ncs: List[ItemId], canon: bool, abridged: list):
         self.apps = apps
         self.nca = nca
         self.src = src
         self.ncs = ncs
         self.canon = canon
+        self.abridged = abridged
 
 
 class SectionItemIds:
@@ -67,7 +68,7 @@ def analyze_body(text, appearances: FullListData, sources: FullListData, log: bo
                 x = extract_item(link[0], False, "reference")
                 if x:
                     o = determine_id_for_item(x, appearances.unique, appearances.target, sources.unique, sources.target, {}, log)
-                    if o and not o.use_original_text:
+                    if o and not o.use_original_text and o.replace_references:
                         if link[0].startswith('"') and link[0].startswith('"') and (len(ref) - len(link[0])) > 5:
                             print(f"Skipping quote-enclosed link {link[0]} (likely an episode name)")
                         elif "{{" in o.master.original and len(templates) > 0:
@@ -388,7 +389,7 @@ def handle_sorting(mode, new_found: List[ItemId], missing: List[ItemId], dates: 
     for m in missing:
         index = handle_missing_entry(m, found, mode, dates, log)
         if index == -1:
-            found.append(m)
+            found.insert(0, m)
         elif index >= 0:
             found.insert(index, m)
 
@@ -452,13 +453,13 @@ def compare_partial_dates(o: str, d1: str, d2: str, mode: str):
             return False
         elif d1 == o or d2 == o or mode == "Toys":
             return False    # toys or same neighbor
-        elif d2 == f"{o[:4]}-XX-XX":
+        elif d2.startswith(f"{o[:4]}-XX-XX"):
             return False    # next neighbor has no month/day
         elif is_number(d1) and is_number(d2) and int(d1[:4]) < int(o[:4]) < int(d2[:4]):
             return False
         elif xn == 2 and d1.count("XX") == 1 and d1[:4] != d2[:4] and d1[:4] == o[:4]:
             return False    # no month/day, and neighbors are different years
-        elif xn == 1 and d1.endswith("-XX") and d2.endswith("-XX"):
+        elif xn == 1 and d1.count("XX") == 1 and d2.count("XX") == 1:
             return False    # neither neighbor has day
         elif is_number(d1) and is_number(d2) and int(d1[:4]) < int(o[:4]) and d2[:4] == o[:4] and xn < 2 and d2.count("XX") < 2 and int(o[5:7]) < int(d2[5:7]):
             return False    # prior year & same year, later month
@@ -511,7 +512,7 @@ def build_final_text(results: PageComponents, new_apps: str, new_nca: str, new_s
 
 
 def analyze_section_results(site, target: Page, results: PageComponents, appearances: FullListData,
-                            sources: FullListData, remap: dict, use_index: bool, include_date: bool, log) \
+                            sources: FullListData, remap: dict, use_index: bool,  include_date: bool, log) \
         -> Tuple[str, str, str, str, list, list, list, AnalysisResults]:
     dates = []
     unknown_apps, unknown_src = [], []
@@ -537,6 +538,29 @@ def analyze_section_results(site, target: Page, results: PageComponents, appeara
         else:
             new_apps.found += new_ncs.wrong
 
+    app_targets = [a.master.target for a in new_apps.found if a.master.target]
+    abridged = []
+    new_indexes = []
+    for i, a in enumerate(new_apps.found):
+        for b in find_matching_audiobook(a, app_targets, appearances):
+            if b.abridged:
+                print(f"Skipping abridged audiobook: {b.target}")
+                abridged.append(b.target)
+            else:
+                print(f"Adding missing audiobook: {b.target}")
+                z = ItemId(b, b, False, False, False)
+                z.current.index = a.current.index + 0.1
+                z.current.extra = a.current.extra
+                if a.current.canon_index is not None:
+                    z.current.canon_index = a.current.canon_index + 0.1
+                elif a.current.legends_index is not None:
+                    z.current.legends_index = a.current.legends_index + 0.1
+                new_indexes.append((z, i))
+    o = 1
+    for z, i in new_indexes:
+        new_apps.found.insert(i + o, z)
+        i += 1
+
     canon = False
     app_mode = BY_INDEX
     for c in target.categories():
@@ -548,8 +572,27 @@ def analyze_section_results(site, target: Page, results: PageComponents, appeara
     new_nca, final_nca = build_new_section(new_nca, UNCHANGED, dates, canon, include_date, log, use_index)
     new_sources, final_sources = build_new_section(new_src, BY_DATE, dates, canon, include_date, log, use_index)
     new_ncs, final_ncs = build_new_section(new_ncs, BY_DATE, dates, canon, include_date, log, use_index)
-    analysis = AnalysisResults(final_apps, final_nca, final_sources, final_ncs, canon)
+    analysis = AnalysisResults(final_apps, final_nca, final_sources, final_ncs, canon, abridged)
     return new_apps, new_nca, new_sources, new_ncs, dates, unknown_apps, unknown_src, analysis
+
+
+def find_matching_audiobook(a: ItemId, existing: list, appearances: FullListData):
+    if not a.master.target:
+        return []
+
+    z = None
+    if a.master.target in appearances.parantheticals:
+        z = a.master.target
+    elif a.master.target.endswith(")"):
+        z = a.master.target.rsplit("(", 1)[0]
+
+    if not z:
+        return []
+    results = []
+    for y in [f"{z} (audiobook)", f"{z} (unabridged audiobook)", f"{z} (abridged audiobook)"]:
+        if y in appearances.target and y not in existing:
+            results.append(appearances.target[y][0])
+    return results
 
 
 def build_page_components(target: Page, appearances: FullListData, sources: FullListData, handle_references=False,
@@ -646,6 +689,12 @@ def analyze_target_page(site: Site, target: Page, appearances: FullListData, sou
     results = []
     with codecs.open("C:/Users/Michael/Documents/projects/C4DE/c4de/protocols/unknown.txt", mode="a",
                      encoding="utf-8") as f:
+        if len(analysis.abridged) == 1:
+            results.append(f"1 abridged audiobook was missing from Appearances: {analysis.abridged[0]}")
+        elif analysis.abridged:
+            results.append(f"{len(analysis.abridged)} abridged audiobooks were missing from Appearances:")
+            results.append("\n".join(f"- {a}" for a in analysis.abridged))
+
         if unknown_apps:
             results.append("Could not identify unknown appearances:")
             for o in unknown_apps:

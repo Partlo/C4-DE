@@ -138,19 +138,19 @@ def parse_page(p: Page):
             else:
                 print(f"Cannot parse line: {line}")
 
-    return FullListData(unique, full, target)
+    return FullListData(unique, full, target, set())
 
 
 def dates_match(dates: List[Tuple[str, datetime, str]], master):
     for t, d, r in dates:
         if t == "day":
-            if master == d.strftime("%Y-%m-%d"):
+            if master == d[:10].strftime("%Y-%m-%d"):
                 return True
         elif t == "month":
-            if master == d.strftime("%Y-%m-XX"):
+            if master == d[:10].strftime("%Y-%m-XX"):
                 return True
         elif t == "year":
-            if master == d.strftime("%Y-XX-XX"):
+            if master == d[:10].strftime("%Y-XX-XX"):
                 return True
     return False
 
