@@ -31,7 +31,7 @@ from c4de.protocols.rss import check_rss_feed, check_latest_url, check_wookieepe
     check_blog_list, check_ea_news, check_unlimited
 
 from c4de.sources.analysis import analyze_target_page, get_analysis_from_page
-from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap
+from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, build_template_types
 from c4de.sources.index import create_index
 from c4de.sources.updates import get_future_products_list, handle_results
 
@@ -125,6 +125,7 @@ class C4DE_Bot(commands.Bot):
         self.files_to_be_renamed = []
         self.source_rev_ids = {}
 
+        self.templates = {}
         self.appearances = None
         self.sources = None
         self.remap = None
@@ -569,8 +570,9 @@ class C4DE_Bot(commands.Bot):
         try:
             for p in Category(self.site, "Category:Wookieepedia Sources Project").articles():
                 self.source_rev_ids[p.title()] = p.latest_revision_id
-            self.appearances = load_full_appearances(self.site, False)
-            self.sources = load_full_sources(self.site, False)
+            self.templates = build_template_types(self.site)
+            self.appearances = load_full_appearances(self.site, self.templates, False)
+            self.sources = load_full_sources(self.site, self.templates, False)
             self.remap = load_remap(self.site)
         except Exception as e:
             traceback.print_exc()
@@ -617,8 +619,8 @@ class C4DE_Bot(commands.Bot):
             rev_id = target.latest_revision_id
 
             await message.add_reaction(TIMER)
-            results = analyze_target_page(self.site, target, self.appearances, self.sources, self.remap, save=True,
-                                          include_date=False, use_index=True, handle_references=True)
+            results = analyze_target_page(self.site, target, self.templates, self.appearances, self.sources, self.remap,
+                                          save=True, include_date=False, use_index=True, handle_references=True)
             await message.remove_reaction(TIMER, self.user)
             await message.add_reaction(self.emoji_by_name("bb8thumbsup"))
 
@@ -636,7 +638,7 @@ class C4DE_Bot(commands.Bot):
             await message.channel.send("Encountered error while analyzing page")
 
     async def handle_analyze_source_command(self, message: Message, command: dict):
-        # try:
+        try:
             target = Page(self.site, command['article'])
             if not target.exists():
                 await message.add_reaction(EXCLAMATION)
@@ -649,8 +651,8 @@ class C4DE_Bot(commands.Bot):
             use_index = command.get('text') is None
 
             await message.add_reaction(TIMER)
-            results = analyze_target_page(self.site, target, self.appearances, self.sources, self.remap, save=True,
-                                          include_date=use_date, use_index=use_index, handle_references=True)
+            results = analyze_target_page(self.site, target, self.templates, self.appearances, self.sources, self.remap,
+                                          save=True, include_date=use_date, use_index=use_index, handle_references=True)
             await message.remove_reaction(TIMER, self.user)
 
             rev = next(target.revisions(content=False, total=1))
@@ -660,12 +662,12 @@ class C4DE_Bot(commands.Bot):
                 await message.channel.send(f"Completed: <{target.full_url().replace('%2F', '/')}?diff=next&oldid={rev_id}>")
             for o in results:
                 await message.channel.send(o)
-        # except Exception as e:
-        #     print(e.__traceback__)
-        #     await self.report_error("Analyze sources", type(e), e)
-        #     await message.remove_reaction(TIMER, self.user)
-        #     await message.add_reaction(EXCLAMATION)
-        #     await message.channel.send("Encountered error while analyzing page")
+        except Exception as e:
+            traceback.print_exc()
+            await self.report_error("Analyze sources", type(e), e)
+            await message.remove_reaction(TIMER, self.user)
+            await message.add_reaction(EXCLAMATION)
+            await message.channel.send("Encountered error while analyzing page")
 
     async def handle_create_index_command(self, message: Message, command: dict):
         try:
@@ -678,7 +680,7 @@ class C4DE_Bot(commands.Bot):
                 target = target.getRedirectTarget()
 
             await message.add_reaction(TIMER)
-            analysis = get_analysis_from_page(self.site, target, self.appearances, self.sources, self.remap, False)
+            analysis = get_analysis_from_page(self.site, target, self.templates, self.appearances, self.sources, self.remap, False)
             result = create_index(self.site, target, analysis, True)
             await message.remove_reaction(TIMER, self.user)
 
@@ -710,6 +712,7 @@ class C4DE_Bot(commands.Bot):
             handle_results(self.site, results)
             await self.build_sources()
         except Exception as e:
+            traceback.print_exc()
             await self.report_error("Future products", type(e), e)
 
     @tasks.loop(hours=4)
@@ -1054,6 +1057,7 @@ class C4DE_Bot(commands.Bot):
         f = m["title"].replace("''", "*")
         msg = "{0} **{1}:**    {2}\n- <{3}>".format(self.emoji_by_name(site_data["emoji"]), t, f, m["url"])
 
+        print(success, site_data.get("addToArchive"), not already_archived, target)
         if success and site_data.get("addToArchive") and not already_archived:
             try:
                 self.add_urls_to_archive(site_data["template"], target, archivedate)

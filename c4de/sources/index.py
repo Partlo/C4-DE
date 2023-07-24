@@ -10,7 +10,7 @@ from c4de.sources.updates import extract_release_date
 
 def build_alternate(i: ItemId):
     o = "{{SW|url=" + i.master.special + "|text=" + i.master.text + "}}"
-    x = Item(o, i.master.is_appearance, url=i.master.special, template="SW", mode="Web", text=i.master.text)
+    x = Item(o, "Web", i.master.is_appearance, url=i.master.special, template="SW", text=i.master.text)
     x.date = i.master.date
     x.index = i.master.index + 0.1
     x.canon_index = i.master.canon_index

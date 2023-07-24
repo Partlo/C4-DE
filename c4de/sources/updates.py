@@ -5,7 +5,7 @@ import re
 from datetime import datetime
 from typing import List, Tuple, Dict
 
-from c4de.sources.engine import extract_item, FullListData
+from c4de.sources.engine import extract_item, FullListData, build_template_types
 
 
 def extract_release_date(title, text):
@@ -105,23 +105,23 @@ def get_future_products_list(site: Site):
     return results
 
 
-def parse_page(p: Page):
+def parse_page(p: Page, types):
     unique = {}
     full = {}
     target = {}
     for i, line in enumerate(p.get().splitlines()):
         if line and not line.startswith("==") and not "/Header}}" in line:
-            z = re.search("[\*#](.*?): (D: )?(.*?)( {{C\|d: .*?}})?$", line)
+            z = re.search("[\*#](.*?): (D: )?(.*?)$", line)
             if z:
                 date = z.group(1)
                 item = z.group(3)
                 c = ''
                 if "{{C|" in item:
-                    cr = re.search("({{C\|([Rr]epublished|[Uu]nlicensed)}})", item)
+                    cr = re.search("({{C\|([Nn]on-canon|[Rr]epublished|[Uu]nlicensed)}})", item)
                     if cr:
                         c = ' ' + cr.group(1)
                         item = item.replace(cr.group(1), '').strip()
-                x = extract_item(item, False, p.title(), master=True)
+                x = extract_item(item, False, p.title(), types, master=True)
                 if x:
                     if x.template == "SWCT" and not x.target:
                         x.target = x.card
@@ -156,18 +156,19 @@ def dates_match(dates: List[Tuple[str, datetime, str]], master):
 
 
 def handle_results(site, results: List[FutureProduct]):
+    types = build_template_types(site)
     extra_page = Page(site, "Wookieepedia:Appearances/Extra")
-    extra = parse_page(extra_page)
+    extra = parse_page(extra_page, types)
     l_app_page = Page(site, "Wookieepedia:Appearances/Legends")
-    l_apps = parse_page(l_app_page)
+    l_apps = parse_page(l_app_page, types)
     c_app_page = Page(site, "Wookieepedia:Appearances/Canon")
-    c_apps = parse_page(c_app_page)
+    c_apps = parse_page(c_app_page, types)
     l_src_page = Page(site, "Wookieepedia:Sources/Legends/General/2010s")
-    l_srcs = parse_page(l_src_page)
+    l_srcs = parse_page(l_src_page, types)
     c_src_page = Page(site, "Wookieepedia:Sources/Canon/General")
-    c_srcs = parse_page(c_src_page)
+    c_srcs = parse_page(c_src_page, types)
     sets_page = Page(site, "Wookieepedia:Sources/CardSets")
-    sets = parse_page(sets_page)
+    sets = parse_page(sets_page, types)
 
     master_data = {"Legends Appearances": l_apps, "Canon Appearances": c_apps, "Legends Sources": l_srcs,
                    "Canon Sources": c_srcs, "Extra": extra, "CardSets": sets}
@@ -235,7 +236,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
     if not new_items:
         return
 
-    final = []
+    final = ["{{Wookieepedia:Sources/Header}}"]
     for i in new_items:
         t = f"''[[{i.page.title()}]]''"
         t = re.sub("''\[\[((.*?) \(.*?\))\]\]''", "[[\\1|''\\2'']]", t)
@@ -249,7 +250,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
         d = i.date
         if i.target in changed:
             d = build_date(changed[i.target].dates)
-        final.append((i.original, prep_date(d), i.index))
+        final.append((i.original + i.extra, prep_date(d), i.index))
 
     start_date = DATES.get(page.title())
     section = None

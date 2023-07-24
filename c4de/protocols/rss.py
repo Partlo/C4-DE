@@ -395,6 +395,8 @@ def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, che
         template = None
         if content and "this week in" in content.lower():
             template = "ThisWeek"
+        elif content and "the high republic show" in content.lower():
+            template = "HighRepublicShow"
 
         entries_to_report.append({"site": site, "title": title, "url": e.link, "content": content,
                                   "videoId": e.get("yt_videoid"), "template": template})
@@ -450,6 +452,7 @@ def check_title_formatting(text, title_regex, title):
     title = title.replace("“", '"').replace("”", '"').replace("’", "'").replace("‘", "'")
     title = re.sub(" \| ?Disney ?(\+|Plus)[ ]*$", "", title)
     title = title.replace("|", "&verbar;")
+    title = re.sub(" (&#124; )?@?StarWarsKids ?x ?@?disneyjunior", "", title)
 
     return html.unescape(title).replace("’", "'")
 

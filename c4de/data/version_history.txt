@@ -110,3 +110,5 @@
 **Lots of Source Engine bugs and fixes
 **Source Engine analysis will now add audiobooks if they're missing
 **New RSS feeds
+*'''3.3.3''': July 24, 2023
+**More Source Engine bugs and fixes

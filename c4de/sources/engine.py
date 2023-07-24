@@ -3,7 +3,7 @@ import traceback
 from datetime import datetime
 from typing import List, Dict
 
-from pywikibot import Page
+from pywikibot import Page, Category
 
 
 SUBPAGES = [
@@ -84,38 +84,32 @@ PREFIXES = {
     "SWG": "Star Wars Galaxies:"
 }
 
-TOYS = ["disneytoycite", "gentlegiantcite", "galoob", "hasbrocite", "kennercite", "legocite", "sideshowcite",
-        "kotocite", "tomycite", "bandaicite", "swminicite"]
-CARDS = ["forcecollection", "armada", "ccg", "destiny", "ffgtcg", "ffgxw", "ffgxw2", "jktcg", "legion", "metallicimpressions", "sote",
-         "soteemcc", "swct", "swgtcg", "swia", "swor", "swpm", "smith's", "tcg", "topps", "toptrumps", "yjccg", "swr", "swu"]
-DB = ["db", "databank", "swe"]
-VIDEO = ["youtube", "youtube", "swyoutube", "swkidsyoutube", "ilmvfxyoutube", "ilmxlabyoutube", "legoyoutube", "easwyoutube",
-         "disneyplusyoutube", "disneyxdyoutube", "disneyyoutube", "starwarsshow", "thisweek", "toryoutube"]
-WEB = ["torweb", "twitter", "sonycite", "swarchive", "sw", "holonet", "hunters", "ilm", "ilmxlab",
-       "legowebcite", "ffgweb", "facebookcite", "ea", "disney", "darkhorse", "d23", "dpb", "cite web", "cn", "blog",
-       "blogspot", "amgweb", "asmodee", "marvel", "lucasfilm", "swkids", "bficite", "cardcon", "celebration",
-       "dhboards", "dailyswcite", "disneycompany", "disneynow", "disneyplus", "endorexpress", "faraway", "gamespot",
-       "holonetnews", "imdb", "jcfcite", "kobo", "lccn", "lucasartscite", "mobygames", "swkids", "sonyforumscite",
-       "spotify", "suvudu", "tvcom", "unbound", "wizardscite", "wookcite", "hbcite"]
-
 SELF_CITE = ["torweb", "twitter", "sonycite", "hunters", "ilm", "ilmxlab", "ffgweb", "facebookcite", "ea", "disney",
              "darkhorse", "d23", "dpb", "cite web", "blog", "blogspot", "amgweb", "asmodee", "marvel", "lucasfilm",
              "swkids", "dhboards", "dailyswcite", "disneynow", "disneyplus", "endorexpress", "faraway", "gamespot",
              "holonetnews", "jcfcite", "lucasartscite", "mobygames", "swkids", "sonyforumscite", "suvudu", "wizardscite"]
 
 
-def grouping_type(t):
-    if t.lower() in TOYS:
-        return "Toys"
-    elif t.lower() in CARDS:
-        return "Cards"
-    elif t.lower() in DB:
-        return "DB"
-    elif t.lower() in WEB:
-        return "Web"
-    elif t.lower() in VIDEO:
-        return "YT"
-    return "General"
+def list_templates(site, cat, data, template_type, recurse=False):
+    for p in Category(site, cat).articles(recurse=recurse):
+        if "/" not in p.title() and p.title(with_ns=False).lower() not in data:
+            data[p.title(with_ns=False).lower()] = template_type
+
+
+def build_template_types(site):
+    results = {"db": "DB", "databank": "DB", "swe": "DB"}
+
+    list_templates(site, "Category:StarWars.com citation templates", results, "Web")
+    list_templates(site, "Category:Internet citation templates", results, "Web")
+    list_templates(site, "Category:Commercial and product listing internet citation templates", results, "Web")
+    list_templates(site, "Category:Social media citation templates", results, "Web")
+
+    list_templates(site, "Category:YouTube citation templates", results, "YT")
+    list_templates(site, "Category:Card game citation templates", results, "Cards")
+    list_templates(site, "Category:Miniature game citation templates", results, "Cards")
+    list_templates(site, "Category:Toy citation templates", results, "Toys")
+
+    return results
 
 
 def convert_issue_to_template(s):
@@ -132,11 +126,11 @@ class Item:
     """
     :type date: str
     """
-    def __init__(self, original: str, is_app: bool, *, invalid=False, target: str = None, text: str = None,
-                 parent: str = None, mode: str = None, template: str = None, url: str = None, issue: str = None,
+    def __init__(self, original: str, mode: str, is_app: bool, *, invalid=False, target: str = None, text: str = None,
+                 parent: str = None, template: str = None, url: str = None, issue: str = None, subset: str=None,
                  card: str = None, special=None, collapsed=False, format_text: str = None, no_issue=False):
         self.is_appearance = is_app
-        self.mode = mode or grouping_type(template or '')
+        self.mode = mode
         self.invalid = invalid
         self.original = self.strip(original)
         self.target = self.strip(target)
@@ -147,6 +141,7 @@ class Item:
         self.template = self.strip(template)
         self.url = self.strip(url)
         self.special = self.strip(special)
+        self.subset = self.strip(subset)
         self.collapsed = collapsed
 
         if self.card:
@@ -219,7 +214,7 @@ class ItemId:
         return (self.current.text if self.current.mode == "DB" else self.current.original).replace("''", "").replace('"', '').replace("|", " |").replace("}}", " }}").lower()
 
 
-def extract_item(z: str, a: bool, page, master=False) -> Item:
+def extract_item(z: str, a: bool, page, types, master=False) -> Item:
     """ Extracts an Item object from the given source/appearance line, parsing out the target article and all other
     relevant information.
 
@@ -236,17 +231,17 @@ def extract_item(z: str, a: bool, page, master=False) -> Item:
         s += "}"
     if s.count("{{") > s.count("}}"):
         print(f"Cannot parse invalid line on {page.title()}: {s}")
-        return Item(z, a, invalid=True)
+        return Item(z, "General", a, invalid=True)
     elif s.count("{{") == 0 and s.count("[[") == 0:
         print(f"Cannot parse invalid line on {page.title()}: {s}")
-        return Item(z, a, invalid=True)
+        return Item(z, "General", a, invalid=True)
 
     if s.count("[[") == 1 and s.count("{{") == 0:
         if s.count("]") == 0:
             x = re.search("\[\[(.*?)(\|(.*?))?$", s)
         else:
             x = re.search("\[\[(.*?)(\|(.*?))?\]+", s)
-        return Item(z, a, target=x.group(1), format_text=x.group(3), mode="General")
+        return Item(z, "General", a, target=x.group(1), format_text=x.group(3))
 
     o = f"{s}"
     s = re.sub("(\]+'*?) \(.*?\)", "\\1", s)
@@ -255,77 +250,76 @@ def extract_item(z: str, a: bool, page, master=False) -> Item:
             r = re.sub("^.*\[\[(.*?)(\|.*?)*?$", '\\1', s)
         else:
             r = re.sub("^.*\[\[(.*?)(\|.*?)?\]+.*$", '\\1', s)
-        return Item(o if master else s, a, target=r, mode="General")
+        return Item(o if master else s, "General", a, target=r)
 
-    if "{{SWG}}" in s or "{{SWG|An Empire" in s:
-        return Item(z, a, target="Star Wars Galaxies", template="SWG")
     for i, j in COLLAPSE.items():
         if "{{" + i + "|" in s or "{{" + i + "}}" in s:
-            return Item(z, a, target=COLLAPSE[i], template=i, collapsed=True)
+            return Item(z, "General", a, target=COLLAPSE[i], template=i, collapsed=True)
     for i, (k, o) in REFERENCE_MAGAZINES.items():
         m = re.search("\{\{" + i + "\|([0-9]+)(\|(multiple=\[*?)?(.*?))?(\|(.*?))?(\|.*?)?}}", s)
+        mode = types.get(i.split("\|")[0], "General")
         if m and ((o == "2014" and m.group(1) in ['1', '2', '3', '4', '5']) or (o and o != "2014")):
-            return Item(z, a, target=f"{k} {m.group(1)} ({o})", template=i.split("\|")[0], issue=m.group(1),
+            return Item(z, mode, a, target=f"{k} {m.group(1)} ({o})", template=i.split("\|")[0], issue=m.group(1),
                         text=m.group(4) or m.group(6), collapsed=True)
         elif m:
-            return Item(z, a, target=f"{k} {m.group(1)}", template=i.split("\|")[0], issue=m.group(1),
+            return Item(z, mode, a, target=f"{k} {m.group(1)}", template=i.split("\|")[0], issue=m.group(1),
                         text=m.group(4) or m.group(6), collapsed=True)
 
     m = re.search('{{([^\|\[\}\n]+)[\|\}]', s)
     template = m.group(1) if m else ''
-    template_type = grouping_type(template)
+    mode = types.get(template.lower(), "General")
 
     # # # Template-specific logic
     # IDWAdventures annual= parameter
     if template.startswith("IDWAdventures") and "annual=" in s:
         m = re.search("\|annual=(.*?)\|(.*?\|)?story=(.*?)[\|\}]", s)
-        return Item(z, a, target=m.group(3), template=template, parent=f"Star Wars Adventures Annual {m.group(1)}")
+        return Item(z, mode, a, target=m.group(3), template=template, parent=f"Star Wars Adventures Annual {m.group(1)}")
     # HoloNet News
     elif template == "Hnn":
         m = re.search("\{\{Hnn\|([0-9]+)(\|(.*?)\|(.*?))?}", s)
         if m:
-            return Item(z, a, target=None, parent=f"HoloNet News Vol. 531 {m.group(1)}", template="Hnn",
+            return Item(z, mode, a, target=None, parent=f"HoloNet News Vol. 531 {m.group(1)}", template="Hnn",
                         issue=m.group(1), url=m.group(3), text=m.group(4))
     elif template == "Holonet":
         m = re.search("\{\{Holonet\|((both|old)=true\|)?(.*?\|.*?)\|(.*?)(\|.*?)?}}", s)
         if m:
-            return Item(z, a, target=None, template=template, parent="Holonet", url=m.group(3).replace("|", "/"),
+            return Item(z, mode, a, target=None, template=template, parent="Holonet", url=m.group(3).replace("|", "/"),
                         text=m.group(5))
     elif template == "HBCite":
         m = re.search("\{\{HBCite\|([0-9]+)", s)
         if m:
-            return Item(z, a, target=None, template=template, parent="Homing Beacon (newsletter)", issue=m.group(1))
+            return Item(z, mode, a, target=None, template=template, parent="Homing Beacon (newsletter)", issue=m.group(1))
     # Blog template - first two parameters combined are the URL
     elif template == "Blog":
         m = re.search("{{[^\|\[\}\n]+\|(official=true\|)?(.*?\|.*?)\|(.*?)(\|.*?)?}}", s)
         if m:
-            return Item(z, a, target=None, template=template, url=m.group(2).replace("|", "/"), text=m.group(2))
+            return Item(z, mode, a, target=None, template=template, url=m.group(2).replace("|", "/"), text=m.group(2))
     elif template == "LEGOCite":
         m = re.search("{{LEGOCite\|(theme=)?(.*?)\|(num=)?(.*?)\|(name=)?(.*?)(\|.*?)?}}", s)
         if m:
-            return Item(z, a, target=None, template=template, parent=m.group(2), text=f"{m.group(4)} {m.group(6)}", special=m.group(4))
+            return Item(z, mode, a, target=None, template=template, parent=m.group(2), text=f"{m.group(4)} {m.group(6)}", special=m.group(4))
     # YouTube templates
-    elif template_type == "YT":
+    elif mode == "YT":
         m = re.search("{{[^\|\[\}\n]+\|((subdomain|parameter)=.*?\|)?(video=)?(?P<video>.*?)(&.*?)?\|(text=)?(?P<text>.*?)(\|.*?)?}}", s)
         if m:
             u = re.search("\|sw_url=(.*?)(\|.*?)?}}", s)
-            return Item(z, a, target=None, template=template, url=m.groupdict()['video'], text=m.groupdict()['text'],
+            return Item(z, mode, a, target=None, template=template, url=m.groupdict()['video'], text=m.groupdict()['text'],
                         special=u.group(1) if u else None)
     elif template == "Databank":
         m = re.search("{{Databank\|(url=)?(.*?)\|(title=)?(.*?)(\|.*?)?}}", s)
         if m:
-            return Item(z, a, target=None, template=template, url=m.group(2), text=m.group(4))
-    elif template_type == "DB" or template == "SWE":
+            return Item(z, mode, a, target=None, template=template, url=m.group(2), text=m.group(4))
+    elif mode == "DB" or template == "SWE":
         m = re.search("{{[^\|\[\}\n]+\|(.*?)\|(.*?)\|(.*?)(\|.*?)?}}", s)
         if m:
-            return Item(z, a, target=None, template=template, url=m.group(1) + "/" + m.group(2), text=m.group(3))
+            return Item(z, mode, a, target=None, template=template, url=m.group(1) + "/" + m.group(2), text=m.group(3))
     elif template == "ForceCollection":
         m = re.search("{{[^\|\[\}\n]+\|(.*?)(\|star=([0-9S]))?(\|.*?)?}}", s)
         if m:
-            return Item(z, a, target=None, template=template, parent="Star Wars: Force Collection", card=m.group(1),
-                        special=m.group(3))
-        return Item(z, a, target="Star Wars: Force Collection", template=template)
-    elif template_type == "Cards" or template_type == "Toys" or "|card" in s:
+            return Item(z, mode, a, target=None, template=template, parent="Star Wars: Force Collection",
+                        card=m.group(1), special=m.group(3))
+        return Item(z, mode, a, target="Star Wars: Force Collection", template=template)
+    elif mode == "Cards" or mode == "Toys" or "|card" in s:
         if "{{SOTEEMCC" in s:
             card_set = "Star Wars: Shadows of the Empire Embossed Metal Collector Cards"
         elif "{{SOTE" in s:
@@ -336,10 +330,12 @@ def extract_item(z: str, a: bool, page, master=False) -> Item:
         if template == "SWCT":
             m = re.search("{+[^\|\[\}\n]+\|(set=)?(.*?)(\|.*?)?}}", s)
             if m:
-                return Item(z, a, target=None, template=template, parent="Star Wars: Card Trader", card=m.group(2), text=m.group(3))
+                return Item(z, mode, a, target=None, template=template, parent="Star Wars: Card Trader", card=m.group(2), text=m.group(3))
         elif template == "SWPM" and card_set == "Base Set":
             card_set = "Star Wars PocketModel TCG: Base Set"
-        if card_set and PARAN.get(template) and PARAN[template][1]:
+        if card_set and template == "SWPM" and card_set in ["Clone Wars Conquest", "Clone Wars Tactics", "Scum & Villainy"]:
+            pass
+        elif card_set and PARAN.get(template) and PARAN[template][1]:
             card_set = f"{card_set} ({PARAN[template][0]})"
         if card_set and "cardname=" in card_set:
             card = card_set.replace("cardname=", "")
@@ -349,104 +345,107 @@ def extract_item(z: str, a: bool, page, master=False) -> Item:
             card = m.group(2) if m else None
         u = re.search("(url|link)=(.*?)[\|\}]", s)
         t = re.search("{[^\|\[\}\n]+\|.*?text=(?P<text>.*?)[\|\}]", s)
+        ss = re.search("subset=(.*?)(\|.*?)?}}", s)
+        subset = ss.group(1) if ss else None
         if not t:
             t = re.search("{[^\|\[\}\n]+\|.*?\|(?P<text>.*?)(\|.*?)?}}", s)
             if t and t.groupdict()['text'] and re.search("^[a-z]+=", t.groupdict()['text']):
                 t = None
         if card and "|scenario=" in s:
-            return Item(z, a, target=None, template=template, parent=card_set, special=card,
+            return Item(z, mode, a, target=None, template=template, parent=card_set, special=card,
                         url=u.group(2) if u else None, text=t.groupdict()['text'] if t else None)
         elif card:
-            return Item(z, a, target=None, template=template, parent=card_set, card=card,
+            return Item(z, mode, a, target=None, template=template, parent=card_set, card=card, subset=subset,
                         url=u.group(2) if u else None, text=t.groupdict()['text'] if t else None)
         elif card_set:
-            return Item(z, a, target=card_set, template=template, parent=None, text=t.groupdict()['text'] if t else None)
+            return Item(z, mode, a, target=card_set, template=template, parent=None, subset=subset, text=t.groupdict()['text'] if t else None)
         else:
             print(s)
 
     # InsiderCite - link= parameter
     m = re.search("{{[^\|\[\}\n]+\|link=(.*?)\|.*?\|(.*?)(\|(.*?))?}}", s)
     if m:
-        return Item(z, a, target=m.group(2), template=template, issue=m.group(1), format_text=m.group(4))
+        return Item(z, mode, a, target=m.group(2), template=template, issue=m.group(1), format_text=m.group(4))
 
     # Episode/Featurette parameter
     m = re.search("\{+[^\|\}\]]+?\|(set=)?(.*?)(\|.*?)?(episode|featurette)=\[*?(.*?)\]*?(\|.*?)?\}+", s)
     if m:
-        return Item(z, a, target=None, template=template, parent=m.group(2), issue=m.group(5), collapsed=True)
+        return Item(z, mode, a, target=None, template=template, parent=m.group(2), issue=m.group(5), collapsed=True)
 
     # Miniatures, toys or cards with set= parameter
-    m = re.search("\{\{[^\|\[\}\n]+\|(.*?\|)?set=(?P<set>.*?)\|(.*?\|)?(scenario=(?P<scenario>.*?)\|?)?(.*?)}}", s)
+    m = re.search("\{\{[^\|\[\}\n]+\|(.*?\|)?set=(?P<set>.*?)\|(.*?\|)?((scenario|pack)=(?P<scenario>.*?)\|?)?(.*?)}}", s)
     if m:
-        return Item(z, a, target=m.groupdict()['set'], template=template, text=m.groupdict()['scenario'])
+        return Item(z, mode, a, target=m.groupdict()['set'], template=template, text=m.groupdict()['scenario'])
 
     # Magazine articles with issue as second parameter
     m = re.search("{{[^\|\[\}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(issue[0-9]?=)?(?P<issue>(Special Edition |Souvenir Special)?H?S? ?[0-9\.]*)(\|issue[0-9]=.*?)?\|(story=)?(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?(\|.*?)?}}", s)
     if m:
-        return Item(z, a, target=m.groupdict()['article'], template=template, issue=m.groupdict()['issue'],
+        return Item(z, mode, a, target=m.groupdict()['article'], template=template, issue=m.groupdict()['issue'],
                     special=m.group('year') or m.group('vol'), format_text=m.groupdict()['text'], no_issue=m.groupdict()['issue'] is None)
 
     # Second parameter is formatted version of the target article
     m = re.search("\{\{[^\|\]\n]+\|([^\|\n=\}\]]+)\|([^\|\n=\}\]]+)\}\}", s)
     if m:
         if template == "Microfighters" or m.group(1).startswith("Star Wars: Visions Filmmaker Focus"):
-            return Item(z, a, target=m.group(1), template=template, text=m.group(2))
+            return Item(z, mode, a, target=m.group(1), template=template, text=m.group(2))
         simple = re.sub("''", "", m.group(2))
         if m.group(1) == simple or m.group(1).startswith(f"{simple} (") or m.group(1).endswith(simple):
-            return Item(z, a, target=m.group(1), template=template)
+            return Item(z, mode, a, target=m.group(1), template=template)
 
     # Template-based use cases: collapse down to single value, or convert to identifiable target
     m = re.search("\{\{[^\|\]\n]+\|(\[\[.*?\|)?([^\|\n\}\]]+)\]*?\}\}", s)
     if m:
         i = m.group(2).strip()
         if template == "SWG" and i == "An Empire Divided":
-            return Item(z, a, target="Star Wars Galaxies: An Empire Divided", template="SWG")
+            return Item(z, mode, a, target="Star Wars Galaxies: An Empire Divided", template="SWG")
         elif template and template in PREFIXES:
-            return Item(z, a, target=f"{PREFIXES[template]} {i}", template=template)
+            return Item(z, mode, a, target=f"{PREFIXES[template]} {i}", template=template)
         elif template == "Film" and i in FILMS:
-            return Item(z, a, target=FILMS[i], template="Film")
+            return Item(z, mode, a, target=FILMS[i], template="Film")
         elif template == "KOTORbackups" and i in KOTOR:
-            return Item(z, a, target=KOTOR[i], template="KOTORbackups")
+            return Item(z, mode, a, target=KOTOR[i], template="KOTORbackups")
         elif template and i:
-            return Item(z, a, target=i, template=template)
+            return Item(z, mode, a, target=i, template=template)
 
     m = re.search("{{(?P<template>.*?)\|(.*?\|)?series=(?P<series>.*?)\|(.*?\|)?issue1=(?P<issue>[0-9]+)\|(.*?\|)?(adventure|story)=(?P<story>.*?)(\|.*?)?}", s)
     if not m:
         m = re.search("{{(?P<template>.*?)\|(.*?\|)?(adventure|story)=(?P<story>.*?)\|(.*?\|)?issue1=(?P<issue>[0-9]+)\|(.*?\|)?series=(?P<series>.*?)(\|.*?)?}", s)
     if m:
-        return Item(z, a, target=m.groupdict()['story'], template=template, parent=f"{m.groupdict()['series']} {m.groupdict()['issue']}")
+        return Item(z, mode, a, target=m.groupdict()['story'], template=template, parent=f"{m.groupdict()['series']} {m.groupdict()['issue']}")
 
     # Extract book & adventure or story
     m = re.search("{{(?P<template>.*?)\|(.*?\|)?book[0-9]?=(?P<book>.*?)\|(.*?\|)?(adventure|story)=(?P<story>.*?)(\|.*?)?}", s)
     if not m:
         m = re.search("{{(?P<template>.*?)\|(.*?\|)?(adventure|story)=(?P<story>.*?)\|(.*?\|)?book[0-9]?=(?P<book>.*?)(\|.*?)?}", s)
     if m:
-        return Item(z, a, target=m.groupdict()['story'], template=template, parent=m.groupdict()['book'])
+        return Item(z, mode, a, target=m.groupdict()['story'], template=template, parent=m.groupdict()['book'])
 
     # Web article with int= parameter
     m = re.search("{{[^\|\[\}\n]+\|(.*?\|)?url=(?P<url>.*?)\|.*?(text=(?P<t1>.*?)\|)?(.*?\|)?int=(?P<int>.*?)(\|.*?text=(?P<t2>.*?))?(\|.*?)?}}", s)
     if m:
         text = m.groupdict()['t1'] or m.groupdict()['t2']
-        return Item(z, a, target=m.groupdict()['int'], template=template, url=m.groupdict()['url'], text=text)
+        return Item(z, mode, a, target=m.groupdict()['int'], template=template, url=m.groupdict()['url'], text=text)
 
     # Web articles without int= parameter
     m = re.search("{{[^\|\[\}\n]+\|(.*?\|)?(full_url|url|video)=(?P<url>.*?)\|(.*?\|)?text=(?P<text>.*?)(\|.*?)?}}", s)
     if not m:
         m = re.search("{{[^\|\[\}\n]+\|(.*?\|)?text=(?P<text>.*?)\|(.*?\|)?(full_url|url|video)=(?P<url>.*?)(\|.*?)?}}", s)
     if m:
-        return Item(z, a, target=None, template=template, url=m.groupdict()['url'], text=m.groupdict()['text'])
+        return Item(z, mode, a, target=None, template=template, url=m.groupdict()['url'], text=m.groupdict()['text'])
 
     # Web templates without named parameters
-    if template_type == "Web":
+    if mode == "Web":
         m = re.search("{{[^\|\[\}\n]+\|(subdomain=.*?\|)?(.*?)\|(.*?)(\|.*?)?}}", s)
         if m:
-            return Item(z, a, target=None, template=template, url=m.group(2), text=m.group(3))
+            return Item(z, mode, a, target=None, template=template, url=m.group(2), text=m.group(3))
 
     m = re.search("['\"]*\[\[(.*?)(\|.*?)?\]\]['\"]* ?[-—] ?['\"]*\[\[(.*?) ?([0-9]*?)(\|.*?)?\]\]", s)
     if m and m.group(4):
-        return Item(z, a, target=m.group(1), template="", parent=m.group(3), issue=m.group(4))
+        return Item(z, mode, a, target=m.group(1), template="", parent=m.group(3), issue=m.group(4))
     elif m:
-        return Item(z, a, target=m.group(3), template="", parent=m.group(1))
+        return Item(z, mode, a, target=m.group(3), template="", parent=m.group(1))
 
+    print(f"Unknown: {mode}, {template}, {z}")
     return None
 
 
@@ -514,9 +513,14 @@ def determine_id_for_item(o: Item, data: Dict[str, Item], by_target: Dict[str, L
 
     # Find a match by URL
     if o.url:
-        m = match_url(o, o.url.replace("/#!/about", "").lower(), data)
+        u = o.url.replace("/#!/about", "").lower()
+        m = match_url(o, u, data, False)
         if not m:
-            m = match_url(o, o.url.replace("/#!/about", "").lower(), other_data)
+            m = match_url(o, u, other_data, False)
+        if not m and "indexp" in o.url:
+            m = match_url(o, u, data, True)
+        if not m and "index.html?page=" in o.url:
+            m = match_url(o, u, data, True)
         if m:
             return m
 
@@ -634,7 +638,7 @@ def prep_url(url):
     return u.lower()
 
 
-def match_url(o: Item, url: str, data: Dict[str, Item]):
+def match_url(o: Item, url: str, data: Dict[str, Item], replace_page: bool):
     check_sw = o.template == "SW" and url.startswith("video/")
     url = prep_url(url)
     for k, d in data.items():
@@ -647,8 +651,8 @@ def match_url(o: Item, url: str, data: Dict[str, Item]):
             url_match = True
         elif d_url and "&month=" in d_url and "&month=" in url and d_url.split("&month=", 1)[0] == url.split("&month=", 1)[0]:
             url_match = True
-        elif d_url and "index.html" in d_url and re.match("indexp[0-9]\.html", url):
-            if d_url == re.sub("indexp[0-9]+\.html", "index.html", url):
+        elif d_url and "index.html" in d_url and re.search("indexp[0-9]\.html", url):
+            if replace_page and d_url == re.sub("indexp[0-9]+\.html", "index.html", url):
                 url_match = True
             elif d_url == re.sub("indexp([0-9]+)\.html", "index.html?page=\\1", url):
                 url_match = True
@@ -726,7 +730,7 @@ def load_source_lists(site, log):
             for line in p.get().splitlines():
                 if "/Header}}" in line:
                     continue
-                x = re.search("\*(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?) ?†?( {{C\|alternate: (?P<a>.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
+                x = re.search("\*(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?) ?†?( {{C\|(original|alternate): (?P<a>.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
                 if x:
                     i += 1
                     data.append({"index": i, "page": f"Web/{y}", "date": x.groupdict()["d"], "item": x.groupdict()["t"],
@@ -741,7 +745,7 @@ def load_source_lists(site, log):
     for line in p.get().splitlines():
         if "/Header}}" in line:
             continue
-        x = re.search("\*Current:(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?)( †)?( {{C\|alternate: (?P<a>.*?)}})?$", line)
+        x = re.search("\*Current:(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?)( †)?( {{C\|(original|alternate): (?P<a>.*?)}})?$", line)
         if x:
             i += 1
             data.append({"index": i, "page": "Web/Current", "date": "Current", "item": x.groupdict()["t"],
@@ -756,10 +760,10 @@ def load_source_lists(site, log):
     for line in p.get().splitlines():
         if "/Header}}" in line:
             continue
-        x = re.search("\*.*?:( [0-9:-]+)? (.*?)( †)?( {{C\|alternate: (.*?)}})?$", line)
+        x = re.search("\*.*?:( [0-9:-]+)? (.*?)( †)?( {{C\|(original|alternate): (.*?)}})?$", line)
         if x:
             i += 1
-            data.append({"index": i, "page": "Web/Unknown", "date": "Unknown", "item": x.group(2), "alternate": x.group(5)})
+            data.append({"index": i, "page": "Web/Unknown", "date": "Unknown", "item": x.group(2), "alternate": x.group(6)})
         else:
             print(f"Cannot parse line: {line}")
     if log:
@@ -804,7 +808,7 @@ def load_remap(site) -> dict:
     return results
 
 
-def load_full_sources(site, log) -> FullListData:
+def load_full_sources(site, types, log) -> FullListData:
     sources = load_source_lists(site, log)
     count = 0
     unique_sources = {}
@@ -820,7 +824,7 @@ def load_full_sources(site, log) -> FullListData:
                 if cr:
                     c = ' ' + cr.group(1)
                     i['item'] = i['item'].replace(cr.group(1), '').strip()
-            x = extract_item(i['item'], False, i['page'], master=True)
+            x = extract_item(i['item'], False, i['page'], types, master=True)
             if x and not x.invalid:
                 if x.template == "SWCT" and not x.target:
                     x.target = x.card
@@ -848,7 +852,7 @@ def load_full_sources(site, log) -> FullListData:
     return FullListData(unique_sources, full_sources, target_sources, set())
 
 
-def load_full_appearances(site, log, canon_only=False, legends_only=False) -> FullListData:
+def load_full_appearances(site, types, log, canon_only=False, legends_only=False) -> FullListData:
     appearances = load_appearances(site, log, canon_only=canon_only, legends_only=legends_only)
     _, canon = parse_timeline(Page(site, "Timeline of canon media").get())
     _, legends = parse_timeline(Page(site, "Timeline of Legends media").get())
@@ -867,7 +871,7 @@ def load_full_appearances(site, log, canon_only=False, legends_only=False) -> Fu
                 if cr:
                     c = ' ' + cr.group(1)
                     i['item'] = i['item'].replace(cr.group(1), '').strip()
-            x = extract_item(i['item'], True, i['page'], master=True)
+            x = extract_item(i['item'], True, i['page'], types, master=True)
             if x:
                 x.canon = i.get('canon')
                 x.date = i['date']
@@ -884,6 +888,8 @@ def load_full_appearances(site, log, canon_only=False, legends_only=False) -> Fu
                         x.canon_index = canon[x.target.replace(" (audiobook)", "")] + 0.1
                     elif x.target.replace("(audiobook)", "(novel)") in canon:
                         x.canon_index = canon[x.target.replace("(audiobook)", "(novel)")] + 0.1
+                    elif x.target.replace("(script)", "(novel)") in canon:
+                        x.canon_index = canon[x.target.replace("(script)", "(novel)")] + 0.1
 
                     if x.target in legends:
                         x.legends_index = legends[x.target]
@@ -891,6 +897,8 @@ def load_full_appearances(site, log, canon_only=False, legends_only=False) -> Fu
                         x.legends_index = legends[x.target.replace(" (audiobook)", "")] + 0.1
                     elif x.target.replace("(audiobook)", "(novel)") in legends:
                         x.legends_index = legends[x.target.replace("(audiobook)", "(novel)")] + 0.1
+                    elif x.target.replace("(script)", "(novel)") in legends:
+                        x.legends_index = legends[x.target.replace("(script)", "(novel)")] + 0.1
 
                     if x.target.endswith(")"):
                         parantheticals.add(x.target.rsplit(" (", 1)[0])
