@@ -40,7 +40,14 @@ def prepare_results(results: AnalysisResults) -> Tuple[List[ItemId], List[ItemId
     return found, missing
 
 
-def convert_date_str(date):
+def add_link(d, links: set):
+    if d in links:
+        return d
+    links.add(d)
+    return f"[[{d}]]"
+
+
+def convert_date_str(date, links: set):
     if not (date and date[0].isnumeric()):
         return date, None
     elif date.endswith("-XX-XX"):
@@ -48,14 +55,18 @@ def convert_date_str(date):
     elif date.endswith("-XX"):
         try:
             d = datetime.strptime(date, "%Y-%m-XX")
-            return d.strftime("[[%B]], [[%Y]]"), d
+            m = add_link(d.strftime("%B"), links)
+            y = add_link(d.strftime("%Y"), links)
+            return f"{m}, {y}", d
         except Exception as e:
             print(f"Encountered {type(e)} while parsing {date}: {e}")
         return date, None
     else:
         try:
             d = datetime.strptime(date, "%Y-%m-%d")
-            return d.strftime("[[%B %d]], [[%Y]]"), d
+            m = add_link(d.strftime("%B %d"), links)
+            y = add_link(d.strftime("%Y"), links)
+            return f"{m}, {y}", d
         except Exception as e:
             print(f"Encountered {type(e)} while parsing {date}: {e}")
         return date, None
@@ -133,8 +144,9 @@ def create_index(site, page: Page, results: AnalysisResults, save: bool):
     lines = ["This is the media index page for [[{{PAGENAME}}]].", "", "==Media index=="]
     refs = {}
     contents = {}
+    links = set()
     for i in found:
-        date_str, parsed_date = convert_date_str(i.master.date)
+        date_str, parsed_date = convert_date_str(i.master.date, links)
         date_ref = ''
         if date_str:
             date_str = date_str.replace(" 0", " ")

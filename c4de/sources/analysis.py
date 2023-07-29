@@ -27,13 +27,14 @@ class PageComponents:
 
 
 class AnalysisResults:
-    def __init__(self, apps: List[ItemId], nca: List[ItemId], src: List[ItemId], ncs: List[ItemId], canon: bool, abridged: list):
+    def __init__(self, apps: List[ItemId], nca: List[ItemId], src: List[ItemId], ncs: List[ItemId], canon: bool, abridged: list, mismatch: List[ItemId]):
         self.apps = apps
         self.nca = nca
         self.src = src
         self.ncs = ncs
         self.canon = canon
         self.abridged = abridged
+        self.mismatch = mismatch
 
 
 class SectionItemIds:
@@ -52,7 +53,7 @@ class SectionComponents:
         self.after = after
 
 
-def analyze_body(text, types, appearances: FullListData, sources: FullListData, log: bool):
+def analyze_body(site, text, types, appearances: FullListData, sources: FullListData, remap, log: bool):
     references = re.findall("(<ref name=.*?[^/]>(.*?)</ref>)", text)
     new_text = text
     for full_ref, ref in references:
@@ -68,7 +69,7 @@ def analyze_body(text, types, appearances: FullListData, sources: FullListData, 
             for link in links:
                 x = extract_item(link[0], False, "reference", types)
                 if x:
-                    o = determine_id_for_item(x, appearances.unique, appearances.target, sources.unique, sources.target, {}, log)
+                    o = determine_id_for_item(x, site, appearances.unique, appearances.target, sources.unique, sources.target, remap, log)
                     if o and not o.use_original_text and o.replace_references:
                         if o.master.template and not x.template and x.target and not re.search("^['\"]*\[\[" + x.target + "(\|.*?)?\]\]['\"]*$", new_ref):
                             print(f"Skipping {link[0]} due to extraneous text")
@@ -98,8 +99,8 @@ def analyze_body(text, types, appearances: FullListData, sources: FullListData, 
                     continue
                 x = extract_item(t, False, "reference", types)
                 if x:
-                    o = determine_id_for_item(x, appearances.unique, appearances.target, sources.unique, sources.target,
-                                              {}, log)
+                    o = determine_id_for_item(x, site, appearances.unique, appearances.target, sources.unique,
+                                              sources.target, {}, log)
                     if o and not o.use_original_text:
                         ex = []
                         if "|author=" in t:
@@ -186,6 +187,14 @@ def is_external_wiki(t):
     return t and (t.lower().startswith("w:c:") or t.lower().startswith("wikipedia:") or t.lower().startswith(":wikipedia:"))
 
 
+def is_redirect(page):
+    try:
+        return page.exists() and page.isRedirectPage()
+    except Exception as e:
+        print(page.title(), e)
+        return False
+
+
 def build_item_ids_for_section(site, name, original: List[Item], data: FullListData, other: FullListData, remap: dict,
                                unknown: List[Item], log) -> SectionItemIds:
 
@@ -195,23 +204,14 @@ def build_item_ids_for_section(site, name, original: List[Item], data: FullListD
     extra = {}
     for i, o in enumerate(original):
         o.index = i
-        d = determine_id_for_item(o, data.unique, data.target, other.unique, other.target, remap, log)
-        if not d and (is_external_wiki(o.target) or is_external_wiki(o.parent)):
-            d = ItemId(o, o, True, False)
-        if not d and o.target:
-            p = Page(site, o.target)
-            if p.exists() and p.isRedirectPage():
-                if log:
-                    print(f"Followed redirect {o.target} to {p.getRedirectTarget().title()}")
-                o.target = p.getRedirectTarget().title()
-                d = determine_id_for_item(o, data.unique, data.target, other.unique, other.target, remap, log)
+        d = determine_id_for_item(o, site, data.unique, data.target, other.unique, other.target, remap, log)
         if not d and o.parent:
             p = Page(site, o.parent)
-            if p.exists() and p.isRedirectPage():
+            if is_redirect(p):
                 if log:
                     print(f"Followed redirect {o.parent} to {p.getRedirectTarget().title()}")
                 o.parent = p.getRedirectTarget().title()
-                d = determine_id_for_item(o, data.unique, data.target, other.unique, other.target, remap, log)
+                d = determine_id_for_item(o, site, data.unique, data.target, other.unique, other.target, remap, log)
 
         if d and o.mode == "Cards":
             parent_set = d.master.parent if d.master.parent else d.master.target
@@ -293,7 +293,7 @@ BY_DATE = "Use Master Date"
 
 
 def build_new_section(section: SectionItemIds, mode: str, dates: list, canon: bool, include_date: bool, log: bool,
-                      use_index: bool) -> Tuple[str, List[ItemId]]:
+                      use_index: bool, mismatch: list) -> Tuple[str, List[ItemId]]:
     source_names = {}
     urls = {}
     by_original_index = {o.current.index: o for o in section.found if o.current.index is not None}
@@ -316,8 +316,10 @@ def build_new_section(section: SectionItemIds, mode: str, dates: list, canon: bo
             missing.append(o)
         elif mode == BY_INDEX:
             new_found.append(o)
-        elif o.master.template == "TCWA" and mode == BY_DATE:
+        elif o.current.template == "TCWA" and mode == BY_DATE:
             missing.append(o)
+        elif o.master.target and o.master.target.startswith("Star Wars: The Clone Wars The Complete Season"):
+            continue
         elif o.master.has_date():
             if o.current.index is None:
                 print(f"No index? {o.current.original}, {o.master.original}")
@@ -400,7 +402,10 @@ def build_new_section(section: SectionItemIds, mode: str, dates: list, canon: bo
                 final_items.append(o)
                 final_without_extra.append(zn)
                 new_text.append(z)
-    # TODO: Canon/Legends check
+
+        if o.master.canon is not None:
+            if o.master.canon != canon:
+                mismatch.append(o)
 
     return "\n".join(new_text), final_items
 
@@ -460,7 +465,7 @@ def handle_missing_entry(m: ItemId, found: List[ItemId], mode: str, dates: list,
         if mode == BY_DATE:
             d1 = found[ix1 - 1].master.date if ix1 > 0 else None
             d2 = found[ix1 + 1].master.date if (ix1 + 1) < len(found) else None
-            if log:
+            if log and m.current.template != "TCWA":
                 print(f"Using {ix1} as index (between {d1} | {d2}) for missing-date entry: {m.current.original}")
             dates.append((True, m, d1, d2))
         return ix1
@@ -468,14 +473,14 @@ def handle_missing_entry(m: ItemId, found: List[ItemId], mode: str, dates: list,
         if mode == BY_DATE:
             d1 = found[ix2 - 1].master.date if ix2 > 0 else None
             d2 = found[ix2 + 1].master.date if (ix2 + 1) < len(found) else None
-            if log:
+            if log and m.current.template != "TCWA":
                 print(f"Using {ix2} as index (between {d1} | {d2}) for missing-date entry: {m.current.original}")
             dates.append((True, m, d1, d2))
         return ix2
     elif m.current.index == 0:
         if mode == BY_DATE:
             d2 = found[1].master.date if len(found) > 1 else None
-            if log:
+            if log and m.current.template != "TCWA":
                 print(f"Using 0 as index (between start | {d2}) for missing-date entry: {m.current.original}")
             dates.append((True, m, None, d2))
         return 0
@@ -547,10 +552,11 @@ def build_final_text(results: PageComponents, new_apps: str, new_nca: str, new_s
         pieces.append("==Notes and references==\n{{Reflist}}\n\n")
 
     new_txt = re.sub("(?<![\n=}])\n==", "\n\n==", re.sub("\n\n+", "\n\n", "\n".join(pieces))).strip()
-    new_txt = new_txt.replace("\n\n}}", "\n}}")
+    new_txt = new_txt.replace("\n\n}}", "\n}}").replace("{{Shortstory|", "{{StoryCite|")
     replace = True
     while replace:
         new_txt2 = re.sub("(\[\[(?!File:)[^\[\]\r\n]+)&ndash;", "\\1–", re.sub("(\[\[(?!File:)[^\[\]\n]+)&mdash;", "\\1—", new_txt))
+        new_txt2 = re.sub("(\{\{[A-z0-9]+\|[0-9]+\|[^\[\]\|\r\n]+)&ndash;", "\\1–", re.sub("(\{\{[A-z0-9]+\|[0-9]+\|[^\[\]\|\r\n]+)&mdash;", "\\1—", new_txt2))
         replace = new_txt != new_txt2
         new_txt = new_txt2
     return new_txt
@@ -613,11 +619,12 @@ def analyze_section_results(site, target: Page, results: PageComponents, appeara
             app_mode = UNCHANGED
         elif "canon articles" in c.title().lower():
             canon = True
-    new_apps, final_apps = build_new_section(new_apps, app_mode, dates, canon, include_date, log, use_index)
-    new_nca, final_nca = build_new_section(new_nca, UNCHANGED, dates, canon, include_date, log, use_index)
-    new_sources, final_sources = build_new_section(new_src, BY_DATE, dates, canon, include_date, log, use_index)
-    new_ncs, final_ncs = build_new_section(new_ncs, BY_DATE, dates, canon, include_date, log, use_index)
-    analysis = AnalysisResults(final_apps, final_nca, final_sources, final_ncs, canon, abridged)
+    mismatch = []
+    new_apps, final_apps = build_new_section(new_apps, app_mode, dates, canon, include_date, log, use_index, mismatch)
+    new_nca, final_nca = build_new_section(new_nca, UNCHANGED, dates, canon, include_date, log, use_index, mismatch)
+    new_sources, final_sources = build_new_section(new_src, BY_DATE, dates, canon, include_date, log, use_index, mismatch)
+    new_ncs, final_ncs = build_new_section(new_ncs, BY_DATE, dates, canon, include_date, log, use_index, mismatch)
+    analysis = AnalysisResults(final_apps, final_nca, final_sources, final_ncs, canon, abridged, mismatch)
     return new_apps, new_nca, new_sources, new_ncs, dates, unknown_apps, unknown_src, analysis
 
 
@@ -644,7 +651,7 @@ def find_matching_audiobook(a: ItemId, existing: list, appearances: FullListData
     return results
 
 
-def build_page_components(target: Page, types: dict, appearances: FullListData, sources: FullListData,
+def build_page_components(target: Page, types: dict, appearances: FullListData, sources: FullListData, remap: dict,
                           handle_references=False, log=True) -> Tuple[PageComponents, list]:
     before = re.sub("({{[Ss]croll[_ ]box\|)\*", "{{Scroll_box|\n*", target.get())
     if "‎" in before:
@@ -698,13 +705,13 @@ def build_page_components(target: Page, types: dict, appearances: FullListData, 
 
     results.before = before
     if handle_references:
-        results.before = analyze_body(results.before, types, appearances, sources, log)
+        results.before = analyze_body(target.site, results.before, types, appearances, sources, remap, log)
     return results, unknown
 
 
 def get_analysis_from_page(site: Site, target: Page, types, appearances: FullListData, sources: FullListData,
                            remap: dict, log=True):
-    results, unknown = build_page_components(target, types, appearances, sources, False, log)
+    results, unknown = build_page_components(target, types, appearances, sources, remap, False, log)
 
     _, _, _, _, _, _, _, analysis = analyze_section_results(site, target, results, appearances, sources, remap, True, False, log)
     return analysis
@@ -712,7 +719,7 @@ def get_analysis_from_page(site: Site, target: Page, types, appearances: FullLis
 
 def build_new_text(site: Site, target: Page, types: dict, appearances: FullListData, sources: FullListData,
                    remap: dict, include_date: bool, log=True, use_index=True, handle_references=False):
-    results, unknown = build_page_components(target, types, appearances, sources, handle_references, log)
+    results, unknown = build_page_components(target, types, appearances, sources, remap, handle_references, log)
 
     new_apps, new_nca, new_sources, new_ncs, dates, unknown_apps, unknown_src, analysis = analyze_section_results(
         site, target, results, appearances, sources, remap, use_index, include_date, log)
@@ -722,7 +729,7 @@ def build_new_text(site: Site, target: Page, types: dict, appearances: FullListD
 
 def analyze_target_page(site: Site, target: Page, types: dict, appearances: FullListData, sources: FullListData,
                         remap: dict, save: bool, include_date: bool, log=True, use_index=True, handle_references=False):
-    results, unknown = build_page_components(target, types, appearances, sources, handle_references, log)
+    results, unknown = build_page_components(target, types, appearances, sources, remap, handle_references, log)
 
     new_apps, new_nca, new_sources, new_ncs, dates, unknown_apps, unknown_src, analysis = analyze_section_results(
         site, target, results, appearances, sources, remap, use_index, include_date, log)
@@ -742,7 +749,7 @@ def analyze_target_page(site: Site, target: Page, types: dict, appearances: Full
                     date_txt.append(f"{d[1].master.date} --> {d[0]}: #{d[2]} {d[3]}:  -> {d[1].master.original}")
             f.writelines("\n" + "\n".join(date_txt))
 
-    if save:
+    if save and new_txt != target.get():
         target.put(new_txt, "Source Engine analysis of Appearances, Sources and references")
 
     results = []
@@ -753,6 +760,11 @@ def analyze_target_page(site: Site, target: Page, types: dict, appearances: Full
         elif analysis.abridged:
             results.append(f"{len(analysis.abridged)} abridged audiobooks were missing from Appearances:")
             results.append("\n".join(f"- {a}" for a in analysis.abridged))
+
+        if analysis.mismatch:
+            c, d = ("Canon", "Legends") if analysis.canon else ("Legends", "Canon")
+            results.append(f"The following {len(analysis.mismatch)} entries are marked as {d} in the Masterlist, but are listed on this {c} article: (experimental feature)")
+            results.append("\n".join(f"- `{a.master.original}`" for a in analysis.mismatch))
 
         if unknown_apps:
             results.append("Could not identify unknown appearances:")

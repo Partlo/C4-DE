@@ -533,16 +533,81 @@ def check_consensus_track_duration(site: Site, offset):
     return result
 
 
-def build_site_map():
+SKIPS = ["audio", "activities", "behind-the-scenes", "community", "databank", "disneyplus", "films", "force-for-change",
+         "fuel-your-force", "games-apps", "halloween", "interactive", "life-day", "news", "science-and-star-wars",
+         "search", "series", "the-high-republic", "the-star-wars-show", "video", "databank/the-rise-of-skywalker",
+         "empire-40th", "esbuncut", "mando-mania", "much-to-learn", "rebels-recon", "return-of-the-jedi-40th",
+         "star-wars-40th", "star-wars-celebration", "star-wars-day", "star-wars-galaxy-of-adventures", "tarkin",
+         "this-is-madness", "this-week-in-star-wars", "the-star-wars-show-book-club", "the-high-republic-show",
+         "obi-wan-wednesdays", "our-star-wars-stories"]
+PREFIXES = ["/news/contributor/", "/news/category/", "/news/tag/", "/games-apps/", "/star-wars-fan-awards/", "/interactive/", "/audio/", "fan-awards", "fan-film"]
+GALLERIES = ["-history-gallery", "-biography-gallery", "-biography-slideshow", "the-force-gallery", "-details-gallery",
+             "-poster-gallery", "-posters-gallery", "-stills-gallery", "/poster-gallery", "/posters-gallery",
+             "/stills-gallery", "poster-and-promo-gallery", "-character-posters"]
+
+FULL_SKIP = ["jazwares-micro-galaxy", "jazwares-micro-galaxy-series-v", "news/colin-trevorrow-dirigira-star-wars-episodio-ix",
+             "the-high-republic-claudia-gray", "the-high-republic-concept-art-gallery",
+             "the-high-republic-daniel-cavan-scott", "the-high-republic-daniel-charles-soule",
+             "the-high-republic-daniel-jose-older", "the-high-republic-george-mann",
+             "the-high-republic-justina-ireland", "the-high-republic-lydia-kang",
+             "the-high-republic-tessa-gratton", "the-high-republic-zoraida-cordova",]
+
+
+def build_site_map(full: bool):
     t = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
     directory = ET.fromstring(requests.get("https://www.starwars.com/sitemap.xml").text)
     results = set()
-    skip = ["/news/contributor/", "/news/category/", "/news/tag/"]
     for e in directory:
         for i in e.findall(f'{t}loc'):
             part = ET.fromstring(requests.get(i.text).text)
             for u in part.findall(f"{t}url"):
                 for loc in u.findall(f"{t}loc"):
-                    if not any(s in loc.text for s in skip):
-                        results.add(loc.text)
+                    if full:
+                        results.add(loc.text.split("starwars.com/", 1)[-1])
+                        continue
+
+                    if any(loc.text.endswith(f".com/{s}") for s in SKIPS):
+                        continue
+                    elif any(loc.text.endswith(f".com/{s}") for s in FULL_SKIP):
+                        continue
+                    elif any(s in loc.text for s in PREFIXES):
+                        continue
+                    elif any(s in loc.text for s in GALLERIES):
+                        continue
+                    elif "/series/" in loc.text and re.match(".*?/series/[a-z0-9-]+$", loc.text):
+                        continue
+                    elif "/archived-201" in loc.text or "/archived-202" in loc.text:
+                        continue
+                    elif "/databank/" in loc.text and re.search("/databank/[a-z0-9-]+-all", loc.text):
+                        continue
+                    elif loc.text.endswith("-gallery"):
+                        continue
+                    results.add(loc.text.split("starwars.com/", 1)[-1])
     return results
+
+
+def compile_tracked_urls(site):
+    urls = []
+    for y in range(1990, datetime.now().year + 1):
+        p = Page(site, f"Wookieepedia:Sources/Web/{y}")
+        if p.exists():
+            for line in p.get().splitlines():
+                if "|sw_url=" in line:
+                    urls.append(line.split("|sw_url=")[-1].split("|")[0].split("}", 1)[0])
+                elif "{{SW|" in line:
+                    urls.append(line.split("|url=", 1)[-1].split("|")[0].split("}", 1)[0])
+                    if "{{C|alternate: " in line:
+                        urls.append(line.split("alternate: ", 1)[-1].split("}", 1)[0])
+
+    for line in Page(site, "Wookieepedia:Sources/Web/Databank").get().splitlines():
+        if "{{Databank|url=" in line:
+            urls.append(line.split("|url=", 1)[-1].split("|")[0].split("}", 1)[0])
+        elif "{{Databank|" in line:
+            urls.append("databank/" + line.split("{{Databank|", 1)[-1].split("|")[0].split("}", 1)[0])
+    return urls
+
+
+def compare_site_map(site):
+    urls = compile_tracked_urls(site)
+    sitemap = build_site_map(False)
+    return set(sitemap) - set(urls)

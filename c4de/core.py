@@ -4,6 +4,8 @@ import json
 import sys
 import traceback
 
+import discord.errors
+
 import time
 from urllib import parse
 from typing import List, Tuple
@@ -17,7 +19,7 @@ import ssl
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
-from pywikibot import Site, Page, Category
+from pywikibot import Site, Page, Category, showDiff
 from pywikibot.exceptions import NoPageError, LockedPageError, OtherPageSaveError
 from c4de.common import log, error_log, archive_url
 from c4de.data.filenames import *
@@ -33,7 +35,7 @@ from c4de.protocols.rss import check_rss_feed, check_latest_url, check_wookieepe
 from c4de.sources.analysis import analyze_target_page, get_analysis_from_page
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, build_template_types
 from c4de.sources.index import create_index
-from c4de.sources.updates import get_future_products_list, handle_results
+from c4de.sources.updates import get_future_products_list, handle_results, search_for_missing
 
 
 SELF = 880096997217013801
@@ -45,6 +47,7 @@ REQUESTS = "bot-requests"
 ANNOUNCEMENTS = "announcements"
 ADMIN_HELP = "admin-help"
 NOM_CHANNEL = "status-article-nominations"
+REVIEW_CHANNEL = "status-article-reviews"
 SOCIAL_MEDIA = "social-media-team"
 UPDATES = "star-wars-news"
 SITE_URL = "https://starwars.fandom.com/wiki"
@@ -240,6 +243,9 @@ class C4DE_Bot(commands.Bot):
             u = re.search("/wiki/Wookieepedia:.*?_article_nominations/(.*?)(_\(.*?nomination\))?>", message.content)
             if u:
                 return {"user": m.group(1), "article": u.group(1)}
+        m = re.search("New review requested for .*?(Featured|Good|Comprehensive) article: (.*?)\**\n", message.content)
+        if m:
+            return {"user": None, "article": m.group(2)}
         return None
 
     async def on_message(self, message: Message):
@@ -248,7 +254,7 @@ class C4DE_Bot(commands.Bot):
         elif isinstance(message.channel, DMChannel):
             await self.handle_direct_message(message)
             return
-        elif message.author.id == 863199002614956043 and message.channel.name == NOM_CHANNEL:
+        elif message.author.id == 863199002614956043 and (message.channel.name == NOM_CHANNEL or message.channel.name == REVIEW_CHANNEL):
             nom = self.is_new_nomination_message(message)
             if nom:
                 await self.handle_new_nomination(message, nom)
@@ -339,6 +345,18 @@ class C4DE_Bot(commands.Bot):
 
         if "rebuild sources" in message.content.lower():
             await self.build_sources()
+            await message.add_reaction(THUMBS_UP)
+            return
+
+        if "future products" in message.content.lower():
+            await self.handle_future_products()
+            await message.add_reaction(THUMBS_UP)
+            return
+
+        if "traverse media" in message.content.lower() or "search for missing" in message.content.lower():
+            await message.add_reaction(TIMER)
+            await self.handle_missing_search()
+            await message.remove_reaction(TIMER, self.user)
             await message.add_reaction(THUMBS_UP)
             return
 
@@ -593,14 +611,14 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def is_create_index_command(message: Message):
-        match = re.search("create [iI]ndex (for )?(?P<article>.*?)$", message.content)
+        match = re.search("(create|generate|build) [iI]ndex (for )?(?P<article>.*?)$", message.content)
         if match:
             return match.groupdict()
         return None
 
     @staticmethod
     def is_analyze_source_command(message: Message):
-        match = re.search("(analy[zs]e|build) sources? (for )?(?P<article>.*?)(?P<date> with dates?)?(?P<text> (by|and|with) text)?$", message.content)
+        match = re.search("(analy[zs]e|build|check) sources? (for )?(?P<article>.*?)(?P<date> with dates?)?(?P<text> (by|and|with) text)?$", message.content)
         if match:
             return match.groupdict()
         return None
@@ -617,6 +635,7 @@ class C4DE_Bot(commands.Bot):
                 return
 
             rev_id = target.latest_revision_id
+            old_text = target.get()
 
             await message.add_reaction(TIMER)
             results = analyze_target_page(self.site, target, self.templates, self.appearances, self.sources, self.remap,
@@ -625,10 +644,19 @@ class C4DE_Bot(commands.Bot):
             await message.add_reaction(self.emoji_by_name("bb8thumbsup"))
 
             rev = next(target.revisions(content=False, total=1))
-            if rev.revid != rev_id:
+            if rev.revid == rev_id:
+                return
+
+            current_text = target.get(force=True)
+            if self.flatten_text(current_text) == self.flatten_text(old_text):
+                log(f"No major changes found for article: {target.title()}")
+                return
+            elif command['user']:
                 user_ids = self.get_user_ids()
                 user_str = self.get_user_id(command['user'], user_ids)
                 await message.reply(f"{user_str}: Sources Engine found changes needed for this article; please review when you get a chance:\n<{target.full_url()}?diff=next&oldid={rev_id}>")
+            else:
+                await message.reply(f"Sources Engine found changes needed for this article; please review:\n<{target.full_url()}?diff=next&oldid={rev_id}>")
             for o in results:
                 await message.reply(o)
         except Exception as e:
@@ -669,6 +697,10 @@ class C4DE_Bot(commands.Bot):
             await message.add_reaction(EXCLAMATION)
             await message.channel.send("Encountered error while analyzing page")
 
+    @staticmethod
+    def flatten_text(t):
+        return t.replace("&ndash;", "–").replace("&mdash;", "—").replace("\n", "").replace(" ", "")
+
     async def handle_create_index_command(self, message: Message, command: dict):
         try:
             target = Page(self.site, command['article'])
@@ -707,8 +739,20 @@ class C4DE_Bot(commands.Bot):
     async def check_future_products(self):
         if datetime.now().hour != 5:
             return
+        await self.handle_future_products()
+
+    async def handle_future_products(self):
         try:
             results = get_future_products_list(self.site)
+            handle_results(self.site, results)
+            await self.build_sources()
+        except Exception as e:
+            traceback.print_exc()
+            await self.report_error("Future products", type(e), e)
+
+    async def handle_missing_search(self):
+        try:
+            results = search_for_missing(self.site, self.appearances, self.sources)
             handle_results(self.site, results)
             await self.build_sources()
         except Exception as e:
@@ -920,6 +964,12 @@ class C4DE_Bot(commands.Bot):
                         await message.edit(content=f"~~{message.content}~~ (completed)")
                         self.admin_messages.pop(message.id)
                         update.remove(message.id)
+                        time.sleep(1)
+                except discord.errors.HTTPException as e:
+                    if "rate limit" in str(e):
+                        time.sleep(5)
+                    else:
+                        await self.report_error(f"Deleted Pages (messages): {message.content} -> {e}", type(e), e)
                 except Exception as e:
                     await self.report_error(f"Deleted Pages (messages): {message.content} -> {e}", type(e), e)
 
@@ -1107,16 +1157,19 @@ class C4DE_Bot(commands.Bot):
     def add_urls_to_archive(self, template, new_url, archivedate):
         page = self.get_archive_for_site(template)
         text = page.get()
-        new_text = self.build_archive_template_text(page.title().startswith("Template"), text, new_url, archivedate)
-
+        if page.title().startswith("Template"):
+            new_text = self.build_archive_template_text(text, new_url, archivedate)
+        else:
+            new_text = self.build_archive_module_text(text, new_url, archivedate)
+        new_text = "\n".join(new_text)
         if text == new_text:
             return
 
         try:
-            page.put("\n".join(new_text), f"Archiving {archivedate} for new URL: {new_url}")
+            page.put(new_text, f"Archiving {archivedate} for new URL: {new_url}")
         except OtherPageSaveError:
             self.site.login()
-            page.put("\n".join(new_text), f"Archiving {archivedate} for new URL: {new_url}")
+            page.put(new_text, f"Archiving {archivedate} for new URL: {new_url}")
 
     def parse_archive(self, has_archive, template):
         if has_archive:
@@ -1125,12 +1178,12 @@ class C4DE_Bot(commands.Bot):
                 return None
             archive = {}
             for u, d in re.findall("\[['\"](.*?)['\"]\] ?= ?['\"]?([0-9]+)['\"]?", page.get()):
-                archive[u] = d
+                archive[u.replace("\\'", "'")] = d
             return archive
         return None
 
     @staticmethod
-    def build_archive_template_text(is_template, text, new_url, archivedate):
+    def build_archive_template_text(text, new_url, archivedate):
         special_start = "<!-- Start" in text
         new_text = []
         found, start = False, False,
@@ -1139,16 +1192,12 @@ class C4DE_Bot(commands.Bot):
             if not start and special_start:
                 start = "<!-- Start" in line
             elif not start:
-                start = line.strip().startswith("|" if is_template else "[")
-            elif not found and (f"['{u}']" in line or f"| {u} = " in line or f'["{u}"]' in line):
+                start = line.strip().startswith("|")
+            elif not found and f"| {u} = " in line:
                 log(f"URL {u} is already archived")
                 return
             elif not found and u < line.strip()[1:].strip():
-                if is_template:
-                    new_text.append(f"  | {u} = {archivedate}")
-                else:
-                    z = u.replace("'", "\\'")
-                    new_text.append(f"  ['{z}'] = '{archivedate}'")
+                new_text.append(f"  | {u} = {archivedate}")
                 found = True
             new_text.append(line)
 
@@ -1156,20 +1205,19 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def build_archive_module_text(text, new_url, archivedate):
-        special_start = "p.knownArchiveDates = {" in text
         new_text = []
         found, start = False, False
         u = new_url.replace("=", "{{=}}")
         for line in text.splitlines():
-            if not start and special_start:
-                start = "p.knownArchiveDates = {" in line
-            elif not start:
-                start = line.strip().startswith("|")
-            elif not found and f"| ['{u}']" in line:
+            if not start:
+                start = line.strip().startswith("[")
+            elif not found and (f"['{u}']" in line or f'["{u}"]' in line):
                 log(f"URL {u} is already archived")
                 return
-            elif not found and u < line.strip()[1:].strip():
-                new_text.append(f"	['{u}'] = '{archivedate}',")
+            elif not found and (line.strip().startswith("}") or u < line.strip()[1:].strip()):
+                if "[" in new_text[-1] and not new_text[-1].strip().endswith(","):
+                    new_text[-1] = new_text[-1].rstrip() + ","
+                new_text.append(f'  ["{u}"] = "{archivedate}",')
                 found = True
             new_text.append(line)
 

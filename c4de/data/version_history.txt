@@ -112,3 +112,6 @@
 **New RSS feeds
 *'''3.3.3''': July 24, 2023
 **More Source Engine bugs and fixes
+*'''3.4.0''': July 29, 2023
+**Media traversal function. Not going to be a regular thing, as it takes too long
+**Various Source Engine bug fixes

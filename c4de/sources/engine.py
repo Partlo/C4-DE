@@ -38,7 +38,7 @@ REFERENCE_MAGAZINES = {
 
 PARAN = {
     "SWMiniCite": ("Star Wars Miniatures", True),
-    "SWPM": ("PocketModels", False)
+    "SWPM": ("PocketModels", True)
 }
 
 KOTOR = {
@@ -82,6 +82,40 @@ PREFIXES = {
     "Jedi Temple Challenge": "Star Wars: Jedi Temple Challenge - Episode",
     "CW": "Clone Wars Chapter",
     "SWG": "Star Wars Galaxies:"
+}
+
+TEMPLATES = {
+    "AdventurerCite": "The Adventurer",
+    "AdvUnCite": "Adventures Unlimited",
+    "Avalonmag": "Avalon",
+    "BanthaCite": "Bantha Tracks",
+    "CasusBelliCite": "Casus Belli",
+    "CollectorCite": "Star Wars Galaxy Collector",
+    "CWACite": "Star Wars: Clone Wars Adventures Volume",
+    "CWMCite": "Star Wars: The Clone Wars Magazine",
+    "DragonCite": "Dragon Magazine",
+    "InQuestCite": "InQuest Gamer",
+    "GalaxyCite": "Star Wars Galaxy Magazine",
+    "GameTradeCite": "Game Trade Magazine",
+    "GamerCite": "Star Wars Gamer",
+    "InsiderCite": "Star Wars Insider",
+    "Journal": "Star Wars Adventure Journal",
+    "StarWarsKidsCite": "Star Wars Kids (1997)",
+    "StarWarsKidsCite|year=1997": "Star Wars Kids (1997)",
+    "StarWarsKidsCite|year=1998": "Star Wars Kids (1998)",
+    "StarWarsKidsCite|year=1999": "Star Wars Kids (1999)",
+    "SWAdventuresCite": "Star Wars Adventures Magazine",
+    "SWMCite": "Star Wars Magazine",
+    "SWMUKCite": "Star Wars: The Official Magazine",
+    "SWRACite": "Star Wars Rebels Animation",
+    "SWResACite": "Star Wars Resistance Animation",
+    "SWRMCite": "Star Wars Rebels Magazine",
+    "TOMCite": "Star Wars - The Official Magazine",
+    "TCWUKCite": "Star Wars Comic UK",
+    "TCWUKCite|vol=4": "Star Wars Comic UK",
+    "TCWUKCite|vol=6": "Star Wars: The Clone Wars Comic",
+    "TCWUKCite|vol=7": "Star Wars Comic",
+    "VoyagesCite": "Voyages SF"
 }
 
 SELF_CITE = ["torweb", "twitter", "sonycite", "hunters", "ilm", "ilmxlab", "ffgweb", "facebookcite", "ea", "disney",
@@ -157,6 +191,8 @@ class Item:
         self.canon = None
         self.unlicensed = False
         self.abridged = False
+        self.reprint = False
+        self.department = ''
         self.non_canon = False
         self.alternate_url = None
         self.date_ref = None
@@ -201,12 +237,13 @@ class Item:
 
 class ItemId:
     def __init__(self, current: Item, master: Item, use_original_text: bool,
-                 from_other_data=False, wrong_continuity=False):
+                 from_other_data=False, wrong_continuity=False, by_parent=False):
         self.current = current
         self.master = master
         self.use_original_text = use_original_text
         self.from_other_data = from_other_data
         self.wrong_continuity = wrong_continuity
+        self.by_parent = by_parent
 
         self.replace_references = master.original and "]]'' ([[" not in master.original
 
@@ -303,7 +340,8 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
         m = re.search("{{[^\|\[\}\n]+\|((subdomain|parameter)=.*?\|)?(video=)?(?P<video>.*?)(&.*?)?\|(text=)?(?P<text>.*?)(\|.*?)?}}", s)
         if m:
             u = re.search("\|sw_url=(.*?)(\|.*?)?}}", s)
-            return Item(z, mode, a, target=None, template=template, url=m.groupdict()['video'], text=m.groupdict()['text'],
+            i = re.search("\|int=(.*?)(\|.*?)?}}", s)
+            return Item(z, mode, a, target=i.group(1) if i else None, template=template, url=m.group('video'), text=m.groupdict()['text'],
                         special=u.group(1) if u else None)
     elif template == "Databank":
         m = re.search("{{Databank\|(url=)?(.*?)\|(title=)?(.*?)(\|.*?)?}}", s)
@@ -331,12 +369,19 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
             m = re.search("{+[^\|\[\}\n]+\|(set=)?(.*?)(\|.*?)?}}", s)
             if m:
                 return Item(z, mode, a, target=None, template=template, parent="Star Wars: Card Trader", card=m.group(2), text=m.group(3))
-        elif template == "SWPM" and card_set == "Base Set":
-            card_set = "Star Wars PocketModel TCG: Base Set"
-        if card_set and template == "SWPM" and card_set in ["Clone Wars Conquest", "Clone Wars Tactics", "Scum & Villainy"]:
-            pass
-        elif card_set and PARAN.get(template) and PARAN[template][1]:
-            card_set = f"{card_set} ({PARAN[template][0]})"
+        elif template == "FFGXW" and card_set == "Core Set":
+            card_set = "Star Wars: X-Wing Miniatures Game Core Set"
+        elif card_set and template == "SWPM":
+            if card_set == "Base Set":
+                card_set = "Star Wars PocketModel TCG: Base Set"
+            elif card_set not in ["Clone Wars Conquest", "Clone Wars Tactics", "Scum & Villainy"]:
+                card_set = f"{card_set} (PocketModels)"
+        elif card_set and template == "SWMiniCite":
+            if card_set not in ["Alliance and Empire", "Clone Strike", "The Dark Times", "Rebel Storm",
+                                "Starship Battles", "Rebels and Imperials", "Battle of Hoth Scenario Pack",
+                                "AT-AT Imperial Walker Colossal Pack"]:
+                card_set = f"{card_set} (Star Wars Miniatures)"
+
         if card_set and "cardname=" in card_set:
             card = card_set.replace("cardname=", "")
             card_set = None
@@ -349,39 +394,49 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
         subset = ss.group(1) if ss else None
         if not t:
             t = re.search("{[^\|\[\}\n]+\|.*?\|(?P<text>.*?)(\|.*?)?}}", s)
-            if t and t.groupdict()['text'] and re.search("^[a-z]+=", t.groupdict()['text']):
+            if t and t.group('text') and re.search("^[a-z]+=", t.group('text')):
                 t = None
         if card and "|scenario=" in s:
             return Item(z, mode, a, target=None, template=template, parent=card_set, special=card,
-                        url=u.group(2) if u else None, text=t.groupdict()['text'] if t else None)
+                        url=u.group(2) if u else None, text=t.group('text') if t else None)
         elif card:
             return Item(z, mode, a, target=None, template=template, parent=card_set, card=card, subset=subset,
-                        url=u.group(2) if u else None, text=t.groupdict()['text'] if t else None)
+                        url=u.group(2) if u else None, text=t.group('text') if t else None)
         elif card_set:
-            return Item(z, mode, a, target=card_set, template=template, parent=None, subset=subset, text=t.groupdict()['text'] if t else None)
+            return Item(z, mode, a, target=card_set, template=template, parent=None, subset=subset, text=t.group('text') if t else None)
         else:
             print(s)
 
     # InsiderCite - link= parameter
     m = re.search("{{[^\|\[\}\n]+\|link=(.*?)\|.*?\|(.*?)(\|(.*?))?}}", s)
     if m:
-        return Item(z, mode, a, target=m.group(2), template=template, issue=m.group(1), format_text=m.group(4))
+        return Item(z, mode, a, target=m.group(2), template=template, parent=m.group(1), issue=m.group(1), format_text=m.group(4))
 
-    # Episode/Featurette parameter
-    m = re.search("\{+[^\|\}\]]+?\|(set=)?(.*?)(\|.*?)?(episode|featurette)=\[*?(.*?)\]*?(\|.*?)?\}+", s)
+    # HomeVideoCite
+    m = re.search("\{+HomeVideoCite.*?\|(set=)?(.*?)(\|.*?)?(episode|featurette|scene)=\[*?(.*?)\]*?(\|.*?)?\}+", s)
     if m:
-        return Item(z, mode, a, target=None, template=template, parent=m.group(2), issue=m.group(5), collapsed=True)
+        target = m.group(5) if "featurette=" in s and "nolink=1" not in s else None
+        return Item(z, mode, a, target=target, template=template, parent=m.group(2), issue=m.group(5), collapsed=True)
 
     # Miniatures, toys or cards with set= parameter
     m = re.search("\{\{[^\|\[\}\n]+\|(.*?\|)?set=(?P<set>.*?)\|(.*?\|)?((scenario|pack)=(?P<scenario>.*?)\|?)?(.*?)}}", s)
     if m:
-        return Item(z, mode, a, target=m.groupdict()['set'], template=template, text=m.groupdict()['scenario'])
+        return Item(z, mode, a, target=m.group('set'), template=template, text=m.group('scenario'))
 
     # Magazine articles with issue as second parameter
-    m = re.search("{{[^\|\[\}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(issue[0-9]?=)?(?P<issue>(Special Edition |Souvenir Special)?H?S? ?[0-9\.]*)(\|issue[0-9]=.*?)?\|(story=)?(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?(\|.*?)?}}", s)
+    m = re.search("{{[^\|\[\}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(issue[0-9]?=)?(?P<issue>(Special Edition |Souvenir Special)?H?S? ?[0-9\.]*)(\|issue[0-9]=.*?)?\|(story=|article=)?(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?(\|.*?)?}}", s.replace("&#61;", "="))
     if m:
-        return Item(z, mode, a, target=m.groupdict()['article'], template=template, issue=m.groupdict()['issue'],
-                    special=m.group('year') or m.group('vol'), format_text=m.groupdict()['text'], no_issue=m.groupdict()['issue'] is None)
+        if m.group('year'):
+            p = TEMPLATES.get(f"{template}|{m.group('year')}")
+        elif m.group('vol'):
+            p = TEMPLATES.get(f"{template}|{m.group('vol')}")
+        else:
+            p = TEMPLATES.get(template)
+        p = p or template.replace('Cite', '')
+        parent = f"{p} {m.group('issue')}" if p and m.group('issue') else None
+        return Item(z, mode, a, target=m.group('article'), template=template, issue=m.group('issue'),
+                    special=m.group('year') or m.group('vol'), format_text=m.group('text'),
+                    no_issue=m.group('issue') is None, parent=parent)
 
     # Second parameter is formatted version of the target article
     m = re.search("\{\{[^\|\]\n]+\|([^\|\n=\}\]]+)\|([^\|\n=\}\]]+)\}\}", s)
@@ -411,33 +466,34 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
     if not m:
         m = re.search("{{(?P<template>.*?)\|(.*?\|)?(adventure|story)=(?P<story>.*?)\|(.*?\|)?issue1=(?P<issue>[0-9]+)\|(.*?\|)?series=(?P<series>.*?)(\|.*?)?}", s)
     if m:
-        return Item(z, mode, a, target=m.groupdict()['story'], template=template, parent=f"{m.groupdict()['series']} {m.groupdict()['issue']}")
+        return Item(z, mode, a, target=m.group('story'), template=template, parent=f"{m.group('series')} {m.group('issue')}")
 
     # Extract book & adventure or story
     m = re.search("{{(?P<template>.*?)\|(.*?\|)?book[0-9]?=(?P<book>.*?)\|(.*?\|)?(adventure|story)=(?P<story>.*?)(\|.*?)?}", s)
     if not m:
         m = re.search("{{(?P<template>.*?)\|(.*?\|)?(adventure|story)=(?P<story>.*?)\|(.*?\|)?book[0-9]?=(?P<book>.*?)(\|.*?)?}", s)
     if m:
-        return Item(z, mode, a, target=m.groupdict()['story'], template=template, parent=m.groupdict()['book'])
+        return Item(z, mode, a, target=m.group('story'), template=template, parent=m.group('book'))
 
     # Web article with int= parameter
     m = re.search("{{[^\|\[\}\n]+\|(.*?\|)?url=(?P<url>.*?)\|.*?(text=(?P<t1>.*?)\|)?(.*?\|)?int=(?P<int>.*?)(\|.*?text=(?P<t2>.*?))?(\|.*?)?}}", s)
     if m:
-        text = m.groupdict()['t1'] or m.groupdict()['t2']
-        return Item(z, mode, a, target=m.groupdict()['int'], template=template, url=m.groupdict()['url'], text=text)
+        text = m.group('t1') or m.group('t2')
+        return Item(z, mode, a, target=m.group('int'), template=template, url=m.group('url'), text=text)
 
     # Web articles without int= parameter
     m = re.search("{{[^\|\[\}\n]+\|(.*?\|)?(full_url|url|video)=(?P<url>.*?)\|(.*?\|)?text=(?P<text>.*?)(\|.*?)?}}", s)
     if not m:
         m = re.search("{{[^\|\[\}\n]+\|(.*?\|)?text=(?P<text>.*?)\|(.*?\|)?(full_url|url|video)=(?P<url>.*?)(\|.*?)?}}", s)
     if m:
-        return Item(z, mode, a, target=None, template=template, url=m.groupdict()['url'], text=m.groupdict()['text'])
+        return Item(z, mode, a, target=None, template=template, url=m.group('url'), text=m.group('text'))
 
     # Web templates without named parameters
     if mode == "Web":
         m = re.search("{{[^\|\[\}\n]+\|(subdomain=.*?\|)?(.*?)\|(.*?)(\|.*?)?}}", s)
         if m:
-            return Item(z, mode, a, target=None, template=template, url=m.group(2), text=m.group(3))
+            y = re.search("\|int=(.*?)[\|\}]", s)
+            return Item(z, mode, a, template=template, url=m.group(2), text=m.group(3), target=y.group(1) if y else None)
 
     m = re.search("['\"]*\[\[(.*?)(\|.*?)?\]\]['\"]* ?[-—] ?['\"]*\[\[(.*?) ?([0-9]*?)(\|.*?)?\]\]", s)
     if m and m.group(4):
@@ -455,10 +511,25 @@ PARANTHETICALS = {
 }
 
 
-def determine_id_for_item(o: Item, data: Dict[str, Item], by_target: Dict[str, List[Item]], other_data: Dict[str, Item],
+def follow_redirect(o: Item, site, log):
+    try:
+        if o.target:
+            p = Page(site, o.target)
+            if p.exists() and p.isRedirectPage():
+                if log:
+                    print(f"Followed redirect {o.target} to {p.getRedirectTarget().title()}")
+                o.target = p.getRedirectTarget().title()
+                return True
+    except Exception as e:
+        print(o.target, e)
+    return False
+
+
+def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[str, List[Item]], other_data: Dict[str, Item],
                           other_targets: Dict[str, List[Item]], remap: dict, log: bool):
     """ :rtype: ItemId """
 
+    followed_redirect = False
     if o.unique_id() in data:
         return ItemId(o, data[o.unique_id()], False, False)
     elif "cargobay" in o.original:
@@ -544,28 +615,18 @@ def determine_id_for_item(o: Item, data: Dict[str, Item], by_target: Dict[str, L
         t = f"{o.mode}|None|{o.target}|None|None|None|None|None"
         if t in data:
             return ItemId(o, data[t], o.collapsed, False)
-        elif other_data and t in other_data:
-            return ItemId(o, other_data[t], o.collapsed, False)
-        elif o.target and by_target and o.target in by_target:
-            # print(f"Finding {o.full_id()} by target: {o.target} --> {by_target[o.target][0]}")
-            return ItemId(o, by_target[o.target][0], True, False)
-        elif o.target and "&hellip;" in o.target and by_target and o.target.replace("&hellip;", "...") in by_target:
-            return ItemId(o, by_target[o.target.replace("&hellip;", "...")][0], True, False)
-        elif o.target and other_targets and o.target in other_targets:
-            # print(f"Finding {o.full_id()} by target: {o.target} --> {other_targets[o.target][0]}")
-            return ItemId(o, other_targets[o.target][0], True, True)
-        elif o.target and "&hellip;" in o.target and by_target and o.target.replace("&hellip;", "...") in other_targets:
-            return ItemId(o, other_targets[o.target.replace("&hellip;", "...")][0], True, False)
+        x = match_issue_target(o, by_target, other_targets)
+        if x:
+            return x
 
     if o.parent and o.target:
-        if by_target and o.target in by_target and len(by_target[o.target]) > 1:
-            for t in by_target[o.target]:
-                if t.parent == o.target:
-                    return ItemId(o, t, False, False)
-        elif other_targets and o.target in other_targets and len(other_targets[o.target]) > 1:
-            for t in other_targets[o.target]:
-                if t.parent == o.target:
-                    return ItemId(o, t, False, False)
+        x = match_parent_target(o, by_target, other_targets)
+        if not x and o.target and not followed_redirect:
+            if follow_redirect(o, site, True):
+                followed_redirect = True
+                x = match_parent_target(o, by_target, other_targets)
+        if x:
+            return x
 
     if o.parent and "|story=" not in o.original and "|adventure=" not in o.original:
         # print(f"Parent: {o.full_id()}")
@@ -577,6 +638,40 @@ def determine_id_for_item(o: Item, data: Dict[str, Item], by_target: Dict[str, L
         elif o.card:
             return ItemId(o, o, True, False)
 
+    x = match_target(o, by_target, other_targets, log)
+    if not x and o.target and not followed_redirect:
+        if follow_redirect(o, site, log):
+            x = match_target(o, by_target, other_targets, log)
+    return x
+
+
+def match_issue_target(o: Item, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]]):
+    if o.target and by_target and o.target in by_target:
+        # print(f"Finding {o.full_id()} by target: {o.target} --> {by_target[o.target][0]}")
+        return ItemId(o, by_target[o.target][0], True, False)
+    elif o.target and "&hellip;" in o.target and by_target and o.target.replace("&hellip;", "...") in by_target:
+        return ItemId(o, by_target[o.target.replace("&hellip;", "...")][0], True, False)
+    elif o.target and other_targets and o.target in other_targets:
+        # print(f"Finding {o.full_id()} by target: {o.target} --> {other_targets[o.target][0]}")
+        return ItemId(o, other_targets[o.target][0], True, True)
+    elif o.target and "&hellip;" in o.target and by_target and o.target.replace("&hellip;", "...") in other_targets:
+        return ItemId(o, other_targets[o.target.replace("&hellip;", "...")][0], True, False)
+    return None
+
+
+def match_parent_target(o: Item, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]]):
+    if by_target and o.target in by_target and len(by_target[o.target]) > 1:
+        for t in by_target[o.target]:
+            if t.parent == o.parent:
+                return ItemId(o, t, False, False, True)
+    elif other_targets and o.target in other_targets and len(other_targets[o.target]) > 1:
+        for t in other_targets[o.target]:
+            if t.parent == o.parent:
+                return ItemId(o, t, False, False, True)
+    return None
+
+
+def match_target(o: Item, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]], log):
     targets = []
     if o.target:
         targets.append(o.target.replace("_", " ").replace("Game Book ", ""))
@@ -612,7 +707,8 @@ def determine_id_for_item(o: Item, data: Dict[str, Item], by_target: Dict[str, L
             if log:
                 print(f"Multiple matches found for {t}")
             for x in by_target[t]:
-                if x.format_text and o.format_text and x.format_text.replace("''", "") == o.format_text.replace("''", ""):
+                if x.format_text and o.format_text and x.format_text.replace("''", "") == o.format_text.replace("''",
+                                                                                                                ""):
                     return ItemId(o, x, o.collapsed, False)
             return ItemId(o, by_target[t][0], o.collapsed, False)
         elif other_targets and t in other_targets:
@@ -622,10 +718,10 @@ def determine_id_for_item(o: Item, data: Dict[str, Item], by_target: Dict[str, L
             if log:
                 print(f"Multiple matches found for {t}")
             for x in other_targets[t]:
-                if x.format_text and o.format_text and x.format_text.replace("''", "") == o.format_text.replace("''", ""):
+                if x.format_text and o.format_text and x.format_text.replace("''", "") == o.format_text.replace("''",
+                                                                                                                ""):
                     return ItemId(o, x, o.collapsed, False)
             return ItemId(o, other_targets[t][0], o.collapsed, False)
-
     return None
 
 
@@ -716,8 +812,8 @@ def load_source_lists(site, log):
                 x = re.search("[\*#](?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (D: )?(?P<t>.*?)( {{C\|d: .*?}})?$", line)
                 if x:
                     i += 1
-                    data.append({"index": i, "page": sp, "date": x.groupdict()["d"], "item": x.groupdict()["t"],
-                                 "canon": None if sp == "CardSets" else "Canon" in sp, "ref": x.groupdict()["r"]})
+                    data.append({"index": i, "page": sp, "date": x.group("d"), "item": x.group("t"),
+                                 "canon": None if sp == "CardSets" else "Canon" in sp, "ref": x.group("r")})
                 else:
                     print(f"Cannot parse line: {line}")
         if log:
@@ -733,8 +829,8 @@ def load_source_lists(site, log):
                 x = re.search("\*(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?) ?†?( {{C\|(original|alternate): (?P<a>.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
                 if x:
                     i += 1
-                    data.append({"index": i, "page": f"Web/{y}", "date": x.groupdict()["d"], "item": x.groupdict()["t"],
-                                 "alternate": x.groupdict()["a"], "ref": x.groupdict()["r"]})
+                    data.append({"index": i, "page": f"Web/{y}", "date": x.group("d"), "item": x.group("t"),
+                                 "alternate": x.group("a"), "ref": x.group("r")})
                 else:
                     print(f"Cannot parse line: {line}")
             if log:
@@ -748,8 +844,8 @@ def load_source_lists(site, log):
         x = re.search("\*Current:(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?)( †)?( {{C\|(original|alternate): (?P<a>.*?)}})?$", line)
         if x:
             i += 1
-            data.append({"index": i, "page": "Web/Current", "date": "Current", "item": x.groupdict()["t"],
-                         "alternate": x.groupdict()["a"], "ref": x.groupdict()["r"]})
+            data.append({"index": i, "page": "Web/Current", "date": "Current", "item": x.group("t"),
+                         "alternate": x.group("a"), "ref": x.group("r")})
         else:
             print(f"Cannot parse line: {line}")
     if log:
@@ -779,8 +875,8 @@ def load_source_lists(site, log):
             x = re.search("\*((?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? )?(?P<t>{{.*?)$", line)
             if x:
                 i += 1
-                data.append({"index": 0, "page": f"Web/{template}", "date": date, "item": x.groupdict()["t"],
-                             "extraDate": x.groupdict()["d"], "ref": x.groupdict()["r"]})
+                data.append({"index": 0, "page": f"Web/{template}", "date": date, "item": x.group("t"),
+                             "extraDate": x.group("d"), "ref": x.group("r")})
             else:
                 print(f"Cannot parse line: {line}")
         if log:
@@ -818,6 +914,7 @@ def load_full_sources(site, types, log) -> FullListData:
         try:
             unlicensed = "{{c|unlicensed" in i['item'].lower()
             non_canon = ("{{c|non-canon" in i['item'].lower() or "{{nc" in i['item'].lower())
+            reprint = "{{c|republish" in i['item'].lower()
             c = ''
             if "{{C|" in i['item']:
                 cr = re.search("({{C\|([Aa]bridged|[Rr]epublished|[Uu]nlicensed|[Nn]on[ -]?canon)}})", i['item'])
@@ -834,6 +931,7 @@ def load_full_sources(site, types, log) -> FullListData:
                 x.extra = c
                 x.unlicensed = unlicensed
                 x.non_canon = non_canon
+                x.reprint = reprint
                 x.alternate_url = i.get('alternate')
                 x.date_ref = i.get('ref')
                 x.extra_date = i.get('extraDate')
@@ -865,6 +963,7 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
         try:
             unlicensed = "{{c|unlicensed" in i['item'].lower()
             non_canon = ("{{c|non-canon" in i['item'].lower() or "{{nc" in i['item'].lower())
+            reprint = "{{c|republish" in i['item'].lower()
             c = ''
             if "{{C|" in i['item']:
                 cr = re.search("({{C\|([Aa]bridged|[Rr]epublished|[Uu]nlicensed|[Nn]on[ -]?canon)}})", i['item'])
@@ -873,11 +972,12 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                     i['item'] = i['item'].replace(cr.group(1), '').strip()
             x = extract_item(i['item'], True, i['page'], types, master=True)
             if x:
-                x.canon = i.get('canon')
+                x.canon = None if i.get('extra') else i.get('canon')
                 x.date = i['date']
                 x.extra = c
                 x.unlicensed = unlicensed
                 x.non_canon = non_canon
+                x.reprint = reprint
                 x.abridged = "abridged audiobook" in x.original and "unabridged" not in x.original
                 full_appearances[x.full_id()] = x
                 unique_appearances[x.unique_id()] = x
@@ -930,8 +1030,8 @@ def parse_timeline(text):
             "^\|(data-sort-value=.*?\|)?(?P<date>.*?)\|(\|?style.*?\|)? ?[A-Z]+ ?\n?\|.*?\|+[\* ]*?(['\"]*\[\[(?P<target>.*?)(\|.*?)?\]\]['\"]*) ?†?$",
             line)
         if m:
-            t = m.groupdict()['target'].replace("&ndash;", '–').replace('&mdash;', '—').strip()
-            results.append({"index": index, "target": t, "date": m.groupdict()["date"]})
+            t = m.group('target').replace("&ndash;", '–').replace('&mdash;', '—').strip()
+            results.append({"index": index, "target": t, "date": m.group("date")})
             if t not in unique:
                 unique[t] = index
             index += 1
