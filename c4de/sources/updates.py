@@ -133,7 +133,7 @@ def parse_page(p: Page, types):
     full = {}
     target = {}
     for i, line in enumerate(p.get().splitlines()):
-        if line and not line.startswith("==") and not "/Header}}" in line:
+        if line and not line.startswith("==") and "/Header}}" not in line:
             z = re.search("[\*#](.*?): (D: )?(.*?)$", line)
             if z:
                 date = z.group(1)
@@ -321,7 +321,7 @@ def handle_results(site, results: List[FutureProduct], save=True):
     build_new_page(l_app_page, l_apps, "Appearances|True", new_items, changed_dates, True, save)
 
     build_new_page(c_src_page, c_srcs, "Sources|False", new_items, changed_dates, True, save)
-    build_new_page(l_src_page, l_srcs, "Sources|False", new_items, changed_dates, True, save)
+    build_new_page(l_src_page, l_srcs, "Sources|True", new_items, changed_dates, True, save)
 
     build_new_page(extra_page, extra, "Extra", new_items, changed_dates, True, save)
     build_new_page(sets_page, sets, "CardSets", new_items, changed_dates, True, save)

@@ -115,3 +115,5 @@
 *'''3.4.0''': July 29, 2023
 **Media traversal function. Not going to be a regular thing, as it takes too long
 **Various Source Engine bug fixes
+*'''3.4.1''': August 1, 2023
+**More bug fixes because Imp is mean :(

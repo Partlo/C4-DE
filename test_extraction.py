@@ -10,12 +10,13 @@ from c4de.sources.engine import load_full_sources, load_full_appearances, load_r
 
 def analyze(*args):
     gen_factory = pagegenerators.GeneratorFactory()
+    log = False
     for arg in handle_args(*args):
-        print(arg)
+        if arg.startswith("-page:"):
+            log = True
         gen_factory.handle_arg(arg)
     gen_factory.site.login(user="C4-DE Bot")
 
-    log = False
     start = datetime.now()
     types = build_template_types(gen_factory.site)
     appearances = load_full_appearances(gen_factory.site, types, log)
@@ -47,8 +48,8 @@ def analyze(*args):
                 continue
         try:
             old_text = page.get()
-            text = build_new_text(gen_factory.site, page, types, appearances, sources, remap, include_date=include_date, log=False,
-                                  handle_references=True)
+            text = build_new_text(gen_factory.site, page, types, appearances, sources, remap, include_date=include_date,
+                                  log=log, handle_references=True)
 
             if text == old_text:
                 continue

@@ -133,6 +133,8 @@ class C4DE_Bot(commands.Bot):
         self.sources = None
         self.remap = None
 
+        self.last_ran = {}
+
     def reload_site(self):
         self.site = Site(user="C4-DE Bot")
         self.site.login()
@@ -625,13 +627,14 @@ class C4DE_Bot(commands.Bot):
 
     async def handle_new_nomination(self, message: Message, command: dict):
         try:
-            target = Page(self.site, command['article'])
+            a = command['article'].replace('*', '')
+            target = Page(self.site, a)
             if not target.exists():
                 await message.add_reaction(EXCLAMATION)
-                await message.reply(f"{command['article']} does not exist, cannot run source analysis")
+                await message.reply(f"{a} does not exist, cannot run source analysis")
                 return
             if any(c.title() == "Category:Real-world articles" for c in target.categories()):
-                log(f"Skipping Source Engine processing of real-world article {command['article']}")
+                log(f"Skipping Source Engine processing of real-world article {a}")
                 return
 
             rev_id = target.latest_revision_id

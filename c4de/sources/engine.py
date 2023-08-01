@@ -11,6 +11,8 @@ SUBPAGES = [
     "Legends/Toys", "CardSets"
 ]
 
+IGNORE_TEMPLATES = ["BookCite", "=", ]
+
 
 COLLAPSE = {
     "FindtheForce": "Find the Force",
@@ -153,7 +155,7 @@ def convert_issue_to_template(s):
             if m.group(2) == v[0]:
                 t = f"{{{{{template}|{m.group(3)}|{m.group(5)}}}}}"
                 return s.replace(m.group(1), t.replace("\\|", "|"))
-    return s
+    return re.sub("<\!--.*?-->", "", s)
 
 
 class Item:
@@ -201,7 +203,7 @@ class Item:
         self.extra = ''
 
     def sort_index(self, canon):
-        return ((self.canon_index if canon else self.legends_index) or self.index) or 100000
+        return (self.canon_index if canon else self.legends_index) or self.index
 
     def __str__(self):
         return f"Item[{self.full_id()}]"
@@ -240,7 +242,7 @@ class ItemId:
                  from_other_data=False, wrong_continuity=False, by_parent=False):
         self.current = current
         self.master = master
-        self.use_original_text = use_original_text
+        self.use_original_text = use_original_text or current.old_version
         self.from_other_data = from_other_data
         self.wrong_continuity = wrong_continuity
         self.by_parent = by_parent
@@ -248,7 +250,8 @@ class ItemId:
         self.replace_references = master.original and "]]'' ([[" not in master.original
 
     def sort_text(self):
-        return (self.current.text if self.current.mode == "DB" else self.current.original).replace("''", "").replace('"', '').replace("|", " |").replace("}}", " }}").lower()
+        return (self.current.text if self.current.mode == "DB" else self.current.original).replace("''", "")\
+            .replace('"', '').replace("|", " |").replace("}}", " }}").lower()
 
 
 def extract_item(z: str, a: bool, page, types, master=False) -> Item:
@@ -257,8 +260,8 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
 
     :rtype: Item
     """
-    z = z.replace("|1=", "|").replace("|s=y", "").replace("{{'s}}", "'s").replace("{{'}}", "'").replace("{{!}}", "|")
-    z = re.sub("{{([A-z]+)\]\]", "{{\\1}}", re.sub("\|[a-z ]+=\|", "|", z)).replace(" ", " ")
+    z = z.replace("|1=", "|").replace("|s=y", "").replace("{{'s}}", "'s").replace("{{'}}", "'").replace("{{!}}", "|").replace("…", "&hellip;")
+    z = re.sub("{{([A-z]+)\]\]", "{{\\1}}", re.sub("\|[a-z ]+=\|", "|", z)).replace(" ", " ").replace("<!-- Unknown -->", "")
     while re.search("\[\[([^\]\|\n]+)_", z):
         z = re.sub("\[\[([^\]\|\n]+)_", "[[\\1 ", z)
 
@@ -305,6 +308,9 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
     m = re.search('{{([^\|\[\}\n]+)[\|\}]', s)
     template = m.group(1) if m else ''
     mode = types.get(template.lower(), "General")
+
+    if template in IGNORE_TEMPLATES:
+        return None
 
     # # # Template-specific logic
     # IDWAdventures annual= parameter
@@ -379,7 +385,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
         elif card_set and template == "SWMiniCite":
             if card_set not in ["Alliance and Empire", "Clone Strike", "The Dark Times", "Rebel Storm",
                                 "Starship Battles", "Rebels and Imperials", "Battle of Hoth Scenario Pack",
-                                "AT-AT Imperial Walker Colossal Pack"]:
+                                "AT-AT Imperial Walker Colossal Pack"] and "Star Wars Miniatures" not in card_set:
                 card_set = f"{card_set} (Star Wars Miniatures)"
 
         if card_set and "cardname=" in card_set:
@@ -501,6 +507,11 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
     elif m:
         return Item(z, mode, a, target=m.group(3), template="", parent=m.group(1))
 
+    # Second parameter is formatted version of the target article (retry)
+    m = re.search("\{\{[^\|\]\n]+\|([A-Z][^\|\n=\}\]]+)\|([^\|\n=\}\]]+)\}\}", s)
+    if m:
+        return Item(z, mode, a, target=m.group(1), template=template)
+
     print(f"Unknown: {mode}, {template}, {z}")
     return None
 
@@ -518,7 +529,7 @@ def follow_redirect(o: Item, site, log):
             if p.exists() and p.isRedirectPage():
                 if log:
                     print(f"Followed redirect {o.target} to {p.getRedirectTarget().title()}")
-                o.target = p.getRedirectTarget().title()
+                o.target = p.getRedirectTarget().title().split('#', 1)[0]
                 return True
     except Exception as e:
         print(o.target, e)
@@ -583,7 +594,7 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
                 return ItemId(o, x, True, False)
 
     # Find a match by URL
-    if o.url:
+    if o.url and 'starwars/article/dodcampaign' not in o.url:
         u = o.url.replace("/#!/about", "").lower()
         m = match_url(o, u, data, False)
         if not m:
@@ -615,7 +626,17 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
         t = f"{o.mode}|None|{o.target}|None|None|None|None|None"
         if t in data:
             return ItemId(o, data[t], o.collapsed, False)
-        x = match_issue_target(o, by_target, other_targets)
+        elif o.parent and "Special Edition" in o.parent and by_target.get(o.parent):
+            return ItemId(o, by_target[o.parent][0], True, False)
+        x = match_issue_target(o, by_target, other_targets, True)
+        if not x and o.target and not followed_redirect:
+            if follow_redirect(o, site, True):
+                followed_redirect = True
+                x = match_issue_target(o, by_target, other_targets, False)
+                if x:
+                    print(o.target, x.current.original, x.master.original, x.use_original_text)
+                else:
+                    print(o.target, None)
         if x:
             return x
 
@@ -645,17 +666,24 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
     return x
 
 
-def match_issue_target(o: Item, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]]):
+def find_matching_issue(items, issue):
+    for t in items:
+        if t.issue == issue:
+            return t
+    return items[0]
+
+
+def match_issue_target(o: Item, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]], use_original):
     if o.target and by_target and o.target in by_target:
         # print(f"Finding {o.full_id()} by target: {o.target} --> {by_target[o.target][0]}")
-        return ItemId(o, by_target[o.target][0], True, False)
+        return ItemId(o, find_matching_issue(by_target[o.target], o.issue), use_original, False)
     elif o.target and "&hellip;" in o.target and by_target and o.target.replace("&hellip;", "...") in by_target:
-        return ItemId(o, by_target[o.target.replace("&hellip;", "...")][0], True, False)
+        return ItemId(o, find_matching_issue(by_target[o.target.replace("&hellip;", "...")], o.issue), use_original, False)
     elif o.target and other_targets and o.target in other_targets:
         # print(f"Finding {o.full_id()} by target: {o.target} --> {other_targets[o.target][0]}")
-        return ItemId(o, other_targets[o.target][0], True, True)
+        return ItemId(o, find_matching_issue(other_targets[o.target], o.issue), use_original, True)
     elif o.target and "&hellip;" in o.target and by_target and o.target.replace("&hellip;", "...") in other_targets:
-        return ItemId(o, other_targets[o.target.replace("&hellip;", "...")][0], True, False)
+        return ItemId(o, find_matching_issue(other_targets[o.target.replace("&hellip;", "...")], o.issue), use_original, False)
     return None
 
 
@@ -1002,6 +1030,8 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
 
                     if x.target.endswith(")"):
                         parantheticals.add(x.target.rsplit(" (", 1)[0])
+                    if x.parent and x.parent.endswith(")"):
+                        parantheticals.add(x.parent.rsplit(" (", 1)[0])
 
                     if x.target not in target_appearances:
                         target_appearances[x.target] = []
