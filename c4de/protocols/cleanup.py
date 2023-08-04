@@ -57,7 +57,7 @@ def remove_spoiler_tags_from_page(site, page, limit=30, offset=5):
             f, v = field.split("=", 1)
             named[f] = v
         else:
-            fields.append(field)
+            fields.append(field.replace('}', ''))
 
     if named.get("time") == "skip":
         return "skip"

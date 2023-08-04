@@ -145,6 +145,10 @@ def build_template_types(site):
     list_templates(site, "Category:Miniature game citation templates", results, "Cards")
     list_templates(site, "Category:Toy citation templates", results, "Toys")
 
+    list_templates(site, "Category:Dating citation templates", results, "Dates")
+    list_templates(site, "Category:Canon dating citation templates", results, "Dates")
+    list_templates(site, "Category:Legends dating citation templates", results, "Dates")
+
     return results
 
 
@@ -158,6 +162,16 @@ def convert_issue_to_template(s):
     return re.sub("<\!--.*?-->", "", s)
 
 
+SORT_MODES = {
+    "General": 0,
+    "Web": 1,
+    "YT": 1,
+    "DB": 2,
+    "Toys": 3,
+    "Cards": 4,
+}
+
+
 class Item:
     """
     :type date: str
@@ -167,6 +181,7 @@ class Item:
                  card: str = None, special=None, collapsed=False, format_text: str = None, no_issue=False):
         self.is_appearance = is_app
         self.mode = mode
+        self.sort_mode = SORT_MODES.get(mode, 5)
         self.invalid = invalid
         self.original = self.strip(original)
         self.target = self.strip(target)
@@ -189,8 +204,11 @@ class Item:
         self.index = None
         self.canon_index = None
         self.legends_index = None
+        self.override = None
+        self.override_date = None
         self.date = ''
         self.canon = None
+        self.from_extra = None
         self.unlicensed = False
         self.abridged = False
         self.reprint = False
@@ -243,11 +261,17 @@ class ItemId:
         self.current = current
         self.master = master
         self.use_original_text = use_original_text or current.old_version
+        if " edition" in self.current.original:
+            if re.search("''Star Wars: (Complete Locations|The Complete Visual Dictionary)'', [0-9]+ edition", self.current.original):
+                self.use_original_text = True
         self.from_other_data = from_other_data
         self.wrong_continuity = wrong_continuity
         self.by_parent = by_parent
 
         self.replace_references = master.original and "]]'' ([[" not in master.original
+
+    def sort_date(self):
+        return self.current.override_date if self.current.override_date else self.master.date
 
     def sort_text(self):
         return (self.current.text if self.current.mode == "DB" else self.current.original).replace("''", "")\
@@ -260,12 +284,13 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
 
     :rtype: Item
     """
-    z = z.replace("|1=", "|").replace("|s=y", "").replace("{{'s}}", "'s").replace("{{'}}", "'").replace("{{!}}", "|").replace("…", "&hellip;")
-    z = re.sub("{{([A-z]+)\]\]", "{{\\1}}", re.sub("\|[a-z ]+=\|", "|", z)).replace(" ", " ").replace("<!-- Unknown -->", "")
+    z = z.replace("|1=", "|").replace("|s=y", "").replace("{{'s}}", "'s").replace("{{'}}", "'").replace("{{!}}", "|").replace("…", "&hellip;").replace("{{SeriesListing}}", "")
+    z = re.sub("{{([A-z]+)\]\]", "{{\\1}}", re.sub("\|[a-z ]+=\|", "|", z)).replace(" ", " ")
     while re.search("\[\[([^\]\|\n]+)_", z):
         z = re.sub("\[\[([^\]\|\n]+)_", "[[\\1 ", z)
 
     s = re.sub("\|volume=([0-9])\|([0-9]+)\|", "|\\1.\\2|", z)
+    s = re.sub("<\!--.*?-->", "", s)
     s = re.sub("^(.*?\[\[.*?[^ ])#(.*?)(\|.*?\]\].*?)$", "\\1\\3", s).replace("|d=y", "").replace("Star Wars Ships and Vehicles", "Star Wars Starships & Vehicles")
     if s.count("{") == 2 and s.count("}") == 1:
         s += "}"
@@ -296,20 +321,21 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
         if "{{" + i + "|" in s or "{{" + i + "}}" in s:
             return Item(z, "General", a, target=COLLAPSE[i], template=i, collapsed=True)
     for i, (k, o) in REFERENCE_MAGAZINES.items():
-        m = re.search("\{\{" + i + "\|([0-9]+)(\|(multiple=\[*?)?(.*?))?(\|(.*?))?(\|.*?)?}}", s)
-        mode = types.get(i.split("\|")[0], "General")
-        if m and ((o == "2014" and m.group(1) in ['1', '2', '3', '4', '5']) or (o and o != "2014")):
-            return Item(z, mode, a, target=f"{k} {m.group(1)} ({o})", template=i.split("\|")[0], issue=m.group(1),
-                        text=m.group(4) or m.group(6), collapsed=True)
-        elif m:
-            return Item(z, mode, a, target=f"{k} {m.group(1)}", template=i.split("\|")[0], issue=m.group(1),
-                        text=m.group(4) or m.group(6), collapsed=True)
+        if i.split('\\', 1)[0].lower() in s.lower():
+            m = re.search("\{\{" + i + "\|([0-9]+)(\|((multiple=)?.*?))?}}", s)
+            mode = types.get(i.split("\|")[0], "General")
+            if m and ((o == "2014" and m.group(1) in ['1', '2', '3', '4', '5']) or (o and o != "2014")):
+                return Item(z, mode, a, target=f"{k} {m.group(1)} ({o})", template=i.split("\|")[0], issue=m.group(1),
+                            text=m.group(2), collapsed=True)
+            elif m:
+                return Item(z, mode, a, target=f"{k} {m.group(1)}", template=i.split("\|")[0], issue=m.group(1),
+                            text=m.group(2), collapsed=True)
 
     m = re.search('{{([^\|\[\}\n]+)[\|\}]', s)
     template = m.group(1) if m else ''
     mode = types.get(template.lower(), "General")
 
-    if template in IGNORE_TEMPLATES:
+    if template in IGNORE_TEMPLATES or mode == "Dates":
         return None
 
     # # # Template-specific logic
@@ -377,6 +403,8 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
                 return Item(z, mode, a, target=None, template=template, parent="Star Wars: Card Trader", card=m.group(2), text=m.group(3))
         elif template == "FFGXW" and card_set == "Core Set":
             card_set = "Star Wars: X-Wing Miniatures Game Core Set"
+        elif card_set and template == "TopTrumps":
+            card_set = f"Top Trumps: {card_set}"
         elif card_set and template == "SWPM":
             if card_set == "Base Set":
                 card_set = "Star Wars PocketModel TCG: Base Set"
@@ -633,10 +661,6 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
             if follow_redirect(o, site, True):
                 followed_redirect = True
                 x = match_issue_target(o, by_target, other_targets, False)
-                if x:
-                    print(o.target, x.current.original, x.master.original, x.use_original_text)
-                else:
-                    print(o.target, None)
         if x:
             return x
 
@@ -735,8 +759,9 @@ def match_target(o: Item, by_target: Dict[str, List[Item]], other_targets: Dict[
             if log:
                 print(f"Multiple matches found for {t}")
             for x in by_target[t]:
-                if x.format_text and o.format_text and x.format_text.replace("''", "") == o.format_text.replace("''",
-                                                                                                                ""):
+                if x.format_text and o.format_text and x.format_text.replace("''", "") == o.format_text.replace("''", ""):
+                    return ItemId(o, x, o.collapsed, False)
+                elif x.url and o.url and do_urls_match(o.url, o.template, x, True, True):
                     return ItemId(o, x, o.collapsed, False)
             return ItemId(o, by_target[t][0], o.collapsed, False)
         elif other_targets and t in other_targets:
@@ -746,8 +771,9 @@ def match_target(o: Item, by_target: Dict[str, List[Item]], other_targets: Dict[
             if log:
                 print(f"Multiple matches found for {t}")
             for x in other_targets[t]:
-                if x.format_text and o.format_text and x.format_text.replace("''", "") == o.format_text.replace("''",
-                                                                                                                ""):
+                if x.format_text and o.format_text and x.format_text.replace("''", "") == o.format_text.replace("''", ""):
+                    return ItemId(o, x, o.collapsed, False)
+                elif x.url and o.url and do_urls_match(o.url, o.template, x, True, True):
                     return ItemId(o, x, o.collapsed, False)
             return ItemId(o, other_targets[t][0], o.collapsed, False)
     return None
@@ -762,41 +788,44 @@ def prep_url(url):
     return u.lower()
 
 
+def do_urls_match(url, template, d: Item, replace_page, log=False):
+    d_url = prep_url(d.url)
+    alternate_url = prep_url(d.alternate_url)
+    if d_url and d_url == url:
+        return True
+    elif alternate_url and alternate_url == url:
+        return True
+    elif d_url and "&month=" in d_url and "&month=" in url and d_url.split("&month=", 1)[0] == url.split("&month=", 1)[0]:
+        return True
+    elif d_url and "index.html" in d_url and re.search("indexp[0-9]\.html", url):
+        if replace_page and d_url == re.sub("indexp[0-9]+\.html", "index.html", url):
+            return True
+        elif d_url == re.sub("indexp([0-9]+)\.html", "index.html?page=\\1", url):
+            return True
+    elif d_url and ("index.html" in d_url or "index.html" in url) and url.split("/index.html", 1)[0] == d_url.split("/index.html", 1)[0]:
+        return True
+    elif d_url and template == "SW" and d.template == "SW" and url.startswith("tv-shows/") and \
+            d_url.startswith("series") and d_url == url.replace("tv-shows/", "series/"):
+        return True
+    elif d_url and "?page=" in url and d_url == url.split("?page=", 1)[0]:
+        return True
+    elif template == "SonyCite" and d.template == "SonyCite" and url.startswith("en_US/players/"):
+        if d_url.replace("&resource=features", "") == url.replace("en_US/players/", "").replace("&resource=features", ""):
+            return True
+        elif alternate_url and alternate_url.replace("&resource=features", "") == url.replace("en_US/players/", "").replace("&resource=features", ""):
+            return True
+    return False
+
+
 def match_url(o: Item, url: str, data: Dict[str, Item], replace_page: bool):
     check_sw = o.template == "SW" and url.startswith("video/")
     url = prep_url(url)
+    merge = {"SW", "SWArchive", "Hyperspace"}
     for k, d in data.items():
-        url_match = False
-        d_url = prep_url(d.url)
-        alternate_url = prep_url(d.alternate_url)
-        if d_url and d_url == url:
-            url_match = True
-        elif alternate_url and alternate_url == url:
-            url_match = True
-        elif d_url and "&month=" in d_url and "&month=" in url and d_url.split("&month=", 1)[0] == url.split("&month=", 1)[0]:
-            url_match = True
-        elif d_url and "index.html" in d_url and re.search("indexp[0-9]\.html", url):
-            if replace_page and d_url == re.sub("indexp[0-9]+\.html", "index.html", url):
-                url_match = True
-            elif d_url == re.sub("indexp([0-9]+)\.html", "index.html?page=\\1", url):
-                url_match = True
-        elif d_url and o.template == "SW" and d.template == "SW" and url.startswith("tv-shows/") and \
-                d_url.startswith("series") and d_url == url.replace("tv-shows/", "series/"):
-            url_match = True
-        elif d_url and "?page=" in url and d_url == url.split("?page=", 1)[0]:
-            url_match = True
-        elif o.template == "SonyCite" and d.template == "SonyCite" and url.startswith("en_US/players/"):
-            if d_url.replace("&resource=features", "") == url.replace("en_US/players/", "").replace("&resource=features", ""):
-                url_match = True
-            elif alternate_url and alternate_url.replace("&resource=features", "") == url.replace("en_US/players/", "").replace("&resource=features", ""):
-                url_match = True
-
-        if url_match:
+        if do_urls_match(url, o.template, d, replace_page):
             if d.template == o.template:
                 return ItemId(o, d, False, False)
-            elif d.template == "SWArchive" and o.template == "SW":
-                return ItemId(o, d, False, False)
-            elif d.template == "SW" and o.template == "SWArchive":
+            elif {d.template, o.template}.issubset(merge):
                 return ItemId(o, d, False, False)
             elif d.mode == "YT" and o.mode == "YT":
                 return ItemId(o, d, False, False)
@@ -1001,6 +1030,7 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
             x = extract_item(i['item'], True, i['page'], types, master=True)
             if x:
                 x.canon = None if i.get('extra') else i.get('canon')
+                x.from_extra = i.get('extra')
                 x.date = i['date']
                 x.extra = c
                 x.unlicensed = unlicensed
@@ -1012,19 +1042,23 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 if x.target:
                     if x.target in canon:
                         x.canon_index = canon[x.target]
-                    elif x.target.replace(" (audiobook)", "") in canon:
-                        x.canon_index = canon[x.target.replace(" (audiobook)", "")] + 0.1
+                    elif x.target.replace("(audiobook)", "(novelization)") in canon:
+                        x.canon_index = canon[x.target.replace("(audiobook)", "(novelization)")] + 0.1
                     elif x.target.replace("(audiobook)", "(novel)") in canon:
                         x.canon_index = canon[x.target.replace("(audiobook)", "(novel)")] + 0.1
+                    elif x.target.replace(" (audiobook)", "") in canon:
+                        x.canon_index = canon[x.target.replace(" (audiobook)", "")] + 0.1
                     elif x.target.replace("(script)", "(novel)") in canon:
                         x.canon_index = canon[x.target.replace("(script)", "(novel)")] + 0.1
 
                     if x.target in legends:
                         x.legends_index = legends[x.target]
-                    elif x.target.replace(" (audiobook)", "") in legends:
-                        x.legends_index = legends[x.target.replace(" (audiobook)", "")] + 0.1
+                    elif x.target.replace("(audiobook)", "(novelization)") in legends:
+                        x.legends_index = legends[x.target.replace("(audiobook)", "(novelization)")] + 0.1
                     elif x.target.replace("(audiobook)", "(novel)") in legends:
                         x.legends_index = legends[x.target.replace("(audiobook)", "(novel)")] + 0.1
+                    elif x.target.replace(" (audiobook)", "") in legends:
+                        x.legends_index = legends[x.target.replace(" (audiobook)", "")] + 0.1
                     elif x.target.replace("(script)", "(novel)") in legends:
                         x.legends_index = legends[x.target.replace("(script)", "(novel)")] + 0.1
 

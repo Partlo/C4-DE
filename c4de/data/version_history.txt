@@ -117,3 +117,5 @@
 **Various Source Engine bug fixes
 *'''3.4.1''': August 1, 2023
 **More bug fixes because Imp is mean :(
+*'''3.4.2.''': August 4, 2023
+**Source Engine tweaks

@@ -38,7 +38,8 @@ def check_new_pages_rss_feed(site, url, cache: Dict[str, List[str]]):
                 elif e.title.startswith("Forum:TC:") or e.title.startswith("Wookieepedia:Trash compactor"):
                     pt, ch, message = "Trash Compactor", "announcements", f"🗑️ **New Trash Compactor thread**\n<{e.link}>"
                 elif e.title.startswith("User blog:"):
-                    pt, ch, message = "Fandom Blog", "announcements", f"<:fandom:872166055693393940>**New Fandom Staff blog post**\n<{e.link}>"
+                    if "Category:Staff blogs" in e.description:
+                        pt, ch, message = "Fandom Blog", "announcements", f"<:fandom:872166055693393940>**New Fandom Staff blog post**\n<{e.link}>"
             elif re.match("^<p>.*? deleted page.*?</p>", e.description):
                 continue
             elif e.title.startswith("Wookieepedia:Trash compactor") and re.match("^<p>.*?delete.*?</p>", e.description.lower()):

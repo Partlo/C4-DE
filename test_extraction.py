@@ -6,6 +6,7 @@ from pywikibot import Site, Page, handle_args, pagegenerators, showDiff, input_c
 
 from c4de.sources.analysis import analyze_target_page, build_new_text
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, build_template_types
+from c4de.sources.infoboxer import list_all_infoboxes
 
 
 def analyze(*args):
@@ -22,6 +23,7 @@ def analyze(*args):
     appearances = load_full_appearances(gen_factory.site, types, log)
     sources = load_full_sources(gen_factory.site, types, log)
     remap = load_remap(gen_factory.site)
+    infoboxes = list_all_infoboxes(gen_factory.site)
     duration = datetime.now() - start
     print(f"Loaded {len(appearances.unique)} appearances and {len(sources.unique)} sources in {duration.seconds} seconds")
 
@@ -48,9 +50,13 @@ def analyze(*args):
                 continue
         try:
             old_text = page.get()
-            text = build_new_text(gen_factory.site, page, types, appearances, sources, remap, include_date=include_date,
-                                  log=log, handle_references=True)
+            text = build_new_text(gen_factory.site, page, infoboxes, types, appearances, sources, remap,
+                                  include_date=include_date, log=log, handle_references=True)
 
+            if text == old_text:
+                continue
+
+            text = text.replace("|spouses=", "|partners=")
             if text == old_text:
                 continue
 

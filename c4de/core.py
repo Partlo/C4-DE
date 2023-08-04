@@ -35,6 +35,7 @@ from c4de.protocols.rss import check_rss_feed, check_latest_url, check_wookieepe
 from c4de.sources.analysis import analyze_target_page, get_analysis_from_page
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, build_template_types
 from c4de.sources.index import create_index
+from c4de.sources.infoboxer import list_all_infoboxes
 from c4de.sources.updates import get_future_products_list, handle_results, search_for_missing
 
 
@@ -128,6 +129,7 @@ class C4DE_Bot(commands.Bot):
         self.files_to_be_renamed = []
         self.source_rev_ids = {}
 
+        self.infoboxes = {}
         self.templates = {}
         self.appearances = None
         self.sources = None
@@ -591,6 +593,7 @@ class C4DE_Bot(commands.Bot):
             for p in Category(self.site, "Category:Wookieepedia Sources Project").articles():
                 self.source_rev_ids[p.title()] = p.latest_revision_id
             self.templates = build_template_types(self.site)
+            self.infoboxes = list_all_infoboxes(self.site)
             self.appearances = load_full_appearances(self.site, self.templates, False)
             self.sources = load_full_sources(self.site, self.templates, False)
             self.remap = load_remap(self.site)
@@ -641,7 +644,7 @@ class C4DE_Bot(commands.Bot):
             old_text = target.get()
 
             await message.add_reaction(TIMER)
-            results = analyze_target_page(self.site, target, self.templates, self.appearances, self.sources, self.remap,
+            results = analyze_target_page(self.site, target, self.infoboxes, self.templates, self.appearances, self.sources, self.remap,
                                           save=True, include_date=False, use_index=True, handle_references=True)
             await message.remove_reaction(TIMER, self.user)
             await message.add_reaction(self.emoji_by_name("bb8thumbsup"))
@@ -682,7 +685,7 @@ class C4DE_Bot(commands.Bot):
             use_index = command.get('text') is None
 
             await message.add_reaction(TIMER)
-            results = analyze_target_page(self.site, target, self.templates, self.appearances, self.sources, self.remap,
+            results = analyze_target_page(self.site, target, self.infoboxes, self.templates, self.appearances, self.sources, self.remap,
                                           save=True, include_date=use_date, use_index=use_index, handle_references=True)
             await message.remove_reaction(TIMER, self.user)
 
@@ -715,7 +718,7 @@ class C4DE_Bot(commands.Bot):
                 target = target.getRedirectTarget()
 
             await message.add_reaction(TIMER)
-            analysis = get_analysis_from_page(self.site, target, self.templates, self.appearances, self.sources, self.remap, False)
+            analysis = get_analysis_from_page(self.site, target, self.infoboxes, self.templates, self.appearances, self.sources, self.remap, False)
             result = create_index(self.site, target, analysis, True)
             await message.remove_reaction(TIMER, self.user)
 
