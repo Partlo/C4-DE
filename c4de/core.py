@@ -475,7 +475,7 @@ class C4DE_Bot(commands.Bot):
                 log(f"{len(v)} sources found for {k}; currently {c - 1} are listed")
                 text = ("{{Wookieepedia:Sources/Web/Header}}\n" + "\n".join(f"*{i}".strip() for i in sorted(v))).replace("\n\n", "\n")
                 if text != t:
-                    p.put(text, "Updating sources list")
+                    p.put(text, "Updating sources list", botflag=False)
             await message.add_reaction(THUMBS_UP)
         except Exception as e:
             error_log(type(e), e)
@@ -491,7 +491,7 @@ class C4DE_Bot(commands.Bot):
             for page in category.articles():
                 try:
                     text = page.get()
-                    page.put(text, "Bot: Ghost edit to update WhatLinksHere. Tell Cade if you see this.")
+                    page.put(text, "Bot: Ghost edit to update WhatLinksHere. Tell Cade if you see this.", botflag=False)
                 except NoPageError:
                     continue
                 except LockedPageError:
@@ -644,7 +644,7 @@ class C4DE_Bot(commands.Bot):
             old_text = target.get()
 
             await message.add_reaction(TIMER)
-            results = analyze_target_page(self.site, target, self.infoboxes, self.templates, self.appearances, self.sources, self.remap,
+            results = analyze_target_page(target, self.infoboxes, self.templates, self.appearances, self.sources, self.remap,
                                           save=True, include_date=False, use_index=True, handle_references=True)
             await message.remove_reaction(TIMER, self.user)
             await message.add_reaction(self.emoji_by_name("bb8thumbsup"))
@@ -685,7 +685,7 @@ class C4DE_Bot(commands.Bot):
             use_index = command.get('text') is None
 
             await message.add_reaction(TIMER)
-            results = analyze_target_page(self.site, target, self.infoboxes, self.templates, self.appearances, self.sources, self.remap,
+            results = analyze_target_page(target, self.infoboxes, self.templates, self.appearances, self.sources, self.remap,
                                           save=True, include_date=use_date, use_index=use_index, handle_references=True)
             await message.remove_reaction(TIMER, self.user)
 
@@ -718,7 +718,7 @@ class C4DE_Bot(commands.Bot):
                 target = target.getRedirectTarget()
 
             await message.add_reaction(TIMER)
-            analysis = get_analysis_from_page(self.site, target, self.infoboxes, self.templates, self.appearances, self.sources, self.remap, False)
+            analysis = get_analysis_from_page(target, self.infoboxes, self.templates, self.appearances, self.sources, self.remap, False)
             result = create_index(self.site, target, analysis, True)
             await message.remove_reaction(TIMER, self.user)
 
@@ -727,9 +727,9 @@ class C4DE_Bot(commands.Bot):
                 text = target.get()
                 if "{{Indexpage}}" not in text:
                     if "==Appearances==" in text:
-                        target.put(text.replace("==Appearances==", "==Appearances==\n{{Indexpage}}"), "Adding Index")
+                        target.put(text.replace("==Appearances==", "==Appearances==\n{{Indexpage}}"), "Adding Index", botflag=False)
                     elif "==Appearances==" in text:
-                        target.put(text.replace("==Sources==", "==Sources==\n{{Indexpage}}"), "Adding Index")
+                        target.put(text.replace("==Sources==", "==Sources==\n{{Indexpage}}"), "Adding Index", botflag=False)
                     else:
                         await message.channel.send("Could not locate Appearances or Sources header in target article, so {Indexpage} has not been added")
             else:
@@ -935,7 +935,7 @@ class C4DE_Bot(commands.Bot):
                         d = m.created_at.strftime("%H:%M, %B %d %Y")
                         t = f"*{d}: '''{users[m.author.display_name]}''': <nowiki>{m.content}</nowiki>"
                         text += f"\n{t}"
-                page.put(text, "Archiving completed bot requests from Discord", force=True)
+                page.put(text, "Archiving completed bot requests from Discord", force=True, botflag=False)
 
                 for m in messages:
                     try:
@@ -1089,7 +1089,7 @@ class C4DE_Bot(commands.Bot):
             for d, t in templates:
                 text += f"\n*{d or nd}: {t}"
             if text != page.get():
-                page.put(text, "Adding new sources")
+                page.put(text, "Adding new sources", botflag=False)
         except Exception as e:
             await self.report_error(f"RSS: Saving sources", type(e), e)
         log("Completed external RSS check")
@@ -1172,10 +1172,10 @@ class C4DE_Bot(commands.Bot):
             return
 
         try:
-            page.put(new_text, f"Archiving {archivedate} for new URL: {new_url}")
+            page.put(new_text, f"Archiving {archivedate} for new URL: {new_url}", botflag=False)
         except OtherPageSaveError:
             self.site.login()
-            page.put(new_text, f"Archiving {archivedate} for new URL: {new_url}")
+            page.put(new_text, f"Archiving {archivedate} for new URL: {new_url}", botflag=False)
 
     def parse_archive(self, has_archive, template):
         if has_archive:

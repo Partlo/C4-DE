@@ -29,10 +29,10 @@ def list_all_infoboxes(site) -> Dict[str, InfoboxInfo]:
     now = datetime.datetime.now()
     results = {}
     parse_infobox_category(Category(site, "Category:Infobox templates"), results)
-    if results.get("Battle300"):
-        results["Battle300"].optional += [f for f in results["Battle300"].params if f.endswith("3") or f.endswith("4)")]
+    if results.get("battle300"):
+        results["battle300"].optional += [f for f in results["battle300"].params if f.endswith("3") or f.endswith("4)")]
     if results.get("Battle350"):
-        results["Battle350"].optional += [f for f in results["Battle350"].params if f.endswith("4)")]
+        results["battle350"].optional += [f for f in results["battle350"].params if f.endswith("4)")]
     duration = datetime.datetime.now() - now
     print(f"Loaded {len(results)} infoboxes in {duration.seconds} seconds")
     return results
@@ -175,7 +175,6 @@ REMAP = {
     "developer": "publisher",
     "media_type": "type",
     "prev": "previous",
-    "spouses": "partners",
     "card": "figures",
     "composer": "author",
 }
@@ -188,6 +187,8 @@ def handle_infobox_on_page(page: Page, all_infoboxes):
     data, pre, post, on_own_line, found = parse_infobox(text, all_infoboxes)
     if not found or found.lower() not in all_infoboxes:
         print(f"ERROR: no infobox found, or infobox below body text; cannot parse {page.title()}")
+        return text
+    elif found.lower().startswith("year"):
         return text
 
     infobox = all_infoboxes.get(found.lower())
@@ -214,12 +215,12 @@ def handle_infobox_on_page(page: Page, all_infoboxes):
                 # x = [k for k, v in REMAP.items() if v == f and data.get(k) and data.get(k) != "new"]
                 x = [k for k, v in REMAP.items() if v == f and data.get(k)]
                 v = data.get(x[0] if x else '') or v
-            if f == "release date":
+            if f == "release date" and found.lower().replace("_", " ") != "iu media":
                 x = re.search("([Pp]ublished|[Rr]eleased|[Ii]ncluded|from) (in|on)? ?((\[*(January|February|March|April|May|June|July|August|September|October|November|December|fall|spring|winter|autumn)/?\]* ?)*?([0-9\[\], ]*)?(of )?\[*?[0-9]{4}\]*)",
                               text)
                 if x:
                     v = x.group(3)
-            if f == "published in":
+            if f == "published in" and found.lower().replace("_", " ") != "iu media":
                 v = data.get("issue") or ''
                 if re.search("\[\[(.*?) ([0-9]+)\|\\2( of .*?)?\]\]", v):
                     v = re.sub("\[\[(.*?) ([0-9]+)\|\\2( of .*?)?\]\]", "[[\\1 \\2|''\\1'' \\2]]", v)
@@ -239,7 +240,7 @@ def handle_infobox_on_page(page: Page, all_infoboxes):
                 continue
             data[f] = v
 
-    if data.get("published in") and "release date" in data and not data["release date"]:
+    if data.get("published in") and "release date" in data and not data["release date"] and found.lower().replace("_", " ") != "iu media":
         p = re.search("\[\[(.*?)(\|.*?)?\]\]", data["published in"])
         if p:
             parent = Page(page.site, p.group(1))
@@ -263,6 +264,8 @@ def handle_infobox_on_page(page: Page, all_infoboxes):
         if f in infobox.combo and not v and any(i in data for i in infobox.groups[infobox.combo[f]] if i != f):
             continue
         elif f in infobox.optional and not v and f not in data:
+            continue
+        elif f == 'pronouns' and not v and found.lower().startswith('droid'):
             continue
         new_infobox.append(f"|{f}={v or ''}")
 

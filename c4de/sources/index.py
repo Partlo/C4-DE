@@ -2,9 +2,9 @@ from pywikibot import Site, Page, Category
 from datetime import datetime
 from typing import Tuple, List
 import codecs
+import re
 
-from c4de.sources.analysis import AnalysisResults
-from c4de.sources.engine import *
+from c4de.sources.domain import Item, ItemId, AnalysisResults
 from c4de.sources.updates import extract_release_date
 
 
@@ -181,7 +181,7 @@ def create_index(site, page: Page, results: AnalysisResults, save: bool):
     index = None
     if save:
         index = Page(site, f"Index:{page.title()}")
-        index.put("\n".join(lines), "Source Engine: Generating Index page")
+        index.put("\n".join(lines), "Source Engine: Generating Index page", botflag=False)
     else:
         with codecs.open("C:/Users/Michael/Documents/projects/C4DE/c4de/protocols/test_text.txt", mode="w",
                          encoding="utf-8") as f:

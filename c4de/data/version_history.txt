@@ -117,5 +117,7 @@
 **Various Source Engine bug fixes
 *'''3.4.1''': August 1, 2023
 **More bug fixes because Imp is mean :(
-*'''3.4.2.''': August 4, 2023
+*'''3.4.2''': August 4, 2023
 **Source Engine tweaks
+*'''3.4.3''': August 6, 2023
+**Source Engine fixes, and handling being flagged as a bot

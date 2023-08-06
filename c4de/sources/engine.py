@@ -1,9 +1,10 @@
 import re
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict
 
 from pywikibot import Page, Category
+from c4de.sources.domain import Item, ItemId, FullListData
 
 
 SUBPAGES = [
@@ -120,11 +121,6 @@ TEMPLATES = {
     "VoyagesCite": "Voyages SF"
 }
 
-SELF_CITE = ["torweb", "twitter", "sonycite", "hunters", "ilm", "ilmxlab", "ffgweb", "facebookcite", "ea", "disney",
-             "darkhorse", "d23", "dpb", "cite web", "blog", "blogspot", "amgweb", "asmodee", "marvel", "lucasfilm",
-             "swkids", "dhboards", "dailyswcite", "disneynow", "disneyplus", "endorexpress", "faraway", "gamespot",
-             "holonetnews", "jcfcite", "lucasartscite", "mobygames", "swkids", "sonyforumscite", "suvudu", "wizardscite"]
-
 
 def list_templates(site, cat, data, template_type, recurse=False):
     for p in Category(site, cat).articles(recurse=recurse):
@@ -160,122 +156,6 @@ def convert_issue_to_template(s):
                 t = f"{{{{{template}|{m.group(3)}|{m.group(5)}}}}}"
                 return s.replace(m.group(1), t.replace("\\|", "|"))
     return re.sub("<\!--.*?-->", "", s)
-
-
-SORT_MODES = {
-    "General": 0,
-    "Web": 1,
-    "YT": 1,
-    "DB": 2,
-    "Toys": 3,
-    "Cards": 4,
-}
-
-
-class Item:
-    """
-    :type date: str
-    """
-    def __init__(self, original: str, mode: str, is_app: bool, *, invalid=False, target: str = None, text: str = None,
-                 parent: str = None, template: str = None, url: str = None, issue: str = None, subset: str=None,
-                 card: str = None, special=None, collapsed=False, format_text: str = None, no_issue=False):
-        self.is_appearance = is_app
-        self.mode = mode
-        self.sort_mode = SORT_MODES.get(mode, 5)
-        self.invalid = invalid
-        self.original = self.strip(original)
-        self.target = self.strip(target)
-        self.text = self.strip(text)
-        self.parent = self.strip(parent)
-        self.issue = self.strip(issue)
-        self.card = self.strip(card)
-        self.template = self.strip(template)
-        self.url = self.strip(url)
-        self.special = self.strip(special)
-        self.subset = self.strip(subset)
-        self.collapsed = collapsed
-
-        if self.card:
-            self.text = None
-
-        self.format_text = format_text
-        self.no_issue = no_issue
-        self.old_version = self.original and "oldversion" in self.original
-        self.index = None
-        self.canon_index = None
-        self.legends_index = None
-        self.override = None
-        self.override_date = None
-        self.date = ''
-        self.canon = None
-        self.from_extra = None
-        self.unlicensed = False
-        self.abridged = False
-        self.reprint = False
-        self.department = ''
-        self.non_canon = False
-        self.alternate_url = None
-        self.date_ref = None
-        self.extra_date = None
-        self.self_cite = False
-        self.extra = ''
-
-    def sort_index(self, canon):
-        return (self.canon_index if canon else self.legends_index) or self.index
-
-    def __str__(self):
-        return f"Item[{self.full_id()}]"
-
-    def __repr__(self):
-        return f"Item[{self.full_id()}]"
-
-    @staticmethod
-    def strip(s: str) -> str:
-        return s.strip() if s is not None else None
-
-    def has_date(self):
-        return self.date is not None and (self.date.startswith("1") or self.date.startswith("2") or self.date == "Current")
-
-    def full_id(self):
-        x = self.unique_id()
-        return x if self.canon is None else f"{self.canon}|{x}"
-
-    def unique_id(self):
-        s = ((self.card or '') + (self.special or '')) if (self.card or self.special) else None
-        i = f"{self.mode}|{self.template}|{self.target}|{self.url}|{self.parent}|{self.issue}|{s}|{self.text}"
-        return f"{i}|True" if self.old_version else i
-
-    def can_self_cite(self):
-        if self.mode == "YT":
-            return True
-        elif self.template.lower() in SELF_CITE:
-            return True
-        elif self.template == "SW" and self.url.startswith("news/"):
-            return True
-        return self.self_cite
-
-
-class ItemId:
-    def __init__(self, current: Item, master: Item, use_original_text: bool,
-                 from_other_data=False, wrong_continuity=False, by_parent=False):
-        self.current = current
-        self.master = master
-        self.use_original_text = use_original_text or current.old_version
-        if " edition" in self.current.original:
-            if re.search("''Star Wars: (Complete Locations|The Complete Visual Dictionary)'', [0-9]+ edition", self.current.original):
-                self.use_original_text = True
-        self.from_other_data = from_other_data
-        self.wrong_continuity = wrong_continuity
-        self.by_parent = by_parent
-
-        self.replace_references = master.original and "]]'' ([[" not in master.original
-
-    def sort_date(self):
-        return self.current.override_date if self.current.override_date else self.master.date
-
-    def sort_text(self):
-        return (self.current.text if self.current.mode == "DB" else self.current.original).replace("''", "")\
-            .replace('"', '').replace("|", " |").replace("}}", " }}").lower()
 
 
 def extract_item(z: str, a: bool, page, types, master=False) -> Item:
@@ -363,6 +243,8 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
         m = re.search("{{[^\|\[\}\n]+\|(official=true\|)?(.*?\|.*?)\|(.*?)(\|.*?)?}}", s)
         if m:
             return Item(z, mode, a, target=None, template=template, url=m.group(2).replace("|", "/"), text=m.group(2))
+    elif template == "Sphero":
+        return Item(z, "Toys", a, target="Star Wars Droids App by Sphero", template=template, collapsed=True, date="2017-08-31")
     elif template == "LEGOCite":
         m = re.search("{{LEGOCite\|(theme=)?(.*?)\|(num=)?(.*?)\|(name=)?(.*?)(\|.*?)?}}", s)
         if m:
@@ -403,6 +285,8 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
                 return Item(z, mode, a, target=None, template=template, parent="Star Wars: Card Trader", card=m.group(2), text=m.group(3))
         elif template == "FFGXW" and card_set == "Core Set":
             card_set = "Star Wars: X-Wing Miniatures Game Core Set"
+        elif template == "Topps" and card_set == "Star Wars Topps Now" and "|stext=" in s:
+            card_set = re.search("\|stext=(.*?)[\|}].*?$", s).group(1).replace("''", "")
         elif card_set and template == "TopTrumps":
             card_set = f"Top Trumps: {card_set}"
         elif card_set and template == "SWPM":
@@ -426,6 +310,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
         t = re.search("{[^\|\[\}\n]+\|.*?text=(?P<text>.*?)[\|\}]", s)
         ss = re.search("subset=(.*?)(\|.*?)?}}", s)
         subset = ss.group(1) if ss else None
+
         if not t:
             t = re.search("{[^\|\[\}\n]+\|.*?\|(?P<text>.*?)(\|.*?)?}}", s)
             if t and t.group('text') and re.search("^[a-z]+=", t.group('text')):
@@ -616,6 +501,11 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
                 return ItemId(o, data[t], True, False)
             elif other_data and t in other_data:
                 return ItemId(o, other_data[t], True, True)
+
+        if o.url:
+            m = match_url(o, o.url, data, False)
+            if m:
+                return m
 
         for s, x in data.items():
             if x.template == o.template and x.target and (x.target.startswith(set_name) or set_name in x.target):
@@ -942,14 +832,6 @@ def load_source_lists(site, log):
     return data
 
 
-class FullListData:
-    def __init__(self, unique: Dict[str, Item], full: Dict[str, Item], target: Dict[str, List[Item]], parantheticals: set):
-        self.unique = unique
-        self.full = full
-        self.target = target
-        self.parantheticals = parantheticals
-
-
 def load_remap(site) -> dict:
     p = Page(site, "Wookieepedia:Appearances/Remap")
     results = {}
@@ -1048,8 +930,10 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                         x.canon_index = canon[x.target.replace("(audiobook)", "(novel)")] + 0.1
                     elif x.target.replace(" (audiobook)", "") in canon:
                         x.canon_index = canon[x.target.replace(" (audiobook)", "")] + 0.1
-                    elif x.target.replace("(script)", "(novel)") in canon:
-                        x.canon_index = canon[x.target.replace("(script)", "(novel)")] + 0.1
+                    elif x.target == "Doctor Aphra (script)":
+                        x.canon_index = canon["Doctor Aphra: An Audiobook Original"] + 0.1
+                    elif x.target.replace("(script)", "") in canon:
+                        x.canon_index = canon[x.target.replace("(script)", "")] + 0.1
 
                     if x.target in legends:
                         x.legends_index = legends[x.target]
@@ -1059,8 +943,8 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                         x.legends_index = legends[x.target.replace("(audiobook)", "(novel)")] + 0.1
                     elif x.target.replace(" (audiobook)", "") in legends:
                         x.legends_index = legends[x.target.replace(" (audiobook)", "")] + 0.1
-                    elif x.target.replace("(script)", "(novel)") in legends:
-                        x.legends_index = legends[x.target.replace("(script)", "(novel)")] + 0.1
+                    elif x.target.replace("(script)", "") in legends:
+                        x.legends_index = legends[x.target.replace("(script)", "")] + 0.1
 
                     if x.target.endswith(")"):
                         parantheticals.add(x.target.rsplit(" (", 1)[0])

@@ -45,7 +45,7 @@ def report_version_info(site, version) -> Optional[str]:
         with open(OLD_VERSION_FILE, "w") as f:
             f.write(version)
         page = pywikibot.Page(site, "User:C4-DE Bot/History")
-        page.put(total, "Updating C4-DE Bot changelog")
+        page.put(total, "Updating C4-DE Bot changelog", botflag=False)
         return f"**C4-DE Bot: Version {version}**\n{updates}"
     else:
         return None

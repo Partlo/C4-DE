@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pywikibot import Site, Page, handle_args, pagegenerators, showDiff, input_choice
 
-from c4de.sources.analysis import analyze_target_page, build_new_text
+from c4de.sources.analysis import build_new_text
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, build_template_types
 from c4de.sources.infoboxer import list_all_infoboxes
 
@@ -50,13 +50,12 @@ def analyze(*args):
                 continue
         try:
             old_text = page.get()
-            text = build_new_text(gen_factory.site, page, infoboxes, types, appearances, sources, remap,
+            text = build_new_text(page, infoboxes, types, appearances, sources, remap,
                                   include_date=include_date, log=log, handle_references=True)
 
             if text == old_text:
                 continue
 
-            text = text.replace("|spouses=", "|partners=")
             if text == old_text:
                 continue
 
@@ -73,7 +72,7 @@ def analyze(*args):
             if choice == 'q':
                 break
             if choice == 'y':
-                page.put(text, message)
+                page.put(text, message, botflag=False)
             if choice == 'a':
                 always = True
             else:

@@ -403,7 +403,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
         f.writelines(new_txt)
 
     if save:
-        page.put(new_txt, "Updating Source Engine Masterlist with new future products")
+        page.put(new_txt, "Updating Source Engine Masterlist with new future products", botflag=False)
     else:
         showDiff(page.get(), new_txt, context=2)
 

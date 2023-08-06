@@ -74,7 +74,7 @@ def calculate_isbns_for_all_pages(site):
     for k in sorted(isbns_by_page):
         text.append('    ' + json.dumps(k) + ": " + json.dumps(sorted(list(isbns_by_page[k]))))
     page_text = "{" + ",\n".join(text) + "}"
-    page.put(page_text, "Updating sitewide ISBN records")
+    page.put(page_text, "Updating sitewide ISBN records", botflag=False)
     return isbns_by_page
 
 
@@ -330,7 +330,7 @@ def analyze_products(site, products: List[dict], search_terms):
             if "isbn=none" in text:
                 print(f"Saving new ISBN {item['isbn']} for {page.title()}")
                 text = text.replace("isbn=none", f"isbn={item['isbn']}")
-                page.put(text, f"Saving new ISBN {item['isbn']} from Edelweiss")
+                page.put(text, f"Saving new ISBN {item['isbn']} from Edelweiss", botflag=False)
                 if page.title() not in pages_by_isbn:
                     pages_by_isbn[page.title()] = []
                 pages_by_isbn[page.title()].append(item['isbn'])
@@ -461,7 +461,7 @@ def save_reprint(site, title, entries: List[dict]):
         section += "\n"
 
         new_text = "".join([before, split1, section, i_header, international, split2, after])
-        page.put(new_text, f"Adding {len(entries)} new reprints to Editions")
+        page.put(new_text, f"Adding {len(entries)} new reprints to Editions", botflag=False)
 
     elif re.search("=+[A-z]* ?[Gg]allery=+", text):
         before, split, after = re.split("(=+[A-z]* ?[Gg]allery=+\n)", text)
@@ -484,7 +484,7 @@ def save_reprint(site, title, entries: List[dict]):
             lines.append("")
             lines.append("===Cover gallery===")
         new_text = "".join([before, "\n".join(lines), after])
-        page.put(new_text, f"Creating Editions section and adding {len(entries)} new reprints")
+        page.put(new_text, f"Creating Editions section and adding {len(entries)} new reprints", botflag=False)
 
     else:
         return f"- Cannot add {len(entries)} new reprints to {page.title()} due to lack of Editions and/or Media subsection"

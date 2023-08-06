@@ -36,7 +36,7 @@ def archive_senate_hall_thread(site, page, offset):
         if text == new_text:
             print("ERROR: cannot find {{Shtop}}")
         else:
-            page.put(new_text, f"Archiving stagnant Senate Hall thread")
+            page.put(new_text, f"Archiving stagnant Senate Hall thread", botflag=False)
 
 
 def remove_spoiler_tags_from_page(site, page, limit=30, offset=5):
@@ -74,7 +74,7 @@ def remove_spoiler_tags_from_page(site, page, limit=30, offset=5):
     else:
         time, new_text = remove_expired_fields(site, text, fields, named, limit=limit)
 
-    page.put(new_text, "Removing expired spoiler notices")
+    page.put(new_text, "Removing expired spoiler notices", botflag=False)
     return time
 
 
@@ -199,7 +199,7 @@ def check_preload_for_missing_fields(site, template: Page, apply: bool):
         new_text = "\n".join(new_lines)
         showDiff(preload_text, new_text)
         if apply:
-            preload.put(new_text, "Updating preload with new parameters")
+            preload.put(new_text, "Updating preload with new parameters", botflag=False)
 
     return missing_from_preload, missing_from_check
 
