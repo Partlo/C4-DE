@@ -13,6 +13,7 @@ from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, Anal
 from c4de.sources.infoboxer import handle_infobox_on_page
 
 KEEP_TEMPLATES = ["TCWA", "Twitter", "FacebookCite"]
+DO_NOT_MOVE = ["TCWA", "GEAttr", "DatapadCite"]
 
 SPECIAL = {
     "Star Wars: X-Wing vs. TIE Fighter": ["Star Wars: X-Wing vs. TIE Fighter: Balance of Power"],
@@ -47,18 +48,10 @@ def build_redirects(page: Page):
     return results
 
 
-def analyze_body(page: Page, text, types, appearances: FullListData, sources: FullListData, remap, redirects, log: bool):
-    references = re.findall("(<ref name=.*?[^/]>(.*?)</ref>)", text)
-    new_text = text
-    for full_ref, ref in references:
-        new_text = handle_reference(full_ref, ref, page, new_text, types, appearances, sources, remap, redirects, log)
-    return new_text
-
-
 def handle_reference(full_ref, ref, page: Page, new_text, types, appearances: FullListData, sources: FullListData, remap, redirects, log: bool):
     try:
         new_ref = fix_redirects(redirects, ref, "Reference")
-        new_ref = re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", new_ref.replace("&ndash;", '–').replace('&mdash;', '—'))
+        new_ref = re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", new_ref)
         new_ref = re.sub("'*\[\[Star Wars: The Official Starships & Vehicles Collection ([0-9]+)(\|.*?)?\]\]'* (<small>)?\{\{C\|'*\[\[(.*?)\]\]'* ?(-|&[mn]dash;|:) ?([^\[\}\r\n]+?)'*\}\}(</small>)?",
                    "{{StarshipsVehiclesCite|\\1|\\4|\\6}}", new_ref)
         new_ref = re.sub("'*\[\[Star Wars: The Official Starships & Vehicles Collection ([0-9]+)(\|.*?)?\]\]'* (<small>)?\{\{C\|('*\[\[(.*?)\]\]'* ?(-|&[mn]dash;|:) ?(.*?)'*)\}\}(</small>)?",
@@ -129,7 +122,7 @@ def handle_reference(full_ref, ref, page: Page, new_text, types, appearances: Fu
                 z = z[:-2] + "|d=y}}"
             new_ref = new_ref.replace(ot, z)
 
-        final_ref = full_ref.replace(ref, new_ref).replace('–', '&ndash;').replace('—', '&mdash;').replace("film]] film", "film]]").replace("|reprint=yes", "")
+        final_ref = full_ref.replace(ref, new_ref).replace("film]] film", "film]]").replace("|reprint=yes", "")
         new_text = new_text.replace(full_ref, final_ref)
     except Exception as e:
         traceback.print_exc()
@@ -239,7 +232,7 @@ def build_item_ids_for_section(page: Page, name, original: List[Item], data: Ful
                 o.parent = p.getRedirectTarget().title().split('#', 1)[0]
                 d = determine_id_for_item(o, page.site, data.unique, data.target, other.unique, other.target, remap, log)
 
-        if d and o.mode == "Cards" and d.current.card == d.master.card and d.master.has_date():
+        if d and o.mode == "Cards" and d.current.card and d.current.card == d.master.card and d.master.has_date():
             found.append(d)
         elif d and o.template == "ForceCollection":
             found.append(d)
@@ -279,12 +272,13 @@ def build_item_ids_for_section(page: Page, name, original: List[Item], data: Ful
                 extra[d.master.target] = d
         elif d and d.current.template in KEEP_TEMPLATES:
             found.append(d)
-        elif d and d.from_other_data and "databank" not in (o.extra or '').lower() and d.current.template != "TCWA" \
-                and d.current.template != "DatapadCite" and not real_world and not d.master.from_extra:
+        elif d and d.from_other_data and "databank" not in (o.extra or '').lower() and d.current.template not in DO_NOT_MOVE \
+                and d.current.target != 'Star Wars: Datapad (Galactic Starcruiser)'\
+                and not real_world and not d.master.from_extra:
             if log:
                 print(f"({name}) Listed in wrong section: {o.original} -> {d.master.is_appearance} {d.master.full_id()}")
             wrong.append(d)
-        elif d and d.master.non_canon and not name.startswith("Non-canon") and d.master.target != "Star Tours: The Adventures Continue":
+        elif d and d.master.non_canon and not name.startswith("Non-canon") and d.master.target != "Star Tours: The Adventures Continue" and not page.title().endswith("/LEGO"):
             non_canon.append(d)
         elif "{{Hyperspace" in o.original and name == "Appearances":
             if d and d.master.template == "Hyperspace":
@@ -310,6 +304,8 @@ def build_item_ids_for_section(page: Page, name, original: List[Item], data: Ful
             if save and not name.startswith("Non-canon") and "star wars: visions" in o.original.lower():
                 non_canon.append(ItemId(o, o, False))
             elif save:
+                found.append(ItemId(o, o, False))
+            elif real_world:
                 found.append(ItemId(o, o, False))
 
     set_ids = {}
@@ -349,10 +345,10 @@ UNCHANGED = "Leave As Is"
 BY_DATE = "Use Master Date"
 
 
-def build_new_section(section: SectionItemIds, mode: str, dates: list, canon: bool, include_date: bool, log: bool,
+def build_new_section(name, section: SectionItemIds, mode: str, dates: list, canon: bool, include_date: bool, log: bool,
                       use_index: bool, mismatch: list) -> Tuple[FinishedSection, List[ItemId]]:
     if section is None:
-        return FinishedSection(0, ""), []
+        return FinishedSection(name, 0, ""), []
 
     source_names = {}
     urls = {}
@@ -442,7 +438,7 @@ def build_new_section(section: SectionItemIds, mode: str, dates: list, canon: bo
             if len(set_cards) > 1:
                 new_text.append(f"{d}{{{{CardGameSet|set={o.current.original}|cards=")
                 ct = 2
-            for c in sorted(set_cards, key=lambda a: a.current.original.replace("''", "")):
+            for c in sorted(set_cards, key=lambda a: (a.current.card if a.current.card else a.current.original).replace("''", "")):
                 ot = c.current.original
                 if c.current.subset and "subset=" not in ot:
                     ot = re.sub("({{[^\|\}]*?\|(set=)?[^\|\}]*?\|(stext=.*?\|)?)", f"\\1subset={o.current.subset}|", ot)
@@ -459,6 +455,8 @@ def build_new_section(section: SectionItemIds, mode: str, dates: list, canon: bo
                 zt = re.sub("({{[^\|\}]*?\|(set=)?[^\|\}]*?\|(stext=.*?\|)?)", f"\\1subset={o.current.subset}|", zt)
             zt = re.sub("<\!--( ?Unknown ?|[ 0-9/X-]+)-->", "", zt)
             if o.master.from_extra and "{{co}}" not in (o.current.extra or '').lower():
+                if "audiobook" in o.master.original:
+                    continue
                 d += "{{SeriesListing}} "
             if d == "<!-- Unknown -->" and "{{Hyperspace" in zt and "/member/fiction" in zt:
                 d = ""
@@ -493,7 +491,7 @@ def build_new_section(section: SectionItemIds, mode: str, dates: list, canon: bo
             if o.master.canon != canon:
                 mismatch.append(o)
 
-    return FinishedSection(rows, "\n".join(new_text)), final_items
+    return FinishedSection(name, rows, "\n".join(new_text)), final_items
 
 
 def build_date_text(o: ItemId, include_date):
@@ -501,8 +499,10 @@ def build_date_text(o: ItemId, include_date):
         return f"<!-- {o.current.override}: {o.current.override_date}"
     elif o.current.override:
         return f"<!-- {o.current.override} -->"
+    elif not o.master.has_date():
+        return '<!-- Unknown -->'
     elif include_date:
-        return f"<!-- {o.master.date} -->"
+        return f"<!-- {o.master.date} -->" if o.master.date != 'Current' else ''
     elif o.master.has_date() or o.master.date == 'Future' or o.master.date == 'Canceled':
         return ''
     else:
@@ -567,132 +567,6 @@ def compare_partial_dates(o: str, d1: str, d2: str, mode: str):
 
 def is_number(d):
     return d and (d.startswith("1") or d.startswith("2"))
-
-
-def find_media_categories(page: Page):
-    cc = page.title().replace("/Legends", "")
-    lc = f"{page.title()[0].lower()}{cc[1:]}"
-    image_cat = ""
-    audio_cat = ""
-    for t in ["of", "of the", "from", "from the"]:
-        if not image_cat:
-            if Category(page.site, f"Category:Images {t} {cc}").exists():
-                image_cat = f"|imagecat=Images {t} {cc}"
-            elif Category(page.site, f"Category:Images {t} {lc}").exists():
-                image_cat = f"|imagecat=Images {t} {lc}"
-            if Category(page.site, f"Category:Images {t} {cc}s").exists():
-                image_cat = f"|imagecat=Images {t} {cc}s"
-            elif Category(page.site, f"Category:Images {t} {lc}s").exists():
-                image_cat = f"|imagecat=Images {t} {lc}s"
-        if not audio_cat:
-            if Category(page.site, f"Category:Audio files {t} {cc}").exists():
-                audio_cat = f"|soundcat=Audio files {t} {cc}"
-            if Category(page.site, f"Category:Audio files {t} {lc}").exists():
-                audio_cat = f"|soundcat=Audio files {t} {lc}"
-            if Category(page.site, f"Category:Audio files {t} {cc}s").exists():
-                audio_cat = f"|soundcat=Audio files {t} {cc}s"
-            if Category(page.site, f"Category:Audio files {t} {lc}s").exists():
-                audio_cat = f"|soundcat=Audio files {t} {lc}s"
-    return image_cat, audio_cat
-
-
-def build_section_from_pieces(header: str, section: SectionComponents, items: FinishedSection, log, media_cat):
-    if log:
-        print(f"Creating {header} section with {len(items.text.splitlines())} items")
-
-    pieces = [header]
-    if items.rows >= 20 and not any("{{scroll" in i.lower() for i in section.preceding):
-        pieces.append("{{Scroll_box|content=")
-
-    pieces += section.preceding
-    added_media_cat = False
-    if media_cat:
-        pieces.append(media_cat)
-        added_media_cat = True
-
-    pieces.append(items.text)
-    if section.trailing:
-        pieces.append("")
-        pieces += section.trailing
-    diff = 0
-    for s in pieces:
-        diff += s.count("{{")
-        diff -= s.count("}}")
-    if diff > 0:
-        pieces.append("}}")
-    pieces.append("")
-    pieces.append(section.after)
-    return "\n".join(pieces).strip() + "\n\n", added_media_cat
-
-
-def check_for_media_cat(section: SectionComponents):
-    return any("{{mediacat" in i.lower() or "{{imagecat" in i.lower() for i in section.preceding) or \
-           "{{mediacat" in section.after.lower() or "{{imagecat" in section.after.lower()
-
-
-def build_final_text(page: Page, results: PageComponents, redirects, new_apps: FinishedSection, new_nca: FinishedSection,
-                     new_sources: FinishedSection, new_ncs: FinishedSection, log: bool):
-    pieces = [results.before.strip(), ""]
-
-    if "{{mediacat" in results.final.lower() or "{{imagecat" in results.final.lower():
-        media_cat = None
-    elif any(check_for_media_cat(s) for s in [results.apps, results.nca, results.src, results.ncs]):
-        media_cat = None
-    else:
-        ic, ac = find_media_categories(page)
-        media_cat = f"{{{{Mediacat{ic}{ac}}}}}" if (ic or ac) else None
-
-    if new_apps.text:
-        t, added_media_cat = build_section_from_pieces("==Appearances==", results.apps, new_apps, log, media_cat if new_apps.rows >= 3 and new_apps.rows > new_sources.rows else None)
-        if added_media_cat:
-            media_cat = None
-        pieces.append(t)
-    if new_nca.text:
-        t, added_media_cat = build_section_from_pieces("===Non-canon appearances===", results.nca, new_nca, log, media_cat if new_nca.rows >= 3 else None)
-        if added_media_cat:
-            media_cat = None
-        pieces.append(t)
-    if new_sources.text:
-        t, added_media_cat = build_section_from_pieces("==Sources==", results.src, new_sources, log, media_cat if new_sources.rows >= 3 else None)
-        if added_media_cat:
-            media_cat = None
-        pieces.append(t)
-    if new_ncs.text:
-        t, added_media_cat = build_section_from_pieces("===Non-canon sources===", results.ncs, new_ncs, log, media_cat if new_ncs.rows >= 3 else None)
-        if added_media_cat:
-            media_cat = None
-        pieces.append(t)
-
-    if "<ref" in results.before and "{{reflist" not in results.original.lower():
-        if media_cat:
-            pieces.append("==Notes and references==\n" + media_cat + "\n{{Reflist}}\n\n")
-        else:
-            pieces.append("==Notes and references==\n{{Reflist}}\n\n")
-
-    if results.final:
-        if "==\n" in results.final and media_cat:
-            z = results.final.split("==\n", 1)
-            pieces.append(f"{z[0]}==\n{media_cat}\n{z[1]}")
-        elif media_cat:
-            pieces.append(media_cat + "\n" + results.final)
-        else:
-            pieces.append(results.final)
-
-    new_txt = re.sub("(?<![\n=}])\n==", "\n\n==", re.sub("\n\n+", "\n\n", "\n".join(pieces))).strip()
-    new_txt = new_txt.replace("\n\n}}", "\n}}").replace("{{Shortstory|", "{{StoryCite|")
-
-    replace = False
-    if page.get() != new_txt:
-        new_txt = fix_redirects(redirects, new_txt, "Body")
-        replace = True
-    while replace:
-        new_txt2 = re.sub("(\[\[(?!File:)[^\[\]|\r\n]+)&ndash;", "\\1–", re.sub("(\[\[(?!File:)[^\[\]|\n]+)&mdash;", "\\1—", new_txt))
-        new_txt2 = re.sub("(\{\{[A-z0-9]+\|(ye?a?r?=[0-9]+\|)?[0-9]+\|[^\[\]\|\r\n]+)&ndash;", "\\1–", re.sub("(\{\{[A-z0-9]+\|(ye?a?r?=[0-9]+\|)?[0-9]+\|[^\[\]\|\r\n]+)&mdash;", "\\1—", new_txt2))
-        new_txt2 = re.sub("( ''[^'\n]+'')'s ", "\\1{{'s}} ", new_txt2)
-        replace = new_txt != new_txt2
-        new_txt = new_txt2
-
-    return new_txt
 
 
 def analyze_section_results(target: Page, results: PageComponents, appearances: FullListData,
@@ -778,10 +652,10 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
         elif "canon articles" in c.title().lower():
             canon = True
     mismatch = []
-    new_apps, final_apps = build_new_section(new_apps, app_mode, dates, canon, include_date, log, use_index, mismatch)
-    new_nca, final_nca = build_new_section(new_nca, UNCHANGED, dates, canon, include_date, log, use_index, mismatch)
-    new_sources, final_sources = build_new_section(new_src, BY_DATE, dates, canon, include_date, log, use_index, mismatch)
-    new_ncs, final_ncs = build_new_section(new_ncs, BY_DATE, dates, canon, include_date, log, use_index, mismatch)
+    new_apps, final_apps = build_new_section("==Appearances==", new_apps, app_mode, dates, canon, include_date, log, use_index, mismatch)
+    new_nca, final_nca = build_new_section("===Non-canon appearances===", new_nca, UNCHANGED, dates, canon, include_date, log, use_index, mismatch)
+    new_sources, final_sources = build_new_section("==Sources==", new_src, BY_DATE, dates, canon, len(new_src.found) > 1, log, use_index, mismatch)
+    new_ncs, final_ncs = build_new_section("===Non-canon sources===", new_ncs, BY_DATE, dates, canon, len(new_ncs.found) > 1, log, use_index, mismatch)
     analysis = AnalysisResults(final_apps, final_nca, final_sources, final_ncs, canon, abridged, mismatch)
     return new_apps, new_nca, new_sources, new_ncs, dates, unknown_apps, unknown_src, analysis
 
@@ -905,6 +779,162 @@ def build_page_components(target: Page, types: dict, appearances: FullListData, 
     if handle_references:
         results.before = analyze_body(target, results.before, types, appearances, sources, remap, redirects, log)
     return results, unknown, redirects
+
+
+def analyze_body(page: Page, text, types, appearances: FullListData, sources: FullListData, remap, redirects, log: bool):
+    references = re.findall("(<ref name=.*?[^/]>(.*?)</ref>)", text)
+    new_text = text
+    for full_ref, ref in references:
+        new_text = handle_reference(full_ref, ref, page, new_text, types, appearances, sources, remap, redirects, log)
+    return new_text
+
+
+def find_media_categories(page: Page):
+    cc = page.title().replace("/Legends", "")
+    lc = f"{page.title()[0].lower()}{cc[1:]}"
+    image_cat = ""
+    audio_cat = ""
+    for t in ["of", "of the", "from", "from the"]:
+        if not image_cat:
+            if Category(page.site, f"Category:Images {t} {cc}").exists():
+                image_cat = f"|imagecat=Images {t} {cc}"
+            elif Category(page.site, f"Category:Images {t} {lc}").exists():
+                image_cat = f"|imagecat=Images {t} {lc}"
+            if Category(page.site, f"Category:Images {t} {cc}s").exists():
+                image_cat = f"|imagecat=Images {t} {cc}s"
+            elif Category(page.site, f"Category:Images {t} {lc}s").exists():
+                image_cat = f"|imagecat=Images {t} {lc}s"
+        if not audio_cat:
+            if Category(page.site, f"Category:Audio files {t} {cc}").exists():
+                audio_cat = f"|soundcat=Audio files {t} {cc}"
+            if Category(page.site, f"Category:Audio files {t} {lc}").exists():
+                audio_cat = f"|soundcat=Audio files {t} {lc}"
+            if Category(page.site, f"Category:Audio files {t} {cc}s").exists():
+                audio_cat = f"|soundcat=Audio files {t} {cc}s"
+            if Category(page.site, f"Category:Audio files {t} {lc}s").exists():
+                audio_cat = f"|soundcat=Audio files {t} {lc}s"
+    return image_cat, audio_cat
+
+
+def build_section_from_pieces(section: SectionComponents, items: FinishedSection, log, media_cat):
+    if log:
+        print(f"Creating {items.name} section with {len(items.text.splitlines())} items")
+
+    pieces = [items.name]
+    if items.rows >= 20 and not any("{{scroll" in i.lower() for i in section.preceding):
+        pieces.append("{{Scroll_box|content=")
+
+    pieces += section.preceding
+    added_media_cat = False
+    if media_cat:
+        pieces.append(media_cat)
+        added_media_cat = True
+
+    pieces.append(items.text)
+    if section.trailing:
+        pieces.append("")
+        pieces += section.trailing
+    diff = 0
+    for s in pieces:
+        diff += s.count("{{")
+        diff -= s.count("}}")
+    if diff > 0:
+        pieces.append("}}")
+    pieces.append("")
+    pieces.append(section.after)
+    return "\n".join(pieces).strip() + "\n\n", added_media_cat
+
+
+def check_for_media_cat(section: SectionComponents):
+    return any("{{mediacat" in i.lower() or "{{imagecat" in i.lower() for i in section.preceding) or \
+           "{{mediacat" in section.after.lower() or "{{imagecat" in section.after.lower()
+
+
+def build_final_text(page: Page, results: PageComponents, redirects, new_apps: FinishedSection, new_nca: FinishedSection,
+                     new_sources: FinishedSection, new_ncs: FinishedSection, log: bool):
+    pieces = [results.before.strip(), ""]
+
+    if "{{mediacat" in results.final.lower() or "{{imagecat" in results.final.lower():
+        media_cat = None
+    elif any(check_for_media_cat(s) for s in [results.apps, results.nca, results.src, results.ncs]):
+        media_cat = None
+    else:
+        ic, ac = find_media_categories(page)
+        media_cat = f"{{{{Mediacat{ic}{ac}}}}}" if (ic or ac) else None
+
+    section = sorted([new_nca, new_apps, new_ncs, new_sources], key=lambda a: a.rows)[-1]
+    mc_section_name = section.name if section.rows > 3 else None
+
+    if new_apps.text:
+        t, added_media_cat = build_section_from_pieces(results.apps, new_apps, log, media_cat if mc_section_name == new_apps.name else None)
+        if added_media_cat:
+            media_cat = None
+        pieces.append(t)
+    if new_nca.text:
+        t, added_media_cat = build_section_from_pieces(results.nca, new_nca, log, media_cat if mc_section_name == new_nca.name else None)
+        if added_media_cat:
+            media_cat = None
+        pieces.append(t)
+    if new_sources.text:
+        t, added_media_cat = build_section_from_pieces(results.src, new_sources, log, media_cat if mc_section_name == new_sources.name else None)
+        if added_media_cat:
+            media_cat = None
+        pieces.append(t)
+    if new_ncs.text:
+        t, added_media_cat = build_section_from_pieces(results.ncs, new_ncs, log, media_cat if mc_section_name == new_ncs.name else None)
+        if added_media_cat:
+            media_cat = None
+        pieces.append(t)
+
+    if "<ref" in results.before and "{{reflist" not in results.original.lower():
+        if media_cat:
+            pieces.append("==Notes and references==\n" + media_cat + "\n{{Reflist}}\n\n")
+        else:
+            pieces.append("==Notes and references==\n{{Reflist}}\n\n")
+
+    if results.final:
+        if "==\n" in results.final and media_cat:
+            z = results.final.split("==\n", 1)
+            pieces.append(f"{z[0]}==\n{media_cat}\n{z[1]}")
+        elif media_cat:
+            pieces.append(media_cat + "\n" + results.final)
+        else:
+            pieces.append(results.final)
+
+    new_txt = sort_categories("\n".join(pieces))
+    new_txt = re.sub("(?<![\n=}])\n==", "\n\n==", re.sub("\n\n+", "\n\n", new_txt)).strip()
+    new_txt = new_txt.replace("\n\n}}", "\n}}").replace("{{Shortstory|", "{{StoryCite|")
+
+    replace = False
+    if re.sub("<!--.*?-->", "", page.get()) != re.sub("<!--.*?-->", "", new_txt):
+        new_txt = fix_redirects(redirects, new_txt, "Body")
+        replace = True
+    while replace:
+        new_txt2 = re.sub("(\[\[(?!File:)[^\[\]|\r\n]+)&ndash;", "\\1–", re.sub("(\[\[(?!File:)[^\[\]|\n]+)&mdash;", "\\1—", new_txt))
+        new_txt2 = re.sub("(\[\[(?!File:)[^\[\]|\r\n]+–[^\[\]|\r\n]+\|[^\[\]|\r\n]+)&ndash;", "\\1–", re.sub("(\[\[(?!File:)[^\[\]|\n]+—[^\[\]|\r\n]+\|[^\[\]|\r\n]+)&mdash;", "\\1—", new_txt2))
+        new_txt2 = re.sub("(\{\{[A-z0-9]+\|(ye?a?r?=[0-9]+\|)?[0-9]+\|[^\[\]\}\|\r\n]+)&ndash;", "\\1–", re.sub("(\{\{[A-z0-9]+\|(ye?a?r?=[0-9]+\|)?[0-9]+\|[^\[\]\}\|\r\n]+)&mdash;", "\\1—", new_txt2))
+        new_txt2 = re.sub("( ''[^'\n]+'')'s ", "\\1{{'s}} ", new_txt2)
+        new_txt2 = re.sub("(\[\[(.*?)( \(.*?\))?(\|.*?)?\]\].*?{{1st[A-z]*?(\|.*?)?\|\[\[\\2 \((.*?audiobook)\)\|).*?\]\]\}\}", "\\1\\6]]}}", new_txt2)
+        new_txt2 = re.sub("(ook=(.*?)( \(.*?\))?(\|.*?)?\}\}.*?{{1st[A-z]*?(\|.*?)?\|\[\[\\2 \((.*?audiobook)\)\|).*?\]\]\}\}", "\\1\\6]]}}", new_txt2)
+        new_txt2 = re.sub("(\[\[(.*?)( \(.*?audiobook\))(\|.*?)?\]\].*?{{1st[A-z]*?(\|.*?)?\|\[\[\\2)( \(audiobook\))?( \(.*?\))?\|.*?\]\]\}\}", "\\1\\7|print edition]]}}", new_txt2)
+        new_txt2 = re.sub("(ook=(.*?)( \(.*?audiobook\))(\|.*?)?\}\}.*?{{1st[A-z]*?(\|.*?)?\|\[\[\\2)( \(audiobook\))?( \(.*?\))?\|.*?\]\]\}\}", "\\1\\7|print edition]]}}", new_txt2)
+        replace = new_txt != new_txt2
+        new_txt = new_txt2
+
+    return new_txt
+
+
+def sort_categories(text):
+    final = []
+    categories = []
+    for line in text.splitlines():
+        if line.strip().lower().startswith("[[category:"):
+            categories.append(line)
+        else:
+            final.append(line)
+    final.append("")
+
+    return "\n".join(final + sorted(categories, key=lambda a: a.lower()))
 
 
 def get_analysis_from_page(target: Page, infoboxes: dict, types, appearances: FullListData,

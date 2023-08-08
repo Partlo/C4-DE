@@ -142,8 +142,8 @@ def build_template_types(site):
     list_templates(site, "Category:Toy citation templates", results, "Toys")
 
     list_templates(site, "Category:Dating citation templates", results, "Dates")
-    list_templates(site, "Category:Canon dating citation templates", results, "Dates")
-    list_templates(site, "Category:Legends dating citation templates", results, "Dates")
+    list_templates(site, "Category:Canon dating citation templates", results, "Dates", recurse=True)
+    list_templates(site, "Category:Legends dating citation templates", results, "Dates", recurse=True)
 
     return results
 
@@ -221,7 +221,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
     # # # Template-specific logic
     # IDWAdventures annual= parameter
     if template.startswith("IDWAdventures") and "annual=" in s:
-        m = re.search("\|annual=(.*?)\|(.*?\|)?story=(.*?)[\|\}]", s)
+        m = re.search("\|annual=(.*?)\|(.*?\|)?story=\[*?(.*?)[\|\}]", s)
         return Item(z, mode, a, target=m.group(3), template=template, parent=f"Star Wars Adventures Annual {m.group(1)}")
     # HoloNet News
     elif template == "Hnn":
@@ -238,6 +238,14 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
         m = re.search("\{\{HBCite\|([0-9]+)", s)
         if m:
             return Item(z, mode, a, target=None, template=template, parent="Homing Beacon (newsletter)", issue=m.group(1))
+    elif template == "VisionsCite":
+        m = re.search("\{\{VisionsCite\|(?P<f>focus=1\|)?(?P<e>.*?)(\|.*?)?}}", s)
+        if not m:
+            m = re.search("\{\{VisionsCite\|(?P<e>.*?)(\|.*?(?P<f>focus=1)?.*?)?}}", s)
+        if m and m.group('f'):
+            return Item(z, mode, a, target="Star Wars Visions: Filmmaker Focus", template=template, issue=m.group('f'))
+        elif m:
+            return Item(z, mode, a, target=m.group('e'), template=template)
     # Blog template - first two parameters combined are the URL
     elif template == "Blog":
         m = re.search("{{[^\|\[\}\n]+\|(official=true\|)?(.*?\|.*?)\|(.*?)(\|.*?)?}}", s)
@@ -289,6 +297,9 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
             card_set = re.search("\|stext=(.*?)[\|}].*?$", s).group(1).replace("''", "")
         elif card_set and template == "TopTrumps":
             card_set = f"Top Trumps: {card_set}"
+        elif card_set and template == "SWU":
+            if card_set == "Spark of Rebellion":
+                card_set = f"{card_set} (Spark of Rebellion)"
         elif card_set and template == "SWPM":
             if card_set == "Base Set":
                 card_set = "Star Wars PocketModel TCG: Base Set"
@@ -343,7 +354,9 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
         return Item(z, mode, a, target=m.group('set'), template=template, text=m.group('scenario'))
 
     # Magazine articles with issue as second parameter
-    m = re.search("{{[^\|\[\}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(issue[0-9]?=)?(?P<issue>(Special Edition |Souvenir Special)?H?S? ?[0-9\.]*)(\|issue[0-9]=.*?)?\|(story=|article=)?(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?(\|.*?)?}}", s.replace("&#61;", "="))
+    m = re.search("{{[^\|\[\}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(issue[0-9]?=)?(?P<issue>(Special Edition |Souvenir Special)?H?S? ?[0-9\.]*)(\|issue[0-9]=.*?)?\|(story=|article=)?\[*(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?\]*(\|.*?)?}}", s.replace("&#61;", "="))
+    if not m:
+        m = re.search("{{[^\|\[\}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(story=|article=)?\[*(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?\]*\|(issue[0-9]?=)?(?P<issue>(Special Edition |Souvenir Special)?H?S? ?[0-9\.]*)(\|issue[0-9]=.*?)?(\|.*?)?}}", s.replace("&#61;", "="))
     if m:
         if m.group('year'):
             p = TEMPLATES.get(f"{template}|{m.group('year')}")
@@ -619,7 +632,7 @@ def match_target(o: Item, by_target: Dict[str, List[Item]], other_targets: Dict[
         targets.append(o.target.replace("_", " ").replace("Game Book ", ""))
         if "&hellip;" in o.target:
             targets.append(o.target.replace("&hellip;", "..."))
-        if "(" not in o.target and o.template == "TCW":
+        if "(" not in o.target and o.template in ["TCW", "YJA", "Rebels", "Resistance", "Andor", "TOTJ"]:
             targets.append(f"{o.target} (episode)")
 
         m = re.search("^(Polyhedron|Challenge|Casus Belli|Valkyrie|Inphobia) ([0-9]+)$", o.target)
@@ -682,45 +695,52 @@ def do_urls_match(url, template, d: Item, replace_page, log=False):
     d_url = prep_url(d.url)
     alternate_url = prep_url(d.alternate_url)
     if d_url and d_url == url:
-        return True
+        return 2
     elif alternate_url and alternate_url == url:
-        return True
+        return 2
     elif d_url and "&month=" in d_url and "&month=" in url and d_url.split("&month=", 1)[0] == url.split("&month=", 1)[0]:
-        return True
+        return 2
     elif d_url and "index.html" in d_url and re.search("indexp[0-9]\.html", url):
         if replace_page and d_url == re.sub("indexp[0-9]+\.html", "index.html", url):
-            return True
+            return 2
         elif d_url == re.sub("indexp([0-9]+)\.html", "index.html?page=\\1", url):
-            return True
+            return 2
     elif d_url and ("index.html" in d_url or "index.html" in url) and url.split("/index.html", 1)[0] == d_url.split("/index.html", 1)[0]:
-        return True
+        return 1
     elif d_url and template == "SW" and d.template == "SW" and url.startswith("tv-shows/") and \
             d_url.startswith("series") and d_url == url.replace("tv-shows/", "series/"):
-        return True
+        return 2
     elif d_url and "?page=" in url and d_url == url.split("?page=", 1)[0]:
-        return True
+        return 2
     elif template == "SonyCite" and d.template == "SonyCite" and url.startswith("en_US/players/"):
         if d_url.replace("&resource=features", "") == url.replace("en_US/players/", "").replace("&resource=features", ""):
-            return True
+            return 2
         elif alternate_url and alternate_url.replace("&resource=features", "") == url.replace("en_US/players/", "").replace("&resource=features", ""):
-            return True
-    return False
+            return 2
+    return 0
 
 
 def match_url(o: Item, url: str, data: Dict[str, Item], replace_page: bool):
     check_sw = o.template == "SW" and url.startswith("video/")
     url = prep_url(url)
     merge = {"SW", "SWArchive", "Hyperspace"}
+    partial_matches = []
     for k, d in data.items():
-        if do_urls_match(url, o.template, d, replace_page):
+        x = do_urls_match(url, o.template, d, replace_page)
+        if x == 2:
             if d.template == o.template:
                 return ItemId(o, d, False, False)
             elif {d.template, o.template}.issubset(merge):
                 return ItemId(o, d, False, False)
             elif d.mode == "YT" and o.mode == "YT":
                 return ItemId(o, d, False, False)
+        elif x == 1:
+            partial_matches.append(d)
         if check_sw and d.mode == "YT" and d.special and prep_url(d.special) == url:
             return ItemId(o, d, False, False)
+    if partial_matches:
+        return ItemId(o, partial_matches[0], False, False)
+    return None
 
 
 def load_appearances(site, log, canon_only=False, legends_only=False):
@@ -922,29 +942,14 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 full_appearances[x.full_id()] = x
                 unique_appearances[x.unique_id()] = x
                 if x.target:
-                    if x.target in canon:
-                        x.canon_index = canon[x.target]
-                    elif x.target.replace("(audiobook)", "(novelization)") in canon:
-                        x.canon_index = canon[x.target.replace("(audiobook)", "(novelization)")] + 0.1
-                    elif x.target.replace("(audiobook)", "(novel)") in canon:
-                        x.canon_index = canon[x.target.replace("(audiobook)", "(novel)")] + 0.1
-                    elif x.target.replace(" (audiobook)", "") in canon:
-                        x.canon_index = canon[x.target.replace(" (audiobook)", "")] + 0.1
-                    elif x.target == "Doctor Aphra (script)":
-                        x.canon_index = canon["Doctor Aphra: An Audiobook Original"] + 0.1
-                    elif x.target.replace("(script)", "") in canon:
-                        x.canon_index = canon[x.target.replace("(script)", "")] + 0.1
+                    o = (0.2 if x.abridged else 0.1) if "audiobook" in x.target or "script" in x.target else 0
+                    canon_index = match_audiobook(x.target, canon)
+                    if canon_index:
+                        x.canon_index = canon_index + o
 
-                    if x.target in legends:
-                        x.legends_index = legends[x.target]
-                    elif x.target.replace("(audiobook)", "(novelization)") in legends:
-                        x.legends_index = legends[x.target.replace("(audiobook)", "(novelization)")] + 0.1
-                    elif x.target.replace("(audiobook)", "(novel)") in legends:
-                        x.legends_index = legends[x.target.replace("(audiobook)", "(novel)")] + 0.1
-                    elif x.target.replace(" (audiobook)", "") in legends:
-                        x.legends_index = legends[x.target.replace(" (audiobook)", "")] + 0.1
-                    elif x.target.replace("(script)", "") in legends:
-                        x.legends_index = legends[x.target.replace("(script)", "")] + 0.1
+                    legends_index = match_audiobook(x.target, legends)
+                    if legends_index:
+                        x.legends_index = legends_index + o
 
                     if x.target.endswith(")"):
                         parantheticals.add(x.target.rsplit(" (", 1)[0])
@@ -962,6 +967,24 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
             print(f"{type(e)}: {e}: {i['item']}")
     print(f"{count} out of {len(appearances)} unmatched: {count / len(appearances) * 100}")
     return FullListData(unique_appearances, full_appearances, target_appearances, parantheticals)
+
+
+def match_audiobook(target, data):
+    if target in data:
+        return data[target]
+    elif target == "Doctor Aphra (script)" and "Doctor Aphra: An Audiobook Original" in data:
+        return data["Doctor Aphra: An Audiobook Original"]
+
+    for x in ["audiobook", "unabridged audiobook", "abridged audiobook"]:
+        if target.replace(f"({x})", "(novelization)") in data:
+            return data[target.replace(f"({x})", "(novelization)")]
+        elif target.replace(f"({x})", "(novel)") in data:
+            return data[target.replace(f"({x})", "(novel)")]
+        elif target.replace(f" ({x})", "") in data:
+            return data[target.replace(f" ({x})", "")]
+    if target.replace(" (script)", "") in data:
+        return data[target.replace(" (script)", "")]
+    return None
 
 
 def parse_timeline(text):

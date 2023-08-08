@@ -71,10 +71,14 @@ def parse_infobox(text: str, all_infoboxes: dict):
     data = {}
     pre, post = [], []
     on_own_line = False
+    scroll_box = False
     text = re.sub("}}([A-Za-z _0-9\[\]/|']+''')", "}}\n\\1", text)
     for line in text.replace("}}{{", "}}\n{{").splitlines():
         if done:
             post.append(line)
+        elif "{{scroll" in line.lower():
+            scroll_box = True
+            break
         elif found:
             if line.strip() == "}}":
                 done = True
@@ -103,6 +107,8 @@ def parse_infobox(text: str, all_infoboxes: dict):
                     data[field] = data[field][:-2]
                 done = True
 
+            if field not in data:
+                continue
             n = re.search("\|([A-Za-z_ 0-9]+?)\=(.*)$", data[field].replace("\n", ""))
             while n:
                 if data[field].startswith("|"):
@@ -151,7 +157,7 @@ def parse_infobox(text: str, all_infoboxes: dict):
                     done = True
                 post.append(line)
 
-    return data, pre, post, on_own_line, found
+    return data, pre, post, on_own_line, found, scroll_box
 
 
 def extract_date(text):
@@ -184,7 +190,10 @@ def handle_infobox_on_page(page: Page, all_infoboxes):
     text = page.get()
     extract = True
 
-    data, pre, post, on_own_line, found = parse_infobox(text, all_infoboxes)
+    data, pre, post, on_own_line, found, scroll_box = parse_infobox(text, all_infoboxes)
+    if scroll_box:
+        print(f"Scroll box found in infobox; cannot parse {page.title()}")
+        return text
     if not found or found.lower() not in all_infoboxes:
         print(f"ERROR: no infobox found, or infobox below body text; cannot parse {page.title()}")
         return text
@@ -264,8 +273,6 @@ def handle_infobox_on_page(page: Page, all_infoboxes):
         if f in infobox.combo and not v and any(i in data for i in infobox.groups[infobox.combo[f]] if i != f):
             continue
         elif f in infobox.optional and not v and f not in data:
-            continue
-        elif f == 'pronouns' and not v and found.lower().startswith('droid'):
             continue
         new_infobox.append(f"|{f}={v or ''}")
 

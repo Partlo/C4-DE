@@ -45,7 +45,7 @@ class Item:
 
         self.format_text = format_text
         self.no_issue = no_issue
-        self.old_version = self.original and "oldversion" in self.original
+        self.old_version = self.original and ("oldversion" in self.original or "|old=true" in self.original)
         self.index = None
         self.canon_index = None
         self.legends_index = None
@@ -174,6 +174,7 @@ class SectionComponents:
 
 
 class FinishedSection:
-    def __init__(self, rows: int, text: str):
+    def __init__(self, name, rows: int, text: str):
+        self.name = name
         self.rows = rows
         self.text = text

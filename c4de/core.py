@@ -705,7 +705,7 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def flatten_text(t):
-        return t.replace("&ndash;", "–").replace("&mdash;", "—").replace("\n", "").replace(" ", "")
+        return re.sub("<!--.*?-->", "", t.replace("&ndash;", "–").replace("&mdash;", "—").replace("\n", "").replace(" ", ""))
 
     async def handle_create_index_command(self, message: Message, command: dict):
         try:

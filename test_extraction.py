@@ -1,3 +1,4 @@
+import re
 import sys
 import traceback
 from datetime import datetime
@@ -7,6 +8,9 @@ from pywikibot import Site, Page, handle_args, pagegenerators, showDiff, input_c
 from c4de.sources.analysis import build_new_text
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, build_template_types
 from c4de.sources.infoboxer import list_all_infoboxes
+
+
+STATUS = ["Category:Wookieepedia Featured articles", "Category:Wookieepedia Good articles", "Category:Wookieepedia Comprehensive articles"]
 
 
 def analyze(*args):
@@ -34,46 +38,58 @@ def analyze(*args):
 
     gen = pagegenerators.PreloadingGenerator(gen_factory.getCombinedGenerator(), groupsize=50)
 
-    i = 0
+    i = -1
     x = True
     always = False
+    always_comment = False
     found = False
     message = "Source Engine analysis of Appearances, Sources and references"
     for page in gen:
-        if i % 100 == 0:
-            print(i, page.title())
         i += 1
+        z = str(i / 40377 * 100).zfill(10)[:6]
+        if i % 100 == 0:
+            print(f"{i} -> {z} -> {page.title()}")
         if start_skip and not found:
-            if page.title() == start_skip.replace("_", " "):
+            if page.title() >= start_skip.replace("_", " "):
                 found = True
             else:
                 continue
         try:
+            bf = True
+            if any(c.title() in STATUS for c in page.categories()):
+                bf = False
+
             old_text = page.get()
             text = build_new_text(page, infoboxes, types, appearances, sources, remap,
                                   include_date=include_date, log=log, handle_references=True)
 
             if text == old_text:
+                print(f"{i} -> {z} -> No changes found for {page.title()}")
+                continue
+            z1 = re.sub("<!--.*?-->", "", text)
+            z2 = re.sub("<!--.*?-->", "", old_text)
+            match = z1 == z2
+
+            if always or (match and always_comment):
+                page.put(text, message, botflag=bf)
                 continue
 
-            if text == old_text:
-                continue
+            showDiff(z2, z1, context=1)
 
-            if always:
-                page.put(text, message)
-                continue
-
-            showDiff(old_text, text, context=1)
-
+            c = '(comment-only) ' if match else ''
             choice = input_choice(
-                f'Do you want to accept these changes to {page.title()}?',
-                [('Yes', 'y'), ('No', 'n'), ('All', 'a'), ('Quit', 'q')],
+                f'Do you want to accept these {c}changes to {page.title()}?',
+                [('Yes', 'y'), ('No', 'n'), ('All', 'a'), ('B', 'b'), ('Quit', 'q')],
                 default='N')
             if choice == 'q':
                 break
             if choice == 'y':
-                page.put(text, message, botflag=False)
+                page.put(text, message, botflag=bf)
+            if choice == 'b' and match:
+                page.put(text, message, botflag=bf)
+                always_comment = True
             if choice == 'a':
+                page.put(text, message, botflag=bf)
                 always = True
             else:
                 continue

@@ -351,7 +351,10 @@ def analyze_products(site, products: List[dict], search_terms):
                     try:
                         page_dates.append(datetime.strptime(c, "%B %d, %Y"))
                     except Exception as e:
-                        print(e)
+                        try:
+                            page_dates.append(datetime.strptime(c.replace(',', ''), "%B %Y"))
+                        except Exception as e2:
+                            print(e2)
             item_date = datetime.strptime(item["publicationDate"], "%B %d, %Y")
 
             past = any([d < datetime.now() for d in page_dates])
