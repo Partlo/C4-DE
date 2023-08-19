@@ -164,7 +164,7 @@ def create_index(site, page: Page, results: AnalysisResults, save: bool):
                     date_ref = f'<ref name="{t}">{refs[t]}</ref>'
 
         zt = i.current.original if i.use_original_text else i.master.original
-        xt = f"*{date_str}:{date_ref} {zt}{i.current.extra}"
+        xt = f"*{date_str}:{date_ref} {zt} {i.current.extra.strip()}".strip()
         if xt.count("{{") < xt.count("}}") and xt.endswith("}}}}"):
             xt = xt[:-2]
         lines.append(xt)

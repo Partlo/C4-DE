@@ -170,10 +170,12 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
                 no_image = bool(item.find_elements_by_class_name("noThumbImageScroll"))
                 categories = [c.text for c in item.find_elements_by_css_selector(".pve_categories ul.categories li")]
 
-                if any("CANCELED" in s.text for s in sub_names):
+                if any("CANCELED" in s.text or "CANCELLED" in s.text for s in sub_names):
                     print(f"Skipping canceled product: {title}")
                     continue
                 elif "Thomas Kinkade Studios" in title:
+                    continue
+                elif "Non-Classifiable" in categories:
                     continue
 
                 results.append({

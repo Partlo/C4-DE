@@ -34,6 +34,7 @@ def analyze(*args):
     include_date = any("date:true" in s.lower() for s in args[0])
     save = any("save:true" in s.lower() for s in args[0])
     s = [s.split(":", 1)[1] for s in args[0] if "skipto:" in s.lower()]
+    s = ['"Mouse']
     start_skip = s[0] if s else None
 
     gen = pagegenerators.PreloadingGenerator(gen_factory.getCombinedGenerator(), groupsize=50)
@@ -46,11 +47,12 @@ def analyze(*args):
     message = "Source Engine analysis of Appearances, Sources and references"
     for page in gen:
         i += 1
-        z = str(i / 40377 * 100).zfill(10)[:6]
+        z = str(i / 40421 * 100).zfill(10)[:6]
         if i % 100 == 0:
             print(f"{i} -> {z} -> {page.title()}")
         if start_skip and not found:
             if page.title() >= start_skip.replace("_", " "):
+                print(page.title())
                 found = True
             else:
                 continue
@@ -66,14 +68,15 @@ def analyze(*args):
             if text == old_text:
                 print(f"{i} -> {z} -> No changes found for {page.title()}")
                 continue
-            z1 = re.sub("<!--.*?-->", "", text)
-            z2 = re.sub("<!--.*?-->", "", old_text)
-            match = z1 == z2
+            z1 = re.sub("<!--.*?-->", "", text).replace("{{!}}", "|")
+            z2 = re.sub("(\|book=.*?)(\|story=.*?)(\|.*?)?}}", "\\2\\1\\3}}", re.sub("<!--.*?-->", "", old_text).replace("text=SWCC 2022", "text=SWCA 2022").replace("{{!}}", "|"))
+            match = z1.replace("–", "&ndash;").replace("—", "&mdash;") == z2.replace("–", "&ndash;").replace("—", "&mdash;")
 
             if always or (match and always_comment):
-                page.put(text, message, botflag=bf)
+                page.put(text, message, botflag=match or bf)
                 continue
 
+            # showDiff(old_text, text, context=1)
             showDiff(z2, z1, context=1)
 
             c = '(comment-only) ' if match else ''

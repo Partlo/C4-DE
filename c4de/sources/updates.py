@@ -162,7 +162,7 @@ def parse_page(p: Page, types):
             else:
                 print(f"Cannot parse line: {line}")
 
-    return FullListData(unique, full, target, set())
+    return FullListData(unique, full, target, set(), set())
 
 
 def dates_match(dates: List[Tuple[str, datetime, str]], master):

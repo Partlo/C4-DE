@@ -125,3 +125,7 @@
 **Source Engine fixes and tweaks, like proper sorting of cardnames
 **Redirect fixing and category sorting are now part of Source Engine analysis
 **The Source Engine will now automatically add release dates for entries in Sources in <!-- YYYY-MM-DD --> form as a default.
+*'''3.5.1''': August 19, 2023
+**Added RSS feed handling for Ubisoft and several other sources
+**Source Engine fixes
+**Fixed Spoiler template handling

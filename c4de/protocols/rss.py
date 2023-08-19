@@ -132,6 +132,12 @@ def check_wookieepedia_feeds(site: Site, cache: Dict[str, List[str]]):
         diff_text = f"\n{diff}" if diff else ""
         messages.append(("bot-requests", f"🔧 **WP:BR** was edited by **{e.author}**\n<{e.link}>{diff_text}", None))
 
+    entries = parse_history_rss_feed("https://starwars.fandom.com/wiki/Forum:SH:General_bug_thread?action=history&feed=rss", cache, "Bug Thread")
+    for e in entries:
+        diff = parse_bot_request_diff(e.description)
+        diff_text = f"\n{diff}" if diff else ""
+        messages.append(("admin-help", f"🔧 **Forum:SH:General bug thread** was edited by **{e.author}**\n<{e.link}>{diff_text}", None))
+
     entries = parse_history_rss_feed("https://starwars.fandom.com/wiki/Wookieepedia:Vandalism_in_progress?action=history&feed=rss", cache, "Vandalism")
     for e in entries:
         messages.append(("admin-help", f"❗ **WP:VIP** was edited by **{e.author}**\n<{e.link}>", None))
@@ -237,7 +243,13 @@ def check_sw_news_page(feed_url, cache: Dict[str, List[str]], title_regex):
 
             d = datetime.now().strftime("%Y-%m-%d")
             try:
-                d = datetime.strptime("%B %d, %Y", e['date']).strftime("%Y-%m-%d") if e.get('date') else None
+                if e.get('date'):
+                    x = datetime.strptime(e['date'], "%B %d, %Y")
+                    if (datetime.now() - x).days >= 30:
+                        continue
+                    d = x.strftime("%Y-%m-%d")
+                else:
+                    d = None
             except Exception:
                 pass
             content = get_content_from_sw_article(r_text)
@@ -246,6 +258,42 @@ def check_sw_news_page(feed_url, cache: Dict[str, List[str]], title_regex):
             error_log(type(e), e)
 
     # cache["StarWars.com"] = cache["StarWars.com"][-100:]
+    return final_entries
+
+
+def check_ubisoft_news(site, url, feed_url, cache: Dict[str, List[str]]):
+    page_html = requests.get(feed_url).content
+    soup = BeautifulSoup(page_html, "html.parser")
+
+    initial_entries = []
+    for item in soup.find_all("a", class_="updatesFeed__item"):
+        try:
+            link = item.get("href")
+            title = item.find("h2", class_="updatesFeed__item__wrapper__content__title").text.strip()
+            pub_date = item.find("span", class_="date").text.strip()
+            initial_entries.append({"title": title, "url": link, "date": pub_date})
+        except Exception as e:
+            error_log(type(e), e)
+
+    final_entries = []
+    for e in initial_entries:
+        try:
+            u = url + e["url"]
+            if site not in cache:
+                cache[site] = []
+            if cache[site] and u in cache[site]:
+                continue
+
+            d = datetime.now().strftime("%Y-%m-%d")
+            try:
+                d = datetime.strptime(e['date'], "%B %d, %Y").strftime("%Y-%m-%d") if e.get('date') else None
+            except Exception:
+                pass
+            final_entries.append({"site": site, "title": e["title"], "url": u, "content": "", "date": d})
+            cache[site].append(u)
+        except Exception as e:
+            error_log(type(e), e)
+
     return final_entries
 
 
@@ -394,7 +442,7 @@ def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, che
             log(f"Skipping non-Star Wars post: {title} --> {e.link}")
             continue
         template = None
-        if content and "this week in" in content.lower():
+        if content and ("this week in" in content.lower() or "this week!" in content.lower()):
             template = "ThisWeek"
         elif content and "the high republic show" in content.lower():
             template = "HighRepublicShow"
@@ -442,20 +490,18 @@ def check_latest_url(url, cache: dict, site, title_regex):
 
 def check_title_formatting(text, title_regex, title):
     m = re.search(title_regex, text)
-    if not m:
-        return html.unescape(title).replace("’", "'")
-
-    title = m.group(1)
+    if m:
+        title = m.group(1)
     title = re.sub(r"<em>(.*?)( )?</em>", r"''\1''\2", title)
     title = re.sub(r"<i( .*?)?>(.*?)( )?</i>", r"''\2''\3", title)
     title = re.sub(r"<span[^>]*?italic.*?>(.*?)( )?</span>", r"''\1''\2", title)
     title = re.sub(r"<span[^>]*?italic.*?>(.*?)( )?</span>", r"''\1''\2", title)
     title = title.replace("“", '"').replace("”", '"').replace("’", "'").replace("‘", "'")
-    title = re.sub(" \| ?Disney ?(\+|Plus)[ ]*$", "", title)
-    title = title.replace("|", "&verbar;")
+    title = title.replace("|", "&#124;")
+    title = re.sub(" &#124; ?Disney ?(\+|Plus)[ ]*$", "", title)
     title = re.sub(" (&#124; )?@?StarWarsKids ?x ?@?disneyjunior", "", title)
 
-    return html.unescape(title).replace("’", "'")
+    return html.unescape(title).replace("’", "'").strip()
 
 
 def check_review_board_nominations(site: Site):

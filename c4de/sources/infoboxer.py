@@ -186,8 +186,7 @@ REMAP = {
 }
 
 
-def handle_infobox_on_page(page: Page, all_infoboxes):
-    text = page.get()
+def handle_infobox_on_page(text, page: Page, all_infoboxes):
     extract = True
 
     data, pre, post, on_own_line, found, scroll_box = parse_infobox(text, all_infoboxes)

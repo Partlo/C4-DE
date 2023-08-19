@@ -30,7 +30,7 @@ from c4de.protocols.cleanup import archive_stagnant_senate_hall_threads, remove_
 from c4de.protocols.edelweiss import run_edelweiss_protocol, calculate_isbns_for_all_pages
 from c4de.protocols.rss import check_rss_feed, check_latest_url, check_wookieepedia_feeds, check_sw_news_page, \
     check_review_board_nominations, check_policy, check_consensus_track_duration, check_user_rights_nominations, \
-    check_blog_list, check_ea_news, check_unlimited
+    check_blog_list, check_ea_news, check_unlimited, check_ubisoft_news
 
 from c4de.sources.analysis import analyze_target_page, get_analysis_from_page
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, build_template_types
@@ -705,7 +705,7 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def flatten_text(t):
-        return re.sub("<!--.*?-->", "", t.replace("&ndash;", "–").replace("&mdash;", "—").replace("\n", "").replace(" ", ""))
+        return re.sub("(\|book=.*?)(\|story=.*?)(\|.*?)?}}", "\\2\\1\\3}}", re.sub("<!--.*?-->", "", t.replace("&ndash;", "–").replace("&mdash;", "—").replace("\n", "").replace(" ", "")).replace("{{!}}", "|"))
 
     async def handle_create_index_command(self, message: Message, command: dict):
         try:
@@ -775,7 +775,11 @@ class C4DE_Bot(commands.Bot):
             return
         log("Scheduled Operation: Checking {{Spoiler}} templates")
         for page in Category(self.site, "Articles with expired spoiler notices").articles(namespaces=0):
-            remove_spoiler_tags_from_page(self.site, page, offset=self.timezone_offset)
+            try:
+                remove_spoiler_tags_from_page(self.site, page, offset=self.timezone_offset)
+            except Exception as e:
+                error_log(f"Encountered {type(e)} while removing spoiler template from {page.title()}", e)
+                await self.text_channel(COMMANDS).send(f"Encountered {type(e)} while removing expired spoiler template from {page.title()}. Please check template usage for anomalies.")
 
     @tasks.loop(hours=1)
     async def load_isbns(self):
@@ -1047,6 +1051,8 @@ class C4DE_Bot(commands.Bot):
                     messages = check_unlimited(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
                 elif site_data["template"] == "AMGweb":
                     messages = check_blog_list(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
+                elif site_data["template"] == "Ubisoft":
+                    messages = check_ubisoft_news(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
                 elif site_data["template"] == "EA":
                     messages = check_ea_news(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
                 elif site_data.get("url"):
@@ -1067,7 +1073,7 @@ class C4DE_Bot(commands.Bot):
             archive = self.parse_archive(site_data.get("addToArchive"), site_data["template"])
             messages = check_rss_feed(
                 f"https://www.youtube.com/feeds/videos.xml?channel_id={site_data['channelId']}",
-                self.external_rss_cache["YouTube"], site, "<h1 class=\"title.*?><.*?>(.*?)</.*?></h1>", site_data.get("sw"))
+                self.external_rss_cache["YouTube"], site, "<h1 class=\"title.*?><.*?>(.*?)</.*?></h1>", site_data.get("nonSW", False))
             for m in reversed(messages):
                 msg, d, template = await self.prepare_new_rss_message(m, "https://www.youtube.com", site_data, True, archive)
                 messages_to_post += msg
@@ -1080,14 +1086,15 @@ class C4DE_Bot(commands.Bot):
                 await self.report_error(f"RSS: {message}", type(e), e)
 
         with open(EXTERNAL_RSS_CACHE, "w") as f:
-            f.writelines(json.dumps({k: {i: c[-150:] for i, c in v.items()} for k, v in self.external_rss_cache.items()}, indent=4))
+            f.writelines(json.dumps({k: {i: c[-250:] for i, c in v.items()} for k, v in self.external_rss_cache.items()}, indent=4))
 
         nd = datetime.now().strftime("%Y-%m-%d")
         try:
             page = Page(self.site, f"Wookieepedia:Sources/Web/{datetime.now().year}")
             text = page.get()
             for d, t in templates:
-                text += f"\n*{d or nd}: {t}"
+                if t.split("|archivedate=", 1)[0].rsplit("|", 1)[0] not in text:
+                    text += f"\n*{d or nd}: {t}"
             if text != page.get():
                 page.put(text, "Adding new sources", botflag=False)
         except Exception as e:
@@ -1113,7 +1120,6 @@ class C4DE_Bot(commands.Bot):
         f = m["title"].replace("''", "*")
         msg = "{0} **{1}:**    {2}\n- <{3}>".format(self.emoji_by_name(site_data["emoji"]), t, f, m["url"])
 
-        print(success, site_data.get("addToArchive"), not already_archived, target)
         if success and site_data.get("addToArchive") and not already_archived:
             try:
                 self.add_urls_to_archive(site_data["template"], target, archivedate)

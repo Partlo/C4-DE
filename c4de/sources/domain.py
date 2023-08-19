@@ -25,8 +25,9 @@ class Item:
                  parent: str = None, template: str = None, url: str = None, issue: str = None, subset: str=None,
                  card: str = None, special=None, collapsed=False, format_text: str = None, no_issue=False, date=''):
         self.is_appearance = is_app
-        self.mode = mode
-        self.sort_mode = SORT_MODES.get(mode, 5)
+        self.tv = mode == "TV"
+        self.mode = "General" if mode == "TV" else mode
+        self.sort_mode = SORT_MODES.get(self.mode, 5)
         self.invalid = invalid
         self.original = self.strip(original)
         self.target = self.strip(target)
@@ -51,7 +52,9 @@ class Item:
         self.legends_index = None
         self.override = None
         self.override_date = None
+        self.unknown = False
         self.date = ''
+        self.future = False
         self.canon = None
         self.from_extra = None
         self.unlicensed = False
@@ -124,11 +127,12 @@ class ItemId:
 
 
 class FullListData:
-    def __init__(self, unique: Dict[str, Item], full: Dict[str, Item], target: Dict[str, List[Item]], parantheticals: set):
+    def __init__(self, unique: Dict[str, Item], full: Dict[str, Item], target: Dict[str, List[Item]], parantheticals: set, both_continuities: set):
         self.unique = unique
         self.full = full
         self.target = target
         self.parantheticals = parantheticals
+        self.both_continuities = both_continuities
 
 
 class PageComponents:

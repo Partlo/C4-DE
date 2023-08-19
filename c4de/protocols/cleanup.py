@@ -47,7 +47,7 @@ def remove_spoiler_tags_from_page(site, page, limit=30, offset=5):
         print(f"Cannot find spoiler tag on {page.title()}")
         return "no-tag"
 
-    target = line.group(0).replace("||", "|").split("|")
+    target = line.group(2).replace("||", "|").split("|")
     fields = []
     named = {}
     for field in target:
