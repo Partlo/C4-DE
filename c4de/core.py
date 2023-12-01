@@ -728,7 +728,7 @@ class C4DE_Bot(commands.Bot):
                 if "{{Indexpage}}" not in text:
                     if "==Appearances==" in text:
                         target.put(text.replace("==Appearances==", "==Appearances==\n{{Indexpage}}"), "Adding Index", botflag=False)
-                    elif "==Appearances==" in text:
+                    elif "==Sources==" in text:
                         target.put(text.replace("==Sources==", "==Sources==\n{{Indexpage}}"), "Adding Index", botflag=False)
                     else:
                         await message.channel.send("Could not locate Appearances or Sources header in target article, so {Indexpage} has not been added")
@@ -1103,6 +1103,8 @@ class C4DE_Bot(commands.Bot):
 
     async def prepare_new_rss_message(self, m: dict, base_url: str, site_data: dict, youtube: bool, archive: dict) -> Tuple[List[Tuple[str, str]], str, str]:
         target = m["url"].replace(base_url + "/", "")
+        if target.endswith("/"):
+            target = target[:-1]
         already_archived = archive and archive.get(target)
         if already_archived:
             log(f"URL already archived and recorded: {m['url']}")
@@ -1189,7 +1191,7 @@ class C4DE_Bot(commands.Bot):
             if not page.exists():
                 return None
             archive = {}
-            for u, d in re.findall("\[['\"](.*?)['\"]\] ?= ?['\"]?([0-9]+)['\"]?", page.get()):
+            for u, d in re.findall("\[['\"](.*?)['\"]\] ?= ?['\"]?([0-9]+)/?['\"]?", page.get()):
                 archive[u.replace("\\'", "'")] = d
             return archive
         return None

@@ -47,13 +47,13 @@ def extract_release_date(title, text):
 
 SOURCE_INFOBOXES = ["activity book", "magazine", "magazine article", "magazine department", "music", "toy line",
                     "reference book", "web article"]
-APP_INFOBOXES = ["comic book", "comic story", "video game", "graphic novel"]
-EXTRA_INFOBOXES = ["comic series", "book series", "television series", "comic story arc", "television season"]
+APP_INFOBOXES = ["comic book", "comic story", "video game", "graphic novel", "audiobook"]
+EXTRA_INFOBOXES = ["comic series", "comic story arc", "book series", "television series", "television season"]
 APP_CATEGORIES = ["Future audiobooks", "Future films", "Future short stories", "Future novels",
                   "Future television episodes"]
 
 INFOBOX_SKIP = ["character", "oou company", "person", "comic collection", "web article", "website"]
-SERIES_SKIP = ["comic story arc", "comic series", "television series", "television season", "book series", "magazine department", "magazine series"]
+SERIES_SKIP = ["magazine department", "magazine series"]
 
 
 def determine_app_or_source(text, category, infobox):
@@ -61,15 +61,15 @@ def determine_app_or_source(text, category, infobox):
         return "Extra"
     elif "|is_appearance=1" in text:
         return "Appearances"
-    elif category == "Future trade paperbacks":
+    elif category == "Future trade paperbacks" or infobox in INFOBOX_SKIP:
         return "SKIP"
-    elif infobox == "Card game" or infobox == "Miniatures game":
+    elif infobox.lower() == "card game" or infobox == "miniatures game":
         return "CardSets"
-    elif infobox in EXTRA_INFOBOXES:
+    elif infobox.lower() in EXTRA_INFOBOXES:
         return "Extra"
-    elif infobox in APP_INFOBOXES:
+    elif infobox.lower() in APP_INFOBOXES:
         return "Appearances"
-    elif infobox in SOURCE_INFOBOXES:
+    elif infobox.lower() in SOURCE_INFOBOXES:
         return "Sources"
     elif category in APP_CATEGORIES:
         return "Appearances"
@@ -114,17 +114,23 @@ def get_future_products_list(site: Site, infoboxes=None):
     for page in cat.articles():
         if page.title().startswith("List of") or page.title().startswith("Timeline of"):
             continue
-        infobox = identify_infobox(page.get(), infoboxes)
-        results.append(analyze_page(page, None, infobox))
+        t = page.get()
+        infobox = identify_infobox(t, infoboxes)
+        if should_check_product(infobox, t, page, cat):
+            results.append(analyze_page(page, None, infobox))
 
     for c in cat.subcategories():
+        if "trade paperbacks" in c.title():
+            continue
         for page in c.articles():
             if page.title().startswith("List of") or page.title().startswith("Timeline of"):
                 continue
             elif c.title() == "Category:Future events" and len(page.title()) == 4 and page.title().startswith("20"):
                 continue
-            infobox = identify_infobox(page.get(), infoboxes)
-            results.append(analyze_page(page, c.title(), infobox))
+            t = page.get()
+            infobox = identify_infobox(t, infoboxes)
+            if should_check_product(infobox, t, page, c):
+                results.append(analyze_page(page, c.title(), infobox))
     return results
 
 
@@ -182,7 +188,7 @@ def dates_match(dates: List[Tuple[str, datetime, str]], master):
 
 
 def build_tracked(a, d, tracked):
-    tracked.add(a.replace('&#61;', '=').replace('&hellip;', '…'))
+    tracked.add(a.replace('&#61;', '=').replace('&hellip;', '…').replace('&mdash;', '—'))
     for i in d:
         if i.parent:
             tracked.add(i.parent.replace('&#61;', '=').replace('&hellip;', '…'))
@@ -220,6 +226,25 @@ def search_for_missing(site, appearances, sources):
     return not_found
 
 
+def should_check_product(inf, t, p: Page, c: Category):
+    if "Game Book" in p.title() or ("Young Jedi Adventures episodes" in c.title() and " / " in p.title()):
+        return False
+    elif inf in INFOBOX_SKIP:
+        print(f"Skipping {inf} article: {p.title()} in {c.title()}")
+        return False
+    elif inf in SERIES_SKIP or "(series)" in p.title() or p.title() == "Star Wars App":
+        return False
+    elif "{{Author-stub" in t or "{{Bio-stub" in t or "{{Author-stub" in t:
+        # print(f"Skipping person article: {p.title()} in {c.title()}")
+        return False
+    elif inf == "toy line" and p.title().startswith("LEGO"):
+        return False
+    elif f"[[{c.title()}| " in t or f"[[{c.title()}|*" in t or f"[[Category:{p.title()}| " in t:
+        # print(f"Skipping root page {p.title()} for {c.title()}")
+        return False
+    return True
+
+
 def check_category(c: Category, cats_checked, pages_checked, tracked, infoboxes, not_found, counts):
     if c.title() in cats_checked:
         return
@@ -242,22 +267,7 @@ def check_category(c: Category, cats_checked, pages_checked, tracked, infoboxes,
 
             t = p.get()
             inf = identify_infobox(t, infoboxes) or 'article'
-            if "Game Book" in p.title() or ("Young Jedi Adventures episodes" in c.title() and " / " in p.title()):
-                continue
-            elif inf in INFOBOX_SKIP:
-                # print(f"Skipping {inf} article: {p.title()} in {c.title()}")
-                continue
-            elif inf in SERIES_SKIP or "(series)" in p.title() or p.title() == "Star Wars App":
-                continue
-            elif "{{Author-stub" in t or "{{Bio-stub" in t or "{{Author-stub" in t:
-                # print(f"Skipping person article: {p.title()} in {c.title()}")
-                continue
-            elif inf == "toy line" and p.title().startswith("LEGO"):
-                continue
-            elif f"[[{c.title()}| " in t or f"[[{c.title()}|*" in t or f"[[Category:{p.title()}| " in t:
-                # print(f"Skipping root page {p.title()} for {c.title()}")
-                continue
-            else:
+            if should_check_product(inf, t, p, c):
                 print(f"Found {inf}: {p.title()}")
                 counts["found"] += 1
                 not_found.append(analyze_page(p, c.title(), inf))
@@ -313,6 +323,8 @@ def handle_results(site, results: List[FutureProduct], save=True):
             print(f"Skipping {i.page.title()}")
         else:
             print(f"Unknown: {i.item_type}: {i.page.title()}")
+            if z == "Sources|False" and i.page.title() in master_data["CardSets"].target:
+                continue
             if z not in new_items:
                 new_items[z] = []
             new_items[z].append(i)
@@ -327,8 +339,10 @@ def handle_results(site, results: List[FutureProduct], save=True):
     build_new_page(sets_page, sets, "CardSets", new_items, changed_dates, True, save)
 
 
-DATES = {"Wookieepedia:Appearances/Legends": "1977", "Wookieepedia:Appearances/Canon": "2008",
-         "Wookieepedia:Sources/Canon/General": "2014"}
+DATES = {"Wookieepedia:Appearances/Legends": "1977",
+         "Wookieepedia:Appearances/Canon": "2008",
+         "Wookieepedia:Sources/Canon/General": "2014",
+         "Wookieepedia:Sources/CardSets": "1977"}
 
 
 def prep_date(d):
@@ -353,12 +367,27 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
 
     final = []
     for i in new_items:
-        t = f"''[[{i.page.title()}]]''"
-        t = re.sub("''\[\[((.*?) \(.*?\)( [0-9]+)?)\]\]''", "[[\\1|''\\2''\\3]]", t)
-        t = re.sub("''\[\[(.*?)\|(((?!'').)*?) ([0-9]+)\]\]''", "[[\\1|''\\2'' \\3]]", t)
-        t = re.sub("''\[\[([^\|\]]+?) ([0-9]+)\]\]''", "[[\\1 \\2|''\\1'' \\2]]", t)
-        if "[[Untitled" in t:
-            t = t[2:-2]
+        if i.infobox in ["short story", "magazine article", "magazine department"]:
+            t = f'"[[{i.page.title()}]"'
+            pt = i.page.get()
+            x = re.search("\|published in=.*?\[\[(.*?)(\|.*?)\]\]", pt)
+            if x and x.group(1) and "Star Wars Insider" in x.group(1):
+                mi = x.group(1).split("Insider")[-1].strip()
+                if mi.isnumeric():
+                    t = f"{{{{InsiderCite|{mi}|{i.page.title()}}}}}"
+                else:
+                    t = f"{{{{InsiderCite|link={x.group(1)}|{i.page.title()}}}}}"
+            elif x and x.group(2):
+                t = f"{{{{StoryCite|book={x.group(1)}|bformatted={x.group(2)[1:]}|story={i.page.title()}}}}}"
+            elif x:
+                t = f"{{{{StoryCite|book={x.group(1)}|story={i.page.title()}}}}}"
+        else:
+            t = f"''[[{i.page.title()}]]''"
+            t = re.sub("''\[\[((.*?) \(.*?\)( [0-9]+)?)\]\]''", "[[\\1|''\\2''\\3]]", t)
+            t = re.sub("''\[\[(.*?)\|(((?!'').)*?) ([0-9]+)\]\]''", "[[\\1|''\\2'' \\3]]", t)
+            t = re.sub("''\[\[([^\|\]]+?) ([0-9]+)\]\]''", "[[\\1 \\2|''\\1'' \\2]]", t)
+            if "[[Untitled" in t:
+                t = t[2:-2]
         d = build_date(i.dates)
         final.append([t, prep_date(d), 100])
     for x, i in data.full.items():
@@ -379,13 +408,13 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
             if d.startswith("1") or d.startswith("2"):
                 if post_found:
                     pass
-                elif start_date and not section:
-                    section = f"Pre-{start_date}"
-                    lines.append(f"=={section}==")
                 elif start_date and d[:4] == start_date:
                     start_date = None
                     section = d[:4]
                     lines.append(f"\n=={section}==")
+                elif start_date and not section:
+                    section = f"Pre-{start_date}"
+                    lines.append(f"=={section}==")
                 elif not start_date and d[:4] != section:
                     if section == post:
                         section = f"Post-{post}"

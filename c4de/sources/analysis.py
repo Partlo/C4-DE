@@ -35,7 +35,7 @@ def fix_redirects(redirects: Dict[str, str], text, section_name):
             x = prepare_title(r)
             text = re.sub("\[\[" + x + "\|('')?(" + prepare_title(t) + ")('')?\]\]", f"\\1[[\\2]]\\1", text)
             text = re.sub("\[\[" + x + "(\|.*?)\]\]", f"[[{t}\\1]]", text)
-            text = re.sub("\[\[(" + x + ")\]\]", f"[[{t}|\\1]]", text)
+            text = re.sub("\[\[(" + x + ")\]\]([A-z]*)", f"[[{t}|\\1\\2]]", text)
             text = text.replace(f"set={r}", f"set={t}")
             text = text.replace(f"book={r}", f"book={t}")
     return text
@@ -50,9 +50,9 @@ def build_redirects(page: Page):
 
 
 def split_section_pieces(section):
-    pieces = re.split("(==|\{\{DEFAULTSORT|\[\[Category:)", section, 1)
+    pieces = re.split("(==|\{\{DEFAULTSORT|\{\{[Ii]nterlang|\[\[Category:)", section, 1)
     section = pieces[0]
-    after = ("==" + pieces[1]) if len(pieces) > 1 else ''
+    after = (pieces[1] + pieces[2]) if len(pieces) > 1 else ''
     if "{{start_box" in section.lower() or "{{start box" in section.lower():
         pieces2 = re.split("({{[Ss]tart[_ ]box)", section, 1)
         if len(pieces2) == 3:
@@ -60,14 +60,13 @@ def split_section_pieces(section):
             after = pieces2[1] + pieces2[2] + after
 
     if after:
-        x = re.split("(==Notes and references|\{\{DEFAULTSORT|\[\[Category:)", after, 1)
+        x = re.split("(==Notes? and references|\{\{DEFAULTSORT|\[\[Category:)", after, 1)
         if x and len(x) == 3:
             return section, x[0], x[1] + x[2]
     return section, after
 
 
-def build_page_components(target: Page, types: dict, appearances: FullListData, sources: FullListData, remap: dict,
-                          all_infoboxes, handle_references=False, log=True) -> Tuple[PageComponents, list, dict]:
+def initial_cleanup(target: Page, all_infoboxes):
     before = target.get()
     if "]]{{" in before or "}}{{" in before:
         before = re.sub(
@@ -75,22 +74,43 @@ def build_page_components(target: Page, types: dict, appearances: FullListData, 
             "\\1 \\2", before)
     before = handle_infobox_on_page(before, target, all_infoboxes)
     before = before.replace("DisneyPlusYT", "DisneyPlusYouTube")
-    redirects = build_redirects(target)
-    before = re.sub("({{[Ss]croll[_ ]box\|)\*", "{{Scroll_box|\n*", before)
-    before = re.sub("([A-z0-9\.>])(\[\[File:.*?\]\]\n)", "\\1\n\\2", before)
+    before = re.sub("({{[Ss]croll[_ ]box\|)\*", "{{Scroll_box|\n*", before) \
+        .replace("referene", "reference").replace("Note and references", "Notes and references") \
+        .replace("Notes and reference=", "Notes and references=").replace("==References==", "==Notes and references==") \
+        .replace("Apearance", "Appearance").replace("Appearence", "Appearance")
+    before = re.sub("([A-z0-9\.>])(\[\[File:.*?\]\]\n)", "\\1\n\\2", before).replace("*{{Indexpage", "{{Indexpage")
     before = re.sub("=+'*Non-canonical (appearances|sources)'*=+", "===Non-canon \\1===", before)
     while "== " in before or " ==" in before:
         before = before.replace("== ", "==").replace(" ==", "==")
+    if "{{C|unlicensed}}" in before:
+        before = re.sub("( {{[Cc]\|[Uu]nlicensed\}\})+", "", before)
 
     if "‎" in before:
         before = before.replace("‎", "")
         print(f"Found ‎ in {target.title()}")
-    results = PageComponents(before)
+    return before
+
+
+def build_page_components(target: Page, types: dict, appearances: FullListData, sources: FullListData, remap: dict,
+                          all_infoboxes, handle_references=False, log=True) -> Tuple[PageComponents, list, dict]:
+    before = initial_cleanup(target, all_infoboxes)
+    redirects = build_redirects(target)
+
+    canon = False
+    app_mode = BY_INDEX
+    for c in target.categories():
+        if "legends articles" in c.title().lower():
+            app_mode = UNCHANGED
+        elif "canon articles" in c.title().lower():
+            canon = True
+    results = PageComponents(before, canon, app_mode)
 
     unknown = []
     final = ""
     x = re.split("(==Notes and references|==External links|\{\{[R]eflist|\{\{DEFAULTSORT|\[\[[Cc]ategory:)", before, 1)
     if x:
+        if len(x) < 3:
+            print(x)
         before = x[0]
         final = x[1] + x[2]
 
@@ -100,6 +120,9 @@ def build_page_components(target: Page, types: dict, appearances: FullListData, 
             nc_sources_section, after = split_section_pieces(nc_sources_section)
             nc_sources_section = fix_redirects(redirects, nc_sources_section, "Non-canon sources")
             results.ncs = parse_section(nc_sources_section, types, False, unknown, after, log)
+            if results.ncs and results.ncs.after.startswith("==Behind the scenes=="):
+                before += f"\n{results.ncs.after}"
+                results.ncs.after = ""
             if log:
                 print(f"Non-Canon Sources: {len(results.ncs.items)} --> {len(set(i.unique_id() for i in results.ncs.items))}")
 
@@ -109,6 +132,9 @@ def build_page_components(target: Page, types: dict, appearances: FullListData, 
             sources_section, after = split_section_pieces(sources_section)
             sources_section = fix_redirects(redirects, sources_section, "Sources")
             results.src = parse_section(sources_section, types, False, unknown, after, log)
+            if results.src and results.src.after.startswith("==Behind the scenes=="):
+                before += f"\n{results.src.after}"
+                results.src.after = ""
             if log:
                 print(f"Sources: {len(results.src.items)} --> {len(set(i.unique_id() for i in results.src.items))}")
 
@@ -118,6 +144,9 @@ def build_page_components(target: Page, types: dict, appearances: FullListData, 
             nc_app_section, after = split_section_pieces(nc_app_section)
             nc_app_section = fix_redirects(redirects, nc_app_section, "Non-canon appearances")
             results.nca = parse_section(nc_app_section, types, True, unknown, after, log)
+            if results.nca and results.nca.after.startswith("==Behind the scenes=="):
+                before += f"\n{results.nca.after}"
+                results.nca.after = ""
             if log:
                 print(f"Non-Canon Appearances: {len(results.nca.items)} --> {len(set(i.unique_id() for i in results.nca.items))}")
 
@@ -127,13 +156,16 @@ def build_page_components(target: Page, types: dict, appearances: FullListData, 
             app_section, after = split_section_pieces(app_section)
             app_section = fix_redirects(redirects, app_section, "Appearances")
             results.apps = parse_section(app_section, types, True, unknown, after, log)
+            if results.apps and results.apps.after.startswith("==Behind the scenes=="):
+                before += f"\n{results.apps.after}"
+                results.apps.after = ""
             if log:
                 print(f"Appearances: {len(results.apps.items)} --> {len(set(i.unique_id() for i in results.apps.items))}")
 
     results.before = before
     results.final = final
     if handle_references:
-        results.before = analyze_body(target, results.before, types, appearances, sources, remap, redirects, log)
+        results.before = analyze_body(target, results.before, types, appearances, sources, remap, redirects, canon, log)
     return results, unknown, redirects
 
 
@@ -146,11 +178,13 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
     other1, other2 = [], []
     start = True
     succession_box = False
+    scroll_box = False
     cs = 0
     section = re.sub("({{CardGameSet\|set=.*?)\n\|cards=", "\\1|cards=\n", section)
     section = re.sub("'*\[\[Star Wars Miniatures\]\]'*: '*\[\[(.*?)(\|.*?)?\]\]'*", "{{SWMiniCite|set=\\1}}", section)
+    section = re.sub(" \((as .*?)\)", " {{C|\\1}}", section)
     for s in section.splitlines():
-        if succession_box:
+        if succession_box or "{{more" in s.lower():
             other2.append(s)
             continue
         if "CardGameSet" in s:
@@ -160,74 +194,96 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
             s = re.sub("<\!--.*?-->", "", s)
 
         if s.strip().startswith("*"):
-            if s.endswith("}}}}") and s.count("{{") < s.count("}}"):
-                s = s[:-2]
             start = False
-            z = s[1:].replace("&ndash;", '–').replace('&mdash;', '—')
-            z = re.sub("(\{\{InsiderCite\|[0-9]{2}\|)Ask Lobot.*?}}", "\\1Star Wars Q&A}}", z)
-            x1 = re.search('( ?(<small>)? ?\{+ ?(1st[A-z]*|[A-z][od]|[Ff]act|[Ll]n|[Nn]cm?|[Cc]|[Aa]mbig|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Nn]cs?|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene) ?[\|\}].*?$)', z)
-            extra = x1.group(1) if x1 else ''
-            if extra:
-                z = z.replace(extra, '').strip()
-
-            zs = [z]
-            if "/" in z and "{{YJA|" in z:
-                x = re.search("^(.*?\{\{YJA\|)(.*?)/(.*?)(\}\}.*?)$", z)
-                if x:
-                    if log:
-                        print(f"Splitting multi-entry line: {s}")
-                    zs = [f"{x.group(1)}{x.group(2)}{x.group(4)}", f"{x.group(1)}{x.group(3)}{x.group(4)}"]
-            elif "/" in z:
-                x = re.search("^(.*?\]\]'*) / ('*\[.*?)$", z)
-                if x:
-                    if log:
-                        print(f"Splitting multi-entry line: {s}")
-                    zs = [x.group(1), x.group(2)]
-
-            found = False
-            for y in zs:
-                t = extract_item(convert_issue_to_template(y), is_appearances, "target", types)
-                if t:
-                    found = True
-                    data.append(t)
-                    t.extra = extra.strip()
-                    ex = re.search("<!-- ?(Exception|Override):? ?([0-9X-]+)? ?-->", s)
-                    if ex:
-                        t.override = ex.group(1)
-                        t.override_date = ex.group(2)
-                    unique_ids[t.unique_id()] = t
-            if not found:
-                if "audiobook" not in s:
-                    unknown.append(s)
-                    other2.append(s)
-                if log:
-                    print(f"Unknown: {s}")
-        elif "{{start_box" in s.lower() or "{{start box" in s.lower():
+            handle_valid_line(s, is_appearances, log, types, data, other2, unknown, unique_ids, False)
+        elif "{{scroll_box" in s.lower() or "{{scroll box" in s.lower():
+            scroll_box = True
+            other1.append(s)
+        elif scroll_box and (s.startswith("|height=") or s.startswith("|content=")):
+            other1.append(s)
+        elif "{{start_box" in s.lower() or "{{start box" in s.lower() or "{{interlang" in s.lower():
             succession_box = True
             other2.append(s)
-        elif "{{imagecat" in s.lower() or "{{mediacat" in s.lower():
+        elif "{{imagecat" in s.lower() or "{{mediacat" in s.lower() or "{{indexpage" in s.lower():
             other1.append(s)
         elif s == "}}":
             if cs > 0:
                 cs = 0
         elif re.match("^<\!--.*?-->$", s):
             continue
-        elif start and s.strip():
-            other1.append(s)
         elif s.strip():
-            other2.append(s)
+            if not data and not re.search("^[\{\[]+([Ii]ncomplete|[Ss]croll|[Mm]ore[_ ]|[Ff]ile:)", s.strip()):
+                x = handle_valid_line(f"*{s}", is_appearances, log, types, data, other2, unknown, unique_ids, True)
+                if x:
+                    start = False
+                    continue
+            if start:
+                other1.append(s)
+            else:
+                other2.append(s)
     return SectionComponents(data, other1, other2, after)
 
 
-def analyze_body(page: Page, text, types, appearances: FullListData, sources: FullListData, remap, redirects, log: bool):
+def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, unknown, unique_ids, attempt=False):
+    if s.endswith("}}}}") and s.count("{{") < s.count("}}"):
+        s = s[:-2]
+    z = s[1:].replace("&ndash;", '–').replace('&mdash;', '—')
+    z = re.sub("(\{\{InsiderCite\|[0-9]{2}\|)Ask Lobot.*?}}", "\\1Star Wars Q&A}}", z)
+    if "SWGTCG" in s and "scenario" in z:
+        z = re.sub("(\{\{SWGTCG.*?)\}\} \{\{C\|(.*?scenario)\}\}", "\\1|scenario=\\2}}", z)
+    x1 = re.search(
+        '( ?(<small>)? ?\{+ ?(1st[A-z]*|V?[A-z][od]|[Ff]act|DLC|[Ll]n|[Nn]cm?|[Cc]|[Aa]mbig|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Nn]cs?|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene) ?[\|\}].*?$)',
+        z)
+    extra = x1.group(1) if x1 else ''
+    if extra:
+        z = z.replace(extra, '').strip()
+    bold = "'''" in z
+
+    zs = [z]
+    if "/" in z and "{{YJA|" in z:
+        x = re.search("^(.*?\{\{YJA\|)(.*?)/(.*?)(\}\}.*?)$", z)
+        if x:
+            if log:
+                print(f"Splitting multi-entry line: {s}")
+            zs = [f"{x.group(1)}{x.group(2)}{x.group(4)}", f"{x.group(1)}{x.group(3)}{x.group(4)}"]
+    elif "/" in z:
+        x = re.search("^(.*?\]\]'*) / ('*\[.*?)$", z)
+        if x:
+            if log:
+                print(f"Splitting multi-entry line: {s}")
+            zs = [x.group(1), x.group(2)]
+
+    found = False
+    for y in zs:
+        t = extract_item(convert_issue_to_template(y), is_appearances, "target", types)
+        if t:
+            found = True
+            data.append(t)
+            t.extra = extra.strip()
+            t.bold = bold
+            ex = re.search("<!-- ?(Exception|Override):? ?([0-9X-]+)? ?-->", s)
+            if ex:
+                t.override = ex.group(1)
+                t.override_date = ex.group(2)
+            unique_ids[t.unique_id()] = t
+    if not found:
+        if "audiobook" not in s and not attempt:
+            unknown.append(s)
+            other2.append(s)
+        if log:
+            print(f"Unknown: {s}")
+    return found
+
+
+def analyze_body(page: Page, text, types, appearances: FullListData, sources: FullListData, remap, redirects, canon, log: bool):
     references = re.findall("(<ref name=.*?[^/]>(.*?)</ref>)", text)
     new_text = text
     for full_ref, ref in references:
-        new_text = handle_reference(full_ref, ref, page, new_text, types, appearances, sources, remap, redirects, log)
+        new_text = handle_reference(full_ref, ref, page, new_text, types, appearances, sources, remap, redirects, canon, log)
     return new_text
 
 
-def handle_reference(full_ref, ref, page: Page, new_text, types, appearances: FullListData, sources: FullListData, remap, redirects, log: bool):
+def handle_reference(full_ref, ref, page: Page, new_text, types, appearances: FullListData, sources: FullListData, remap, redirects, canon, log: bool):
     try:
         new_ref = fix_redirects(redirects, ref, "Reference")
         new_ref = re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", new_ref)
@@ -245,7 +301,7 @@ def handle_reference(full_ref, ref, page: Page, new_text, types, appearances: Fu
         for link in links:
             x = extract_item(link[0], False, "reference", types)
             if x:
-                o = determine_id_for_item(x, page.site, appearances.unique, appearances.target, sources.unique, sources.target, remap, log)
+                o = determine_id_for_item(x, page.site, appearances.unique, appearances.target, sources.unique, sources.target, remap, canon, log)
                 if o and not o.use_original_text and o.replace_references:
                     if o.master.template and not x.template and x.target and not re.search("^['\"]*\[\[" + x.target + "(\|.*?)?\]\]['\"]*$", new_ref):
                         print(f"Skipping {link[0]} due to extraneous text")
@@ -264,22 +320,23 @@ def handle_reference(full_ref, ref, page: Page, new_text, types, appearances: Fu
                     elif re.search("^['\"]*\[\[" + x.target.replace("(", "\(").replace(")", "\)") + "(\|.*?)?\]\]['\"]*", new_ref):
                         if "TODO" in o.master.original:
                             print(link[0], x.full_id(), o.master.original, o.current.original)
-                        new_links.append((link[0], o))
+                        if link[0] != o.master.original:
+                            new_links.append((link[0], o))
 
         for ot, ni in new_links:
             new_ref = new_ref.replace(ot, re.sub("(\|book=.*?)(\|story=.*?)(\|.*?)?}}", "\\2\\1\\3}}", ni.master.original))
 
         new_templates = []
         for t in templates:
-            if t == "{{'s}}" or "{{TORcite" in t or t.startswith("{{C|") or t.startswith("{{Blogspot") or t.startswith("{{Cite"):
+            if t == "{{'s}}" or "{{TORcite" in t or "{{SWG" in t or t.startswith("{{C|") or t.startswith("{{Blogspot") or t.startswith("{{Cite"):
                 continue
             x = extract_item(t, False, "reference", types)
             if x:
                 if x.template and x.template.endswith("Date"):
                     continue
                 o = determine_id_for_item(x, page.site, appearances.unique, appearances.target, sources.unique,
-                                          sources.target, {}, log)
-                if o and not o.use_original_text:
+                                          sources.target, {}, canon, log)
+                if o and not o.use_original_text and t != o.master.original:
                     ex = []
                     if "|author=" in t:
                         ex += [r[0] for r in re.findall("(\|author=(\[\[.*?\|.*?\]\])?.*?)[\|\}]", t)]
@@ -302,6 +359,8 @@ def handle_reference(full_ref, ref, page: Page, new_text, types, appearances: Fu
             new_ref = new_ref.replace(ot, z.replace("–", "&ndash;").replace("—", "&mdash;"))
 
         final_ref = full_ref.replace(ref, new_ref).replace("film]] film", "film]]").replace("|reprint=yes", "")
+        if "series series" in final_ref:
+            final_ref = re.sub(" series( series)+", " series", final_ref)
         new_text = new_text.replace(full_ref, final_ref)
     except Exception as e:
         traceback.print_exc()
@@ -327,27 +386,10 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
     both_continuities = appearances.both_continuities.union(sources.both_continuities)
     dates = []
     unknown_apps, unknown_src = [], []
-    new_apps = build_item_ids_for_section(target, "Appearances", results.apps.items, appearances, sources, remap, unknown_apps, log)
-    new_nca = build_item_ids_for_section(target, "Non-canon appearances", results.nca.items, appearances, sources, remap, unknown_apps, log)
-    new_src = build_item_ids_for_section(target, "Sources", results.src.items, sources, appearances, remap, unknown_src, log)
-    new_ncs = build_item_ids_for_section(target, "Non-canon sources", results.ncs.items, sources, appearances, remap, unknown_src, log)
-
-    if new_apps.wrong or new_nca.wrong:
-        if log:
-            print(f"Moving {len(new_apps.wrong) + len(new_nca.wrong)} sources from Appearances to Sources")
-        new_src.found += new_apps.wrong
-        if new_ncs.found:
-            new_ncs.found += new_nca.wrong
-        else:
-            new_src.found += new_nca.wrong
-    if new_src.wrong or new_ncs.wrong:
-        if log:
-            print(f"Moving {len(new_src.wrong) + len(new_ncs.wrong)} sources from Sources to Appearances")
-        new_apps.found += new_src.wrong
-        if new_ncs.found:
-            new_nca.found += new_ncs.wrong
-        else:
-            new_apps.found += new_ncs.wrong
+    new_apps = build_item_ids_for_section(target, "Appearances", results.apps.items, appearances, sources, remap, unknown_apps, results.canon, log)
+    new_nca = build_item_ids_for_section(target, "Non-canon appearances", results.nca.items, appearances, sources, remap, unknown_apps, results.canon, log)
+    new_src = build_item_ids_for_section(target, "Sources", results.src.items, sources, appearances, remap, unknown_src, results.canon, log)
+    new_ncs = build_item_ids_for_section(target, "Non-canon sources", results.ncs.items, sources, appearances, remap, unknown_src, results.canon, log)
 
     # move non-canon items to the appropriate lists, and swap to non-canon only if no canon entries
     if new_apps.non_canon:
@@ -356,6 +398,31 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
         new_nca.found += new_apps.non_canon
     if new_src.non_canon:
         new_ncs.found += new_src.non_canon
+
+    if new_apps.wrong or new_nca.wrong:
+        if log:
+            print(f"Moving {len(new_apps.wrong) + len(new_nca.wrong)} sources from Appearances to Sources")
+        new_src.found += new_apps.wrong
+        if not new_apps.found:
+            results.src.preceding += results.apps.preceding
+            results.src.trailing += results.apps.trailing
+            results.src.after += results.apps.after
+        if new_ncs.found:
+            new_ncs.found += new_nca.wrong
+        else:
+            new_src.found += new_nca.wrong
+    if new_src.wrong or new_ncs.wrong:
+        if log:
+            print(f"Moving {len(new_src.wrong) + len(new_ncs.wrong)} sources from Sources to Appearances")
+        new_apps.found += new_src.wrong
+        if not new_src.found:
+            results.apps.preceding += results.src.preceding
+            results.apps.trailing += results.src.trailing
+            results.apps.after += results.src.after
+        if new_ncs.found:
+            new_nca.found += new_ncs.wrong
+        else:
+            new_apps.found += new_ncs.wrong
 
     if new_nca.found and not (new_apps.found or new_apps.sets or new_apps.cards):
         new_apps = new_nca
@@ -400,25 +467,18 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
         new_apps.found.insert(i + o, z)
         o += 1
 
-    canon = False
-    app_mode = BY_INDEX
-    for c in target.categories():
-        if "legends articles" in c.title().lower():
-            app_mode = UNCHANGED
-        elif "canon articles" in c.title().lower():
-            canon = True
     mismatch = []
     unknown_final = []
-    new_apps, final_apps = build_new_section("==Appearances==", new_apps, app_mode, dates, canon, include_date, log, use_index, mismatch, both_continuities, unknown_final)
-    new_nca, final_nca = build_new_section("===Non-canon appearances===", new_nca, UNCHANGED, dates, canon, include_date, log, use_index, mismatch, both_continuities, unknown_final)
-    new_src, final_sources = build_new_section("==Sources==", new_src, BY_DATE, dates, canon, new_src and len(new_src.found) > 1, log, use_index, mismatch, both_continuities, unknown_final)
-    new_ncs, final_ncs = build_new_section("===Non-canon sources===", new_ncs, BY_DATE, dates, canon, new_ncs and len(new_ncs.found) > 1, log, use_index, mismatch, both_continuities, unknown_final)
-    analysis = AnalysisResults(final_apps, final_nca, final_sources, final_ncs, canon, abridged, mismatch)
+    new_apps, final_apps = build_new_section("==Appearances==", new_apps, results.app_mode, dates, results.canon, include_date, log, use_index, mismatch, both_continuities, unknown_final)
+    new_nca, final_nca = build_new_section("===Non-canon appearances===", new_nca, UNCHANGED, dates, results.canon, include_date, log, use_index, mismatch, both_continuities, unknown_final)
+    new_src, final_sources = build_new_section("==Sources==", new_src, BY_DATE, dates, results.canon, new_src and len(new_src.found) > 1, log, use_index, mismatch, both_continuities, unknown_final)
+    new_ncs, final_ncs = build_new_section("===Non-canon sources===", new_ncs, BY_DATE, dates, results.canon, new_ncs and len(new_ncs.found) > 1, log, use_index, mismatch, both_continuities, unknown_final)
+    analysis = AnalysisResults(final_apps, final_nca, final_sources, final_ncs, results.canon, abridged, mismatch)
     return new_apps, new_nca, new_src, new_ncs, dates, unknown_apps, unknown_src, unknown_final, analysis
 
 
 def build_item_ids_for_section(page: Page, name, original: List[Item], data: FullListData, other: FullListData, remap: dict,
-                               unknown: List[Item], log) -> SectionItemIds:
+                               unknown: List[Item], canon: bool, log: bool) -> SectionItemIds:
 
     found = []
     wrong = []
@@ -428,14 +488,14 @@ def build_item_ids_for_section(page: Page, name, original: List[Item], data: Ful
     real_world = any("Category:Real-world articles" == c.title() for c in page.categories())
     for i, o in enumerate(original):
         o.index = i
-        d = determine_id_for_item(o, page.site, data.unique, data.target, other.unique, other.target, remap, log)
+        d = determine_id_for_item(o, page.site, data.unique, data.target, other.unique, other.target, remap, canon, log)
         if not d and o.parent:
             p = Page(page.site, o.parent)
             if is_redirect(p):
                 if log:
                     print(f"Followed redirect {o.parent} to {p.getRedirectTarget().title()}")
                 o.parent = p.getRedirectTarget().title().split('#', 1)[0]
-                d = determine_id_for_item(o, page.site, data.unique, data.target, other.unique, other.target, remap, log)
+                d = determine_id_for_item(o, page.site, data.unique, data.target, other.unique, other.target, remap, canon, log)
 
         if d and o.mode == "Cards" and d.current.card and d.current.card == d.master.card and d.master.has_date():
             found.append(d)
@@ -443,6 +503,8 @@ def build_item_ids_for_section(page: Page, name, original: List[Item], data: Ful
             found.append(d)
         elif d and o.mode == "Cards":
             parent_set = d.master.parent if d.master.parent else d.master.target
+            if d.current.template == "Topps" and not d.master.has_date() and parent_set.startswith("20"):
+                d.master.date = f"{parent_set[:4]}-XX-XX"
             if o.template == "SWCT":
                 parent_set = d.master.card or parent_set
             if parent_set == "Topps Star Wars Living Set":
@@ -591,16 +653,8 @@ def build_new_section(name, section: SectionItemIds, mode: str, dates: list, can
         elif o.current.override and not o.current.override_date:
             group.append(o)
         elif o.master.has_date():
-            if o.current.index is None:
+            if o.current.index is None and "audiobook" not in o.master.original:
                 print(f"No index? {o.current.original}, {o.master.original}")
-            # elif "-XX" in o.master.date:
-            #     n1 = by_original_index.get(o.current.index - 1)
-            #     n2 = by_original_index.get(o.current.index + 1)
-            #     if has_month_in_date(n1) and has_month_in_date(n2) and o.current.mode == "Toys" \
-            #             and "-XX-XX" in o.master.date and n1.master.date[:4] == o.master.date[:4]:
-            #         if log:
-            #             print(f"Moving item from partial date {o.master.date} to {n1.master.date[:8]}XX: {o.current.original}")
-            #         o.master.date = n1.master.date[:8] + "XX"
             new_found.append(o)
             if group:
                 missing.append((previous, group))
@@ -617,6 +671,7 @@ def build_new_section(name, section: SectionItemIds, mode: str, dates: list, can
     final_without_extra = []
     final_items = []
     rows = 0
+    sl = "" if canon else "|l=1"
     for o in found:
         if mode == BY_DATE and o.current.index is None:
             print(f"No index? {o.current.original}, {o.master.original}")
@@ -656,6 +711,8 @@ def build_new_section(name, section: SectionItemIds, mode: str, dates: list, can
                 ot = c.current.original
                 if c.current.subset and "subset=" not in ot:
                     ot = re.sub("({{[^\|\}]*?\|(set=)?[^\|\}]*?\|(stext=.*?\|)?)", f"\\1subset={o.current.subset}|", ot)
+                while ot.count("|subset=") > 1:
+                    ot = re.sub("(\|subset=.*?)\1", "\1", ot)
                 zt = "*" + d + re.sub("<\!--( ?Unknown ?|[ 0-9/X-]+)-->", "", f"{ot} {c.current.extra.strip()}").strip()
                 ct += zt.count("{")
                 ct -= zt.count("}")
@@ -667,7 +724,11 @@ def build_new_section(name, section: SectionItemIds, mode: str, dates: list, can
             zt = o.current.original if o.use_original_text else o.master.original
             if o.current.subset:
                 zt = re.sub("({{[^\|\}]*?\|(set=)?[^\|\}]*?\|(stext=.*?\|)?)", f"\\1subset={o.current.subset}|", zt)
+            while zt.count("|subset=") > 1:
+                zt = re.sub("(\|subset=.*?)\1", "\1", zt)
             zt = re.sub("<\!--( ?Unknown ?|[ 0-9/X-]+)-->", "", zt)
+            if o.current.bold:
+                zt = f"'''{zt}'''"
             if o.master.from_extra and "{{co}}" not in (o.current.extra or '').lower() \
                     and "cover only" not in (o.current.extra or '').lower() and o.current.template != "HomeVideoCite":
                 if "audiobook" in o.master.original:
@@ -676,15 +737,15 @@ def build_new_section(name, section: SectionItemIds, mode: str, dates: list, can
                     pass
                 elif "Complete Season" in o.master.original or "Complete Saga" in o.master.original or \
                         "Star Wars: The Skywalker Saga" in o.master.original:
-                    d += "{{SeriesListing|DVD}} "
+                    d += f"{{{{SeriesListing{sl}|DVD}}}} "
                 elif "[[5-Minute Star Wars" in o.master.original or "Trilogy Stories" in o.master.original or \
                         "[[The Clone Wars: Stories" in o.master.original or "[[Life Day Treasury" in o.master.original \
                         or "[[Tales from the " in o.master.original:
-                    d += "{{SeriesListing|short}} "
+                    d += f"{{{{SeriesListing{sl}|short}}}} "
                 else:
-                    d += "{{SeriesListing}} "
+                    d += f"{{{{SeriesListing{sl}}}}} "
             elif o.current.unknown or o.master.unknown:
-                d += "{{SeriesListing}} "
+                d += f"{{{{SeriesListing{sl}}}}} "
             if d == "<!-- Unknown -->" and "{{Hyperspace" in zt and "/member/fiction" in zt:
                 d = ""
             zn = f"*{d}{zt}"
@@ -721,9 +782,9 @@ def build_new_section(name, section: SectionItemIds, mode: str, dates: list, can
 
 def build_date_text(o: ItemId, include_date):
     if o.current.override and o.current.override_date:
-        return f"<!-- {o.current.override}: {o.current.override_date}"
-    elif o.current.override:
-        return f"<!-- {o.current.override} -->"
+        return f"<!-- {o.current.override}: {o.current.override_date} -->"
+    elif o.current.override_date:
+        return f"<!-- {o.current.override_date} -->"
     elif not o.master.has_date():
         return '<!-- Unknown -->'
     elif include_date:
@@ -1001,7 +1062,7 @@ def build_final_text(page: Page, results: PageComponents, redirects, new_apps: F
     new_txt = sort_categories("\n".join(pieces))
     new_txt = re.sub("(\{\{DEFAULTSORT:.*?\}\})\n\n+\[\[[Cc]ategory", "\\1\n[[Category", new_txt)
     new_txt = re.sub("(?<![\n=}])\n==", "\n\n==", re.sub("\n\n+", "\n\n", new_txt)).strip()
-    new_txt = new_txt.replace("\n\n}}", "\n}}").replace("{{Shortstory|", "{{StoryCite|")
+    new_txt = new_txt.replace("\n\n}}", "\n}}").replace("{{Shortstory|", "{{StoryCite|").replace("\n\n{{More", "\n{{More")
 
     replace = False
     if re.sub("<!--.*?-->", "", page.get()) != re.sub("<!--.*?-->", "", new_txt):
@@ -1025,6 +1086,8 @@ def do_final_replacements(new_txt, replace):
         if "{{1st|" in new_txt2 or "{{1stm|" in new_txt2 or "{{1stID|" in new_txt2 or "{{1stp|" in new_txt2:
             new_txt2 = re.sub("(\[\[(.*?)( \(.*?\))?(\|.*?)?\]\].*?{{1st[A-z]*?(\|.*?)?\|\[\[\\2 \((.*?audiobook)\)\|).*?\]\]\}\}", "\\1\\6]]}}", new_txt2)
             new_txt2 = re.sub("(ook=(.*?)( \(.*?\))?(\|.*?)?\}\}.*?{{1st[A-z]*?(\|.*?)?\|\[\[\\2 \((.*?audiobook)\)\|).*?\]\]\}\}", "\\1\\6]]}}", new_txt2)
+        if "{{more" in new_txt2.lower():
+            new_txt2 = re.sub("(\{\{[Mm]ore[ _]sources\}\})\n+\}\}", "}}\n\\1", new_txt2)
         replace = new_txt != new_txt2
         new_txt = new_txt2
     return new_txt
@@ -1083,7 +1146,7 @@ def build_new_text(target: Page, infoboxes: dict, types: dict, appearances: Full
                 if o.current.original not in z:
                     z.add(f"No Date: {o.current.original}")
             if z:
-                f.writelines("\n" + "\n".join([f"{o}\t{target.title()}" for o in z]) + "\n")
+                f.writelines("\n".join([f"{o}\t{target.title()}" for o in z]) + "\n")
 
     return build_final_text(target, results, redirects, new_apps, new_nca, new_sources, new_ncs, log)
 

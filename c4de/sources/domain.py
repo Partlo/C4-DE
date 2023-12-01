@@ -67,6 +67,7 @@ class Item:
         self.extra_date = None
         self.self_cite = False
         self.extra = ''
+        self.bold = False
 
     def sort_index(self, canon):
         return (self.canon_index if canon else self.legends_index) or self.index
@@ -110,7 +111,7 @@ class ItemId:
         self.master = master
         self.use_original_text = use_original_text or current.old_version
         if " edition" in self.current.original:
-            if re.search("''Star Wars: (Complete Locations|The Complete Visual Dictionary)'', [0-9]+ edition", self.current.original):
+            if re.search("''Star Wars: (Complete Locations|The Complete Visual Dictionary|Complete Vehicles)'', [0-9]+ edition", self.current.original):
                 self.use_original_text = True
         self.from_other_data = from_other_data
         self.wrong_continuity = wrong_continuity
@@ -136,10 +137,12 @@ class FullListData:
 
 
 class PageComponents:
-    def __init__(self, before):
+    def __init__(self, before, canon, mode):
         self.before = before
         self.final = ""
         self.original = before
+        self.canon = canon
+        self.app_mode = mode
 
         self.ncs = SectionComponents([], [], [], '')
         self.src = SectionComponents([], [], [], '')

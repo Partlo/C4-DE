@@ -170,6 +170,8 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
     z = re.sub("{{([A-z]+)\]\]", "{{\\1}}", re.sub("\|[a-z ]+=\|", "|", z)).replace(" ", " ")
     while re.search("\[\[([^\]\|\n]+)_", z):
         z = re.sub("\[\[([^\]\|\n]+)_", "[[\\1 ", z)
+    while "  " in z:
+        z = z.replace("  ", " ")
 
     s = re.sub("\|volume=([0-9])\|([0-9]+)\|", "|\\1.\\2|", z).replace("|}}", "}}")
     s = re.sub("<\!--.*?-->", "", s).replace("|20211029101753", "").replace("-episode-guidea-friend-in-need", "episode-guide-a-friend-in-need")
@@ -189,6 +191,10 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
         else:
             x = re.search("\[\[(.*?)(\|(.*?))?\]+", s)
         return Item(z, "General", a, target=x.group(1), format_text=x.group(3))
+
+    m = re.search("\[\[.*?\]\]:.*?\[\[(.*?)(\|.*?)?\]\]", s)
+    if m:
+        return Item(z, "General", a, target=m.group(1))
 
     o = f"{s}"
     s = re.sub("(\]+'*?) \(.*?\)", "\\1", s)
@@ -253,6 +259,8 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
         m = re.search("{{[^\|\[\}\n]+\|(official=true\|)?(.*?\|.*?)\|(.*?)(\|.*?)?}}", s)
         if m:
             return Item(z, mode, a, target=None, template=template, url=m.group(2).replace("|", "/"), text=m.group(2))
+    elif template == "SWMB":
+        return Item(z, "Toys", a, target="Star Wars Miniatures Battles", template=template, collapsed=True)
     elif template == "Sphero":
         return Item(z, "Toys", a, target="Star Wars Droids App by Sphero", template=template, collapsed=True, date="2017-08-31")
     elif template == "LEGOCite":
@@ -301,11 +309,11 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
             card_set = f"Top Trumps: {card_set}"
         elif card_set and template == "SWU":
             if card_set == "Spark of Rebellion":
-                card_set = f"{card_set} (Spark of Rebellion)"
+                card_set = f"{card_set} (Star Wars: Unlimited)"
         elif card_set and template == "SWPM":
             if card_set == "Base Set":
                 card_set = "Star Wars PocketModel TCG: Base Set"
-            elif card_set not in ["Clone Wars Conquest", "Clone Wars Tactics", "Scum & Villainy"]:
+            elif card_set not in ["Clone Wars Conquest", "Clone Wars Tactics", "Scum & Villainy"] and "(PocketModels)" not in card_set:
                 card_set = f"{card_set} (PocketModels)"
         elif card_set and template == "SWMiniCite":
             if card_set not in ["Alliance and Empire", "Clone Strike", "The Dark Times", "Rebel Storm",
@@ -460,12 +468,15 @@ def follow_redirect(o: Item, site, log):
 
 
 def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[str, List[Item]], other_data: Dict[str, Item],
-                          other_targets: Dict[str, List[Item]], remap: dict, log: bool):
+                          other_targets: Dict[str, List[Item]], remap: dict, canon: bool, log: bool):
     """ :rtype: ItemId """
 
     followed_redirect = False
     if o.unique_id() in data:
-        return ItemId(o, data[o.unique_id()], False, False)
+        m = data[o.unique_id()]
+        if m.template == "SWE" and not canon and not o.override:
+            o.override_date = "2014-04-25"
+        return ItemId(o, m, False, False)
     elif "cargobay" in o.original:
         return ItemId(o, o, True, False)
     elif "HoloNet News" in o.original and re.search("\[https://web.archive.*?\.gif .*?\].*?\[\[Holonet News", o.original):
@@ -524,14 +535,15 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
                 return m
 
         set_match = None
-        for s, x in data.items():
-            if x.template == o.template:
-                if (x.target and (x.target.startswith(set_name) or set_name in x.target)) or \
-                        (x.parent and (x.parent.startswith(set_name) or set_name in x.parent)):
-                    if (x.card and x.card == o.card) or (x.text and x.text == o.text):
-                        return ItemId(o, x, False, False)
-                    elif not set_match:
-                        set_match = x
+        if set_name is not None:
+            for s, x in data.items():
+                if x.template == o.template:
+                    if (x.target and (x.target.startswith(set_name) or set_name in x.target)) or \
+                            (x.parent and (x.parent.startswith(set_name) or set_name in x.parent)):
+                        if (x.card and x.card == o.card) or (x.text and x.text == o.text):
+                            return ItemId(o, x, False, False)
+                        elif not set_match:
+                            set_match = x
         if set_match:
             return ItemId(o, set_match, True, False)
 
@@ -621,7 +633,7 @@ def match_issue_target(o: Item, by_target: Dict[str, List[Item]], other_targets:
         return ItemId(o, find_matching_issue(by_target[o.target.replace("&hellip;", "...")], o.issue), use_original, False)
     elif o.target and other_targets and o.target in other_targets:
         # print(f"Finding {o.full_id()} by target: {o.target} --> {other_targets[o.target][0]}")
-        return ItemId(o, find_matching_issue(other_targets[o.target], o.issue), use_original, True)
+        return ItemId(o, find_matching_issue(other_targets[o.target], o.issue), use_original, False)
     elif o.target and "&hellip;" in o.target and by_target and o.target.replace("&hellip;", "...") in other_targets:
         return ItemId(o, find_matching_issue(other_targets[o.target.replace("&hellip;", "...")], o.issue), use_original, False)
     elif o.target and o.parent and o.parent in by_target and o.target.startswith(f"{o.parent}#"):
@@ -635,11 +647,16 @@ def match_parent_target(o: Item, by_target: Dict[str, List[Item]], other_targets
     if by_target and o.target in by_target and len(by_target[o.target]) > 1:
         for t in by_target[o.target]:
             if t.parent == o.parent:
-                return ItemId(o, t, False, False, True)
+                return ItemId(o, t, False, False, by_parent=True)
     elif other_targets and o.target in other_targets and len(other_targets[o.target]) > 1:
         for t in other_targets[o.target]:
             if t.parent == o.parent:
-                return ItemId(o, t, False, False, True)
+                return ItemId(o, t, False, True, by_parent=True)
+    elif o.parent and "Star Wars Legends Epic Collection" in o.parent and o.template == "StoryCite":
+        if by_target and o.target in by_target:
+            return ItemId(o, by_target[o.target][0], True, False, by_parent=True)
+        elif other_targets and o.target in other_targets:
+            return ItemId(o, other_targets[o.target][0], True, True, by_parent=True)
     return None
 
 
@@ -656,6 +673,8 @@ def match_target(o: Item, by_target: Dict[str, List[Item]], other_targets: Dict[
             targets.append(f"{o.target} (Star Wars Encyclopedia)")
         if "ikipedia:" in o.target:
             targets.append(o.target.split("ikipedia:", 1)[-1])
+        if o.template in ["Tales", "TCWUKCite", "IDWAdventuresCite-2017"] and "(" not in o.target and o.target not in by_target:
+            targets.append(f"{o.target} (comic)")
 
         m = re.search("^(Polyhedron|Challenge|Casus Belli|Valkyrie|Inphobia) ([0-9]+)$", o.target)
         if m:

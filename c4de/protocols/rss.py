@@ -309,18 +309,24 @@ def check_blog_list(site, url, feed_url, cache: Dict[str, List[str]]):
     soup = BeautifulSoup(x, "html.parser")
     results = []
 
-    for article in reversed(soup.find_all("article")):
-        link = article.find("a", class_="u-url")
+    for article in reversed(soup.find_all(class_="transmission-wrapper")):
+        link = article.find("a", class_="btn")
         if not link:
             continue
-        u = url + link.get('href')
+        u = link.get('href')
         if site not in cache:
             cache[site] = []
         if cache[site] and u in cache[site]:
             continue
 
-        d = article.find("time", class_="dt-published")
-        results.append({"site": site, "title": link.text, "url": u, "content": "", "date": d.get('datetime') if d else None})
+        title = article.find("h2", class_="allblog-title")
+        d = article.find("h3", class_="dateski")
+        date = d.text.strip() if d else None
+        try:
+            date = datetime.strptime(date, "%m/%d/%Y").strftime("%Y-%m-%d")
+        except Exception:
+            pass
+        results.append({"site": site, "title": title.text if title else None, "url": u, "content": "", "date": date})
         cache[site].append(u)
 
     return results
@@ -440,10 +446,15 @@ def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, che
         if check_star_wars and "star wars" not in title.lower().replace("-", " ") and \
                 "star wars" not in content.lower().replace("-", " "):
             log(f"Skipping non-Star Wars post: {title} --> {e.link}")
+            cache[site].append(e.link)
             continue
         template = None
-        if content and ("this week in" in content.lower() or "this week!" in content.lower()):
+        if (content and ("this week in" in content.lower() or "this week!" in content.lower())) or \
+                (title and ("this week in" in title.lower() or "this week!" in title.lower())):
             template = "ThisWeek"
+            if "Dispatch" in title:
+                title = f"Dispatch: {title.replace('Dispatch', '')}"
+            title = title.replace(" &#124; This Week! in Star Wars", "")
         elif content and "the high republic show" in content.lower():
             template = "HighRepublicShow"
 
@@ -499,7 +510,7 @@ def check_title_formatting(text, title_regex, title):
     title = title.replace("“", '"').replace("”", '"').replace("’", "'").replace("‘", "'")
     title = title.replace("|", "&#124;")
     title = re.sub(" &#124; ?Disney ?(\+|Plus)[ ]*$", "", title)
-    title = re.sub(" (&#124; )?@?StarWarsKids ?x ?@?disneyjunior", "", title)
+    title = re.sub(" (&#124; )?@?StarWarsKids *?x *?@?disneyjunior", "", title)
 
     return html.unescape(title).replace("’", "'").strip()
 

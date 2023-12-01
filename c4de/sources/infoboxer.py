@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 from typing import Dict
 from pywikibot import Page, Category
 import re
@@ -26,14 +26,14 @@ def parse_infobox_category(cat: Category, results):
 
 
 def list_all_infoboxes(site) -> Dict[str, InfoboxInfo]:
-    now = datetime.datetime.now()
+    now = datetime.now()
     results = {}
     parse_infobox_category(Category(site, "Category:Infobox templates"), results)
     if results.get("battle300"):
         results["battle300"].optional += [f for f in results["battle300"].params if f.endswith("3") or f.endswith("4)")]
-    if results.get("Battle350"):
+    if results.get("battle350"):
         results["battle350"].optional += [f for f in results["battle350"].params if f.endswith("4)")]
-    duration = datetime.datetime.now() - now
+    duration = datetime.now() - now
     print(f"Loaded {len(results)} infoboxes in {duration.seconds} seconds")
     return results
 
@@ -263,8 +263,7 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes):
     for f in infobox.params:
         i += 1
         v = data.get(f)
-        if v and (i + 1) < len(infobox.params) and f"|{infobox.params[i + 1]}=" in v and not data.get(
-                infobox.params[i + 1]):
+        if v and (i + 1) < len(infobox.params) and f"|{infobox.params[i + 1]}=" in v and infobox.params[i + 1] not in data:
             print(f"Separating {f} line from {infobox.params[i + 1]}")
             v, x = v.split(f"|{infobox.params[i + 1]}=", 1)
             data[infobox.params[i + 1]] = x
@@ -276,12 +275,12 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes):
         new_infobox.append(f"|{f}={v or ''}")
 
     if sum(i.count("{") - i.count("}") for i in new_infobox) > 0:
-        if on_own_line:
-            new_infobox.append("}}")
-        else:
-            new_infobox[-1] += "}}"
+        # if on_own_line:
+        new_infobox.append("}}")
+        # else:
+        #     new_infobox[-1] += "}}"
 
     new_text = "\n".join([*pre, *new_infobox, *post])
-    if new_text != page.get():
+    if new_text.replace("\n}}", "}}") != page.get().replace("\n}}", "}}"):
         print(f"Found changes for {found} infobox")
     return "\n".join([*pre, *new_infobox, *post])

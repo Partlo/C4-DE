@@ -129,3 +129,5 @@
 **Added RSS feed handling for Ubisoft and several other sources
 **Source Engine fixes
 **Fixed Spoiler template handling
+*'''3.5.2''': December 1, 2023
+**Various minor tweaks, fighting the future-products protocol over comic collection reporting
