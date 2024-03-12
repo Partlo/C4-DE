@@ -34,6 +34,9 @@ def flatten(items: List[ItemId], found: List[ItemId], missing: List[ItemId]):
 def prepare_results(results: AnalysisResults) -> Tuple[List[ItemId], List[ItemId]]:
     found, missing = [], []
     for x in [results.apps, results.nca, results.src, results.ncs]:
+        for i in x:
+            if i.master.sort_index(results.canon) is None:
+                print(i.master.target, i.master.original)
         flatten(x, found, missing)
 
     found = sorted(found, key=lambda a: (a.master.date, a.master.mode == "DB", a.master.sort_index(results.canon), a.sort_text()))
@@ -183,7 +186,7 @@ def create_index(site, page: Page, results: AnalysisResults, save: bool):
         index = Page(site, f"Index:{page.title()}")
         index.put("\n".join(lines), "Source Engine: Generating Index page", botflag=False)
     else:
-        with codecs.open("C:/Users/Michael/Documents/projects/C4DE/c4de/protocols/test_text.txt", mode="w",
+        with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/test_text.txt", mode="w",
                          encoding="utf-8") as f:
             f.writelines("\n".join(lines))
 

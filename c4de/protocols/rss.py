@@ -19,6 +19,9 @@ FEED_URLS = [
     "https://starwars.fandom.com/wiki/Special:RecentChanges?feed=rss"
 ]
 
+ANNOUNCEMENTS = "announcements"
+ADMIN_REQUESTS = "admin-requests"
+
 
 def check_new_pages_rss_feed(site, url, cache: Dict[str, List[str]]):
     d = feedparser.parse(url)
@@ -30,16 +33,16 @@ def check_new_pages_rss_feed(site, url, cache: Dict[str, List[str]]):
             pt, ch, message, d = None, None, None, None
             if is_new:
                 if e.title.startswith("Forum:SH:"):
-                    pt, ch, message = "Senate Hall", "announcements", f"📣 **New Senate Hall thread**\n<{e.link}>"
+                    pt, ch, message = "Senate Hall", ANNOUNCEMENTS, f"📣 **New Senate Hall thread**\n<{e.link}>"
                 elif e.title.startswith("Forum:NB:"):
-                    pt, ch, message = "Administrator's Noticeboard", "announcements", f"📢 **New Administrators' noticeboard thread**\n<{e.link}>"
+                    pt, ch, message = "Administrator's Noticeboard", ANNOUNCEMENTS, f"📢 **New Administrators' noticeboard thread**\n<{e.link}>"
                 elif e.title.startswith("Forum:CT:"):
-                    pt, ch, message = "Consensus Track", "announcements", f"📢 **New Consensus track vote**\n<{e.link}>"
+                    pt, ch, message = "Consensus Track", ANNOUNCEMENTS, f"📢 **New Consensus track vote**\n<{e.link}>"
                 elif e.title.startswith("Forum:TC:") or e.title.startswith("Wookieepedia:Trash compactor"):
-                    pt, ch, message = "Trash Compactor", "announcements", f"🗑️ **New Trash Compactor thread**\n<{e.link}>"
+                    pt, ch, message = "Trash Compactor", ANNOUNCEMENTS, f"🗑️ **New Trash Compactor thread**\n<{e.link}>"
                 elif e.title.startswith("User blog:"):
                     if "Category:Staff blogs" in e.description:
-                        pt, ch, message = "Fandom Blog", "announcements", f"<:fandom:872166055693393940>**New Fandom Staff blog post**\n<{e.link}>"
+                        pt, ch, message = "Fandom Blog", ANNOUNCEMENTS, f"<:fandom:872166055693393940>**New Fandom Staff blog post**\n<{e.link}>"
             elif re.match("^<p>.*? deleted page.*?</p>", e.description):
                 continue
             elif e.title.startswith("Wookieepedia:Trash compactor") and re.match("^<p>.*?delete.*?</p>", e.description.lower()):
@@ -47,10 +50,10 @@ def check_new_pages_rss_feed(site, url, cache: Dict[str, List[str]]):
             elif e.title.startswith("Forum:TC:") and re.match("^<p>.*?delete.*?</p>", e.description.lower()):
                 continue
             elif did_edit_add_deletion_template(site, e.title, e.description) or "<p>CSD</p>" in e.description or "<p>delete</p>" in e.description.lower():
-                pt, ch, message = "CSD", "admin-help", f"❗ **{e.author}** requested deletion of **{e.title}**\n<{e.link}>"
+                pt, ch, message = "CSD", ADMIN_REQUESTS, f"❗ **{e.author}** requested deletion of **{e.title}**\n<{e.link}>"
                 d = e.title
             elif re.match("^<p>.*?CSD.*?</p>", e.description) or re.match("^<p>.*?delete[^d].*?</p>", e.description.lower()):
-                pt, ch, message = "CSD", "admin-help", f"❓ **{e.author}** used 'delete' or 'CSD' in edit summary on **{e.title}**; may be false positive.\n<{e.link}>"
+                pt, ch, message = "CSD", ADMIN_REQUESTS, f"❓ **{e.author}** used 'delete' or 'CSD' in edit summary on **{e.title}**; may be false positive.\n<{e.link}>"
                 d = e.title
             else:
                 continue
@@ -117,11 +120,14 @@ def check_wookieepedia_feeds(site: Site, cache: Dict[str, List[str]]):
             print(p.title())
 
     for url in FEED_URLS:
-        entries = check_new_pages_rss_feed(site, url, cache)
-        for cm in entries:
-            if cm[2] in to_delete:
-                to_delete.pop(cm[2])
-            messages.append(cm)
+        try:
+            entries = check_new_pages_rss_feed(site, url, cache)
+            for cm in entries:
+                if cm[2] in to_delete:
+                    to_delete.pop(cm[2])
+                messages.append(cm)
+        except Exception as e:
+            error_log(type(e), e.args)
 
     for p, u in to_delete.items():
         cache["CSD"] += [p, u]
@@ -136,15 +142,15 @@ def check_wookieepedia_feeds(site: Site, cache: Dict[str, List[str]]):
     for e in entries:
         diff = parse_bot_request_diff(e.description)
         diff_text = f"\n{diff}" if diff else ""
-        messages.append(("admin-help", f"🔧 **Forum:SH:General bug thread** was edited by **{e.author}**\n<{e.link}>{diff_text}", None))
+        messages.append((ADMIN_REQUESTS, f"🔧 **Forum:SH:General bug thread** was edited by **{e.author}**\n<{e.link}>{diff_text}", None))
 
     entries = parse_history_rss_feed("https://starwars.fandom.com/wiki/Wookieepedia:Vandalism_in_progress?action=history&feed=rss", cache, "Vandalism")
     for e in entries:
-        messages.append(("admin-help", f"❗ **WP:VIP** was edited by **{e.author}**\n<{e.link}>", None))
+        messages.append((ADMIN_REQUESTS, f"❗ **WP:VIP** was edited by **{e.author}**\n<{e.link}>", None))
 
     entries = parse_history_rss_feed("https://starwars.fandom.com/wiki/Wookieepedia:Spamfilter_problems?action=history&feed=rss", cache, "Spamfilter")
     for e in entries:
-        messages.append(("admin-help", f"⚠️ **WP:SF** was edited by **{e.author}**\n<{e.link}>", None))
+        messages.append((ADMIN_REQUESTS, f"⚠️ **WP:SF** was edited by **{e.author}**\n<{e.link}>", None))
 
     entries = parse_history_rss_feed("https://starwars.fandom.com/wiki/Wookieepedia:Image_requests?action=history&feed=rss", cache, "Image")
     for e in entries:
@@ -433,6 +439,12 @@ def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, che
             elif not any(t in e.link for t in [today2, today3, today4, today5]):
                 continue
 
+        if site == "*Star Wars: The Old Republic*":
+            if any(x in e.title.lower() for x in ["mise à jour", "de l'histoire", "spieleupdate", "spiel-update", "teaser-clip"]):
+                continue
+            elif any(f" {x} " in f" {e.title.lower()} " for x in ["de", "la", "zu", "der", "des", "sur"]):
+                continue
+
         r = requests.get(e.link).text
         title = check_title_formatting(r, title_regex, e.title)
         content = ""
@@ -454,7 +466,7 @@ def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, che
             template = "ThisWeek"
             if "Dispatch" in title:
                 title = f"Dispatch: {title.replace('Dispatch', '')}"
-            title = title.replace(" &#124; This Week! in Star Wars", "")
+            title = title.replace(" &#124; This Week! in Star Wars", "").replace(" | This Week! in Star Wars", "")
         elif content and "the high republic show" in content.lower():
             template = "HighRepublicShow"
 
@@ -509,9 +521,10 @@ def check_title_formatting(text, title_regex, title):
     title = re.sub(r"<span[^>]*?italic.*?>(.*?)( )?</span>", r"''\1''\2", title)
     title = title.replace("“", '"').replace("”", '"').replace("’", "'").replace("‘", "'")
     title = title.replace("|", "&#124;")
-    title = re.sub(" &#124; ?Disney ?(\+|Plus)[ ]*$", "", title)
+    title = re.sub(" &#124; ?D[Ii][Ss][Nn][Ee][Yy] ?(\+|Plus)[ ]*(& Disney Junior)?[ ]*$", "", title)
     title = re.sub(" (&#124; )?@?StarWarsKids *?x *?@?disneyjunior", "", title)
-
+    if title.strip().endswith("&#124;"):
+        title = title.strip()[:-6]
     return html.unescape(title).replace("’", "'").strip()
 
 

@@ -19,12 +19,13 @@ def list_all_infoboxes(site):
 
 def extract_release_date(title, text):
     date_strs = []
-    m = re.search("\|(publish date|publication date|airdate|release date|released|published)=(?P<d1>.*?)(?P<r1><ref.*?)?\n(\*(?P<d2>.*?)(?P<r2><ref.*?)?\n)?(\*(?P<d3>.*?)(?P<r3><ref.*?)?\n)?", text)
+    m = re.search("\|(publish date|publication date|first aired|airdate|start date|release date|released|published)=(?P<d1>.*?)(?P<r1><ref.*?)?\n(\*(?P<d2>.*?)(?P<r2><ref.*?)?\n)?(\*(?P<d3>.*?)(?P<r3><ref.*?)?\n)?", text)
     if m:
         for i in range(1, 4):
             if m.groupdict()[f"d{i}"]:
                 d = m.groupdict()[f"d{i}"].replace("[", "").replace("]", "").replace("*", "").strip().replace(',', '')
                 d = re.sub("&ndash;[A-z]+ [0-9\|]+", "", d)
+                d = re.sub("\([A-Z]+\)", "", d)
                 d = re.sub("([A-z]+ ?[0-9]*) ([0-9]{4})( .*?)$", "\\1 \\2", d)
                 date_strs.append((d.split("-")[0], m.groupdict().get(f"r{i}")))
 
@@ -47,7 +48,7 @@ def extract_release_date(title, text):
 
 SOURCE_INFOBOXES = ["activity book", "magazine", "magazine article", "magazine department", "music", "toy line",
                     "reference book", "web article"]
-APP_INFOBOXES = ["comic book", "comic story", "video game", "graphic novel", "audiobook"]
+APP_INFOBOXES = ["comic book", "comic story", "video game", "graphic novel", "audiobook", "short story"]
 EXTRA_INFOBOXES = ["comic series", "comic story arc", "book series", "television series", "television season"]
 APP_CATEGORIES = ["Future audiobooks", "Future films", "Future short stories", "Future novels",
                   "Future television episodes"]
@@ -71,7 +72,7 @@ def determine_app_or_source(text, category, infobox):
         return "Appearances"
     elif infobox.lower() in SOURCE_INFOBOXES:
         return "Sources"
-    elif category in APP_CATEGORIES:
+    elif (category or "").replace("Category:", "") in APP_CATEGORIES:
         return "Appearances"
     elif "Category:Canon storybooks" in text:
         return "Appearances"
@@ -90,10 +91,12 @@ def identify_infobox(t, infoboxes):
 def analyze_page(page, category, infobox):
     text = page.get()
     dates = extract_release_date(page.title(), text)
-    c = re.search("{{Top.*?\|(can|leg|ncc|ncl)[\|\}]", text)
+    c = re.search("{{Top.*?\|(can|leg|ncc|ncl|new|pre|btr|old|imp|reb|njo|lgc|inf)[\|\}]", text)
     ct = c.group(1) if c else None
+    if ct in ["pre", "btr", "old", "imp", "reb", "new", "njo", "lgc", "inf"]:
+        ct = "leg"
     t = determine_app_or_source(text, (category or '').replace("Category:", ""), (infobox or '').replace("_", " "))
-    # print(t, page.title(), (category or '').replace("Category:", ""), (infobox or '').replace("_", " "))
+    print(t, page.title(), (category or '').replace("Category:", ""), (infobox or '').replace("_", " "))
     return FutureProduct(page, category, dates, infobox, ct, t)
 
 
@@ -111,13 +114,17 @@ def get_future_products_list(site: Site, infoboxes=None):
     cat = Category(site, "Future products")
     infoboxes = infoboxes or list_all_infoboxes(site)
     results = []
+    unique = set()
     for page in cat.articles():
         if page.title().startswith("List of") or page.title().startswith("Timeline of"):
+            continue
+        elif page.title() in unique:
             continue
         t = page.get()
         infobox = identify_infobox(t, infoboxes)
         if should_check_product(infobox, t, page, cat):
             results.append(analyze_page(page, None, infobox))
+            unique.add(page.title())
 
     for c in cat.subcategories():
         if "trade paperbacks" in c.title():
@@ -127,10 +134,13 @@ def get_future_products_list(site: Site, infoboxes=None):
                 continue
             elif c.title() == "Category:Future events" and len(page.title()) == 4 and page.title().startswith("20"):
                 continue
+            elif page.title() in unique:
+                continue
             t = page.get()
             infobox = identify_infobox(t, infoboxes)
             if should_check_product(infobox, t, page, c):
                 results.append(analyze_page(page, c.title(), infobox))
+                unique.add(page.title())
     return results
 
 
@@ -139,36 +149,40 @@ def parse_page(p: Page, types):
     full = {}
     target = {}
     for i, line in enumerate(p.get().splitlines()):
-        if line and not line.startswith("==") and "/Header}}" not in line:
-            z = re.search("[\*#](.*?): (D: )?(.*?)$", line)
-            if z:
-                date = z.group(1)
-                item = z.group(3)
-                c = ''
-                if "{{C|" in item:
-                    cr = re.search("({{C\|([Nn]on-canon|[Rr]epublished|[Uu]nlicensed)}})", item)
-                    if cr:
-                        c = ' ' + cr.group(1)
-                        item = item.replace(cr.group(1), '').strip()
-                x = extract_item(item, False, p.title(), types, master=True)
-                if x:
-                    if x.template == "SWCT" and not x.target:
-                        x.target = x.card
-                    x.index = i
-                    x.department = z.group(2) or ''
-                    x.canon = "/Canon" in p.title()
-                    x.date = date
-                    x.extra = c
-                    full[x.full_id()] = x
-                    unique[x.unique_id()] = x
-                    if x.target:
-                        if x.target not in target:
-                            target[x.target] = []
-                        target[x.target].append(x)
-            else:
-                print(f"Cannot parse line: {line}")
+        parse_line(line, i, p, types, full, unique, target)
 
     return FullListData(unique, full, target, set(), set())
+
+
+def parse_line(line, i, p: Page, types, full, unique, target):
+    if line and not line.startswith("==") and "/Header}}" not in line:
+        z = re.search("[\*#](.*?): (D: )?(.*?)$", line)
+        if z:
+            date = z.group(1)
+            item = z.group(3)
+            c = ''
+            if "{{C|" in item:
+                cr = re.search("({{C\|([Nn]on-canon|[Rr]epublished|[Uu]nlicensed)}})", item)
+                if cr:
+                    c = ' ' + cr.group(1)
+                    item = item.replace(cr.group(1), '').strip()
+            x = extract_item(item, False, p.title(), types, master=True)
+            if x:
+                if x.template == "SWCT" and not x.target:
+                    x.target = x.card
+                x.index = i
+                x.department = z.group(2) or ''
+                x.canon = "/Canon" in p.title()
+                x.date = date
+                x.extra = c
+                full[x.full_id()] = x
+                unique[x.unique_id()] = x
+                if x.target:
+                    if x.target not in target:
+                        target[x.target] = []
+                    target[x.target].append(x)
+        else:
+            print(f"Cannot parse line: {line}")
 
 
 def dates_match(dates: List[Tuple[str, datetime, str]], master):
@@ -230,7 +244,7 @@ def should_check_product(inf, t, p: Page, c: Category):
     if "Game Book" in p.title() or ("Young Jedi Adventures episodes" in c.title() and " / " in p.title()):
         return False
     elif inf in INFOBOX_SKIP:
-        print(f"Skipping {inf} article: {p.title()} in {c.title()}")
+        # print(f"Skipping {inf} article: {p.title()} in {c.title()}")
         return False
     elif inf in SERIES_SKIP or "(series)" in p.title() or p.title() == "Star Wars App":
         return False
@@ -280,6 +294,10 @@ def check_category(c: Category, cats_checked, pages_checked, tracked, infoboxes,
     return not_found
 
 
+def merge_full_lists(l1, l2, l3):
+    return FullListData(l1.unique + l2.unique + l3.unique, l1.full + l2.full + l3.full, l1.target + l2.target + l3.target, set(), set())
+
+
 def handle_results(site, results: List[FutureProduct], save=True):
     types = build_template_types(site)
     extra_page = Page(site, "Wookieepedia:Appearances/Extra")
@@ -288,14 +306,19 @@ def handle_results(site, results: List[FutureProduct], save=True):
     l_apps = parse_page(l_app_page, types)
     c_app_page = Page(site, "Wookieepedia:Appearances/Canon")
     c_apps = parse_page(c_app_page, types)
-    l_src_page = Page(site, "Wookieepedia:Sources/Legends/General/2010s")
-    l_srcs = parse_page(l_src_page, types)
+    l_src_page1 = Page(site, "Wookieepedia:Sources/Legends/General/2010s")
+    l_srcs1 = parse_page(l_src_page1, types)
+    l_src_page2 = Page(site, "Wookieepedia:Sources/Legends/General/2000s")
+    l_srcs2 = parse_page(l_src_page2, types)
+    l_src_page3 = Page(site, "Wookieepedia:Sources/Legends/General/1977-2000")
+    l_srcs3 = parse_page(l_src_page3, types)
     c_src_page = Page(site, "Wookieepedia:Sources/Canon/General")
     c_srcs = parse_page(c_src_page, types)
     sets_page = Page(site, "Wookieepedia:Sources/CardSets")
     sets = parse_page(sets_page, types)
 
-    master_data = {"Legends Appearances": l_apps, "Canon Appearances": c_apps, "Legends Sources": l_srcs,
+    master_data = {"Legends Appearances": l_apps, "Canon Appearances": c_apps, "Legends-2010s Sources": l_srcs1,
+                   "Legends-2000s Sources": l_srcs2, "Legends-1900s Sources": l_srcs3,
                    "Canon Sources": c_srcs, "Extra": extra, "CardSets": sets}
 
     new_items = {}
@@ -305,6 +328,15 @@ def handle_results(site, results: List[FutureProduct], save=True):
         z = f"{i.item_type}|{is_legends}"
         if i.item_type == "CardSets" or i.item_type == "Extra":
             z = i.item_type
+        if z == "Sources|True":
+            d = build_date(i.dates)
+            if d:
+                if d.startswith("19") or d.startswith("2000"):
+                    z = "Sources|True|3"
+                elif d.startswith("200") or d.startswith("2010"):
+                    z = "Sources|True|2"
+                else:
+                    z = "Sources|True|1"
 
         found = False
         for t, data in master_data.items():
@@ -333,7 +365,9 @@ def handle_results(site, results: List[FutureProduct], save=True):
     build_new_page(l_app_page, l_apps, "Appearances|True", new_items, changed_dates, True, save)
 
     build_new_page(c_src_page, c_srcs, "Sources|False", new_items, changed_dates, True, save)
-    build_new_page(l_src_page, l_srcs, "Sources|True", new_items, changed_dates, True, save)
+    build_new_page(l_src_page1, l_srcs1, "Sources|True|1", new_items, changed_dates, True, save)
+    build_new_page(l_src_page2, l_srcs2, "Sources|True|2", new_items, changed_dates, True, save)
+    build_new_page(l_src_page3, l_srcs3, "Sources|True|3", new_items, changed_dates, True, save)
 
     build_new_page(extra_page, extra, "Extra", new_items, changed_dates, True, save)
     build_new_page(sets_page, sets, "CardSets", new_items, changed_dates, True, save)
@@ -362,15 +396,15 @@ def build_date(dates):
 def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[FutureProduct]], all_changed: Dict[str, Dict[str, FutureProduct]], use_sections, save=False):
     new_items = all_new.get(key) or []
     changed = all_changed.get(key) or {}
-    if not new_items:
+    if not (new_items or changed):
         return
 
     final = []
     for i in new_items:
         if i.infobox in ["short story", "magazine article", "magazine department"]:
-            t = f'"[[{i.page.title()}]"'
+            t = f'"[[{i.page.title()}]]"'
             pt = i.page.get()
-            x = re.search("\|published in=.*?\[\[(.*?)(\|.*?)\]\]", pt)
+            x = re.search("\|published in=.*?\[\[(.*?)(\|.*?)?\]\]", pt)
             if x and x.group(1) and "Star Wars Insider" in x.group(1):
                 mi = x.group(1).split("Insider")[-1].strip()
                 if mi.isnumeric():
@@ -383,10 +417,11 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
                 t = f"{{{{StoryCite|book={x.group(1)}|story={i.page.title()}}}}}"
         else:
             t = f"''[[{i.page.title()}]]''"
+            t = re.sub("''\[\[((.*?) \(audiobook\))\]\]''", "[[\\1|''\\2'' audiobook]]", t)
             t = re.sub("''\[\[((.*?) \(.*?\)( [0-9]+)?)\]\]''", "[[\\1|''\\2''\\3]]", t)
             t = re.sub("''\[\[(.*?)\|(((?!'').)*?) ([0-9]+)\]\]''", "[[\\1|''\\2'' \\3]]", t)
             t = re.sub("''\[\[([^\|\]]+?) ([0-9]+)\]\]''", "[[\\1 \\2|''\\1'' \\2]]", t)
-            if "[[Untitled" in t:
+            if "[[Untitled" in t and t.startswith("''"):
                 t = t[2:-2]
         d = build_date(i.dates)
         final.append([t, prep_date(d), 100])
@@ -428,7 +463,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
         lines.append(f"#{d}: {txt}")
 
     new_txt = re.sub("(?<![\n=])\n==", "\n\n==", re.sub("\n\n+", "\n\n", "\n".join(lines))).strip()
-    with codecs.open("C:/Users/Michael/Documents/projects/C4DE/c4de/sources/test.txt", mode="w", encoding="utf-8") as f:
+    with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/sources/test.txt", mode="w", encoding="utf-8") as f:
         f.writelines(new_txt)
 
     if save:

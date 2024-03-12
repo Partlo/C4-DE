@@ -4,7 +4,7 @@ import traceback
 
 import urllib3.exceptions
 import waybackpy
-from waybackpy.exceptions import RedirectSaveError
+from waybackpy.exceptions import WaybackError
 from pywikibot import Page, Category
 from datetime import datetime
 
@@ -197,7 +197,7 @@ def archive_url(url):
         wayback = waybackpy.Url(url, USER_AGENT)
         archive = wayback.save()
         return True, archive.archive_url.split("/web/", 1)[1].split("/", 1)[0]
-    except RedirectSaveError:
+    except WaybackError:
         err_msg = "URL cannot be archived by wayback machine as it is a redirect"
     except Exception as e:
         error_log(url, type(e), e)

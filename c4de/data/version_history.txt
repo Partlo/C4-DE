@@ -131,3 +131,8 @@
 **Fixed Spoiler template handling
 *'''3.5.2''': December 1, 2023
 **Various minor tweaks, fighting the future-products protocol over comic collection reporting
+*'''3.5.3''': March 3, 2024
+**Switched to use #admin-requests instead of #admin-help
+*'''3.5.4''': March 12, 2024
+**Restored Edelweiss protocol to working status using Firefox
+**Various tweaks and fixes to the Source Engine logic

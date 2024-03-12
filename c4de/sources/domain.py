@@ -70,7 +70,7 @@ class Item:
         self.bold = False
 
     def sort_index(self, canon):
-        return (self.canon_index if canon else self.legends_index) or self.index
+        return ((self.canon_index if canon else self.legends_index) or self.index) or 100000
 
     def __str__(self):
         return f"Item[{self.full_id()}]"

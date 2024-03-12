@@ -277,8 +277,10 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
                         special=u.group(1) if u else None)
     elif template == "Databank":
         m = re.search("{{Databank\|(url=|entry=)?(.*?)\|(title=)?(.*?)(\|.*?)?}}", s)
-        if m:
+        if m and m.group(1):
             return Item(z, mode, a, target=None, template=template, url=m.group(2), text=m.group(4))
+        elif m:
+            return Item(z, mode, a, target=None, template=template, url=f"databank/{m.group(2)}", text=m.group(4))
     elif mode == "DB" or template == "SWE":
         m = re.search("{{[^\|\[\}\n]+\|(.*?)\|(.*?)\|(.*?)(\|.*?)?}}", s)
         if m:
@@ -316,9 +318,9 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
             elif card_set not in ["Clone Wars Conquest", "Clone Wars Tactics", "Scum & Villainy"] and "(PocketModels)" not in card_set:
                 card_set = f"{card_set} (PocketModels)"
         elif card_set and template == "SWMiniCite":
-            if card_set not in ["Alliance and Empire", "Clone Strike", "The Dark Times", "Rebel Storm",
-                                "Starship Battles", "Rebels and Imperials", "Battle of Hoth Scenario Pack",
-                                "AT-AT Imperial Walker Colossal Pack"] and "Star Wars Miniatures" not in card_set:
+            if card_set not in ["Alliance and Empire", "Clone Strike", "The Dark Times", "Rebel Storm", "Galaxy Tiles",
+                                "Starship Battles", "Rebels and Imperials"] \
+                    and not card_set.endswith("Pack") and "Star Wars Miniatures" not in card_set:
                 card_set = f"{card_set} (Star Wars Miniatures)"
 
         if card_set and "cardname=" in card_set:

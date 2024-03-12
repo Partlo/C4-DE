@@ -7,8 +7,9 @@ from pywikibot import Site, Page, Category, showDiff
 from get_chrome_driver import GetChromeDriver
 
 from selenium.common.exceptions import WebDriverException, SessionNotCreatedException
-from selenium.webdriver import Remote as WebDriver, Chrome
+from selenium.webdriver import Remote as WebDriver, Chrome, ChromeService, Firefox, FirefoxService
 from selenium.webdriver.chrome.options import Options as ChromeOptions
+from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
@@ -17,20 +18,32 @@ from c4de.common import log, error_log, archive_url
 from c4de.data.filenames import MISSING_IMAGES_FILE
 
 
-def build_driver(headless=True):
-    options = ChromeOptions()
-    if headless:
-        options.add_argument("headless")
-        options.add_argument("no-sandbox")
-        options.add_argument('window-size=1024,768')
-        # --start-maximized does not work, headless thinks the maximized size is 800*600, making the element not visible;
-        options.add_experimental_option("prefs", {"credentials_enable_service": False})
-    try:
-        return Chrome(chrome_options=options, executable_path="C:/Users/Michael/Documents/Drivers/chromedriver")
-    except SessionNotCreatedException as e:
-        gd = GetChromeDriver()
-        gd.auto_download(extract=True, output_path="C:/Users/Michael/Documents/Drivers")
-        return Chrome(chrome_options=options, executable_path="C:/Users/Michael/Documents/Drivers/chromedriver")
+def build_driver(headless=True, firefox=True):
+    if firefox:
+        options = FirefoxOptions()
+        s = FirefoxService("C:/Users/cadec/Documents/Drivers/geckodriver.exe")
+        if headless:
+            options.headless = True
+            # options.add_argument("no-sandbox")
+            # options.add_argument('window-size=1024,768')
+            # --start-maximized does not work, headless thinks the maximized size is 800*600, making the element not visible;
+            # options.add_experimental_option("prefs", {"credentials_enable_service": False})
+        return Firefox(options=options, service=s)
+    else:
+        options = ChromeOptions()
+        s = ChromeService("C:/Users/cadec/Documents/Drivers/chromedriver.exe")
+        if headless:
+            options.add_argument("headless")
+            options.add_argument("no-sandbox")
+            options.add_argument('window-size=1024,768')
+            # --start-maximized does not work, headless thinks the maximized size is 800*600, making the element not visible;
+            options.add_experimental_option("prefs", {"credentials_enable_service": False})
+        try:
+            return Chrome(options=options, service=s)
+        except SessionNotCreatedException as e:
+            gd = GetChromeDriver()
+            gd.auto_download(extract=True, output_path="C:/Users/cadec/Documents/Drivers")
+            return Chrome(options=options, service=s)
 
 
 def extract_isbns(title, text, data):
@@ -100,75 +113,82 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
     driver.get(f"https://www.edelweiss.plus/#keywordSearch&q={search_term.replace(' ', '+')}")
     time.sleep(10)
 
-    # open the left nav if it's closed
-    chevron = driver.find_elements_by_class_name("leftNavContracted")
-    if chevron:
-        chevron[0].click()
-
-    # wait for "Not Yet Published" button
-    log("Waiting for Not Yet Published button")
-    WebDriverWait(driver, 30).until(EC.visibility_of_element_located((By.ID, "f_4_2")))
-    button = driver.find_element_by_id("f_4_2")
-    driver.execute_script("arguments[0].scrollIntoView()", button)
-    try:
-        button.click()
-    except WebDriverException:
-        driver.execute_script("arguments[0].scrollIntoView()", button)
-        button.click()
-
-    if not driver.find_elements_by_css_selector("#f_4_2.box_checked"):
-        button = driver.find_element_by_id("f_4_2")
-        driver.execute_script("arguments[0].scrollIntoView()", button)
-        try:
-            button.click()
-        except WebDriverException:
-            driver.execute_script("arguments[0].scrollIntoView()", button)
-            button.click()
+    # try:
+    #     # wait for "Not Yet Published" button
+    #     log("Waiting for Not Yet Published button")
+    #
+    #     chevron = driver.find_elements(By.CLASS_NAME, "leftNavLeftArrow")
+    #     if chevron:
+    #         chevron[0].click()
+    #
+    #     WebDriverWait(driver, 30).until(EC.visibility_of_element_located((By.ID, "f_4_2")))
+    #     button = driver.find_element(By.ID, "f_4_2")
+    #     driver.execute_script("arguments[0].scrollIntoView()", button)
+    #     try:
+    #         button.click()
+    #     except WebDriverException:
+    #         driver.execute_script("arguments[0].scrollIntoView()", button)
+    #         button.click()
+    #
+    #     if not driver.find_elements(By.CSS_SELECTOR, "#f_4_2.box_checked"):
+    #         button = driver.find_element(By.ID, "f_4_2")
+    #         driver.execute_script("arguments[0].scrollIntoView()", button)
+    #         try:
+    #             button.click()
+    #         except WebDriverException:
+    #             driver.execute_script("arguments[0].scrollIntoView()", button)
+    #             button.click()
+    # except Exception as e:
+    #     print(f"Encountered {type(e)} while looking for Not Yet Published button")
 
     log("Waiting for results")
-    WebDriverWait(driver, 30).until(EC.visibility_of_element_located((By.ID, "results")))
-    total = int(driver.find_element_by_id("results").text.replace("of", "").strip())
+    WebDriverWait(driver, 30).until(EC.visibility_of_element_located((By.ID, "totalResults")))
+    total = int(driver.find_element(By.ID, "totalResults").text.replace("of", "").strip())
 
     i, j = 0, 1
     results = []
     while i < total:
         log(f"Processing page {j}")
-        toggle = driver.find_elements_by_css_selector(".visibility-toggle-anchor.visible")
-        if toggle:
-            toggle[0].click()
-        time.sleep(5)
+        # toggle = driver.find_elements(By.CSS_SELECTOR, ".visibility-toggle-anchor.visible")
+        # if toggle:
+        #     toggle[0].click()
+        # time.sleep(5)
 
-        WebDriverWait(driver, 30).until(EC.visibility_of_element_located((By.CLASS_NAME, "ltRow")))
+        # WebDriverWait(driver, 30).until(EC.visibility_of_element_located((By.CLASS_NAME, "ltRow")))
 
-        container_ids = [c.get_attribute('id') for c in driver.find_elements_by_class_name("tempListContainer")]
+        container_ids = [c.get_attribute('id') for c in driver.find_elements(By.CLASS_NAME, "tempListContainer")]
         for cid in container_ids:
             k = 0
-            num_items = len(driver.find_elements_by_xpath(f".//div[@id='{cid}']//div[@class='ltRow']"))
+            num_items = len(driver.find_elements(By.XPATH, f".//div[@id='{cid}']//div[@class='ltRow']"))
             while k < num_items:
                 k += 1
-                item = driver.find_element_by_xpath(f".//div[@id='{cid}']//div[contains(@class, 'ltRow')][{k}]")
-                isbn, sku = item.find_element_by_css_selector(".pve_sku").text.split(",", 1)
+                item = driver.find_element(By.XPATH, f".//div[@id='{cid}']//div[contains(@class, 'ltRow')][{k}]")
+                title_type = item.find_elements(By.CLASS_NAME, "pve_titletype")
+                if title_type and "BACKLIST" in title_type[0].get_attribute("innerHTML"):
+                    continue
+
+                isbn, sku = item.find_element(By.CSS_SELECTOR, ".pve_sku").text.split(",", 1)
                 if sku in sku_list:
                     continue
                 else:
                     sku_list.append(sku)
-                title = item.find_element_by_css_selector(".pve_title span.textLarge").text
+                title = item.find_element(By.CSS_SELECTOR, ".pve_title span.textLarge").text
                 if search_term.lower() not in item.get_attribute("innerHTML").lower():
                     log(f"{search_term} not mentioned in {title}; skipping")
                     continue
 
-                date = item.find_elements_by_css_selector(".pve_shipDate span")
+                date = item.find_elements(By.CSS_SELECTOR, ".pve_shipDate span")
                 if not date:
-                    date = item.find_elements_by_css_selector(".pve_shipDate")
+                    date = item.find_elements(By.CSS_SELECTOR, ".pve_shipDate")
                 publication_date = date[0].get_attribute("innerHTML").replace("On Sale Date:", "").strip()
 
-                fmt = item.find_elements_by_class_name("pve_format")
-                sub_names = item.find_elements_by_class_name("pve_subName")
-                page_fields = item.find_elements_by_class_name("pve_numberOfPages")
-                item = driver.find_element_by_xpath(f".//div[@id='{cid}']//div[contains(@class, 'ltRow')][{k}]")
-                imprint = item.find_element_by_class_name("headerImprint").text
-                no_image = bool(item.find_elements_by_class_name("noThumbImageScroll"))
-                categories = [c.text for c in item.find_elements_by_css_selector(".pve_categories ul.categories li")]
+                fmt = item.find_elements(By.CLASS_NAME, "pve_format")
+                sub_names = item.find_elements(By.CLASS_NAME, "pve_subName")
+                page_fields = item.find_elements(By.CLASS_NAME, "pve_numberOfPages")
+                item = driver.find_element(By.XPATH, f".//div[@id='{cid}']//div[contains(@class, 'ltRow')][{k}]")
+                imprint = item.find_element(By.CLASS_NAME, "headerImprint").text
+                no_image = bool(item.find_elements(By.CLASS_NAME, "noThumbImageScroll"))
+                categories = [c.text for c in item.find_elements(By.CSS_SELECTOR, ".pve_categories ul.categories li")]
 
                 if any("CANCELED" in s.text or "CANCELLED" in s.text for s in sub_names):
                     print(f"Skipping canceled product: {title}")
@@ -182,7 +202,7 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
                     "title": title,
                     "subTitle": sub_names[0].text if sub_names else "",
                     "publicationDate": publication_date,
-                    "author": item.find_element_by_css_selector(".title_Author").text,
+                    "author": item.find_element(By.CSS_SELECTOR, ".title_Author").text,
                     "hasImage": not no_image,
                     "isbn": isbn.strip(),
                     "sku": sku.strip(),
@@ -194,7 +214,7 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
 
         i += 50
         j += 1
-        page_buttons = driver.find_elements_by_id(f"pageOption{j}")
+        page_buttons = driver.find_elements(By.ID, f"pageOption{j}")
         if page_buttons:
             page_buttons[0].click()
             time.sleep(3)
@@ -251,7 +271,7 @@ def determine_page(site: Site, title: str, item: dict, pages_by_isbn: Dict[str, 
                 return page, False
         return None, False
 
-    m = re.search("Star Wars: (.*?) \((.*?)\)", title)
+    m = re.search("Star Wars: (.*?) \((.*?)\)", title.replace("World of Reading: ", ""))
     if m:
         titles = [f"{m.group(2)}: {m.group(1)}", f"Star Wars: {m.group(2)}: {m.group(1)}"]
         if re.search(".*?: .*?", m.group(1)):
@@ -301,6 +321,8 @@ def analyze_products(site, products: List[dict], search_terms):
             page, by_isbn = determine_page(site, item["title"], item, pages_by_isbn)
             if not item["hasImage"]:
                 new_missing_images.append(item["sku"])
+            elif item["title"] == "Star Wars Encyclopedia" and not item["hasImage"]:
+                continue
 
             if not page and (item["title"] in false_positives or "t-shirt" in item["title"].lower()):
                 continue
@@ -323,7 +345,7 @@ def analyze_products(site, products: List[dict], search_terms):
             date_strs = []
             m = re.search("\|(publish date|publication date|release date|released|published)=(.*?)(<.*?)?\n(\*(.*?)(<.*?)?\n)*", text)
             if m:
-                date1 = m.group(2).replace("[", "").replace("]", "").replace("*", "").strip()
+                date1 = re.sub("\([A-Z]+\)", "", m.group(2).replace("[", "").replace("]", "").replace("*", "").strip())
                 date_strs.append(re.sub("([A-z]+ [0-9]+) ([0-9]+)", "\\1, \\2", date1))
                 if m.group(5):
                     date2 = m.group(5).replace("[", "").replace("]", "").replace("*", "").strip()
@@ -348,7 +370,7 @@ def analyze_products(site, products: List[dict], search_terms):
                 continue
             page_dates = []
             for d in date_strs:
-                c = d.split("{{C|")[0].strip()
+                c = re.sub("\([A-Z]+\)", "", d.split("{{C|")[0].strip())
                 if c:
                     try:
                         page_dates.append(datetime.strptime(c, "%B %d, %Y"))
@@ -388,7 +410,7 @@ def analyze_products(site, products: List[dict], search_terms):
 
 
 def run_edelweiss_protocol(site, scheduled=False):
-    driver = build_driver(False)
+    driver = build_driver(headless=True, firefox=True)
     search_terms = ["Star Wars", "Mandalorian"]
     sku_list = []
     products = []
@@ -459,13 +481,10 @@ def save_reprint(site, title, entries: List[dict]):
         if "===" in section:
             section, i_header, international = re.split("(\n=+.*?=+)", section, 1)
 
-        section = section.rstrip()
-        for e in entries:
-            template = "{{" + f"Edelweiss|url=#sku={e['sku']}|text={e['title']}|nobackup=1" + "}}"
-            section += f"\n*{{{{ISBN|{e['isbn']}}}}}; {e['publicationDate']}; {e['publisher']}; {e['format']}<ref name=\"Edelweiss-{e['sku']}\">{template}</ref>"
-        section += "\n"
+        lines = [section.rstrip()]
+        build_editions(lines, entries)
 
-        new_text = "".join([before, split1, section, i_header, international, split2, after])
+        new_text = "".join([before, split1, "\n".join(lines), i_header, international, split2, after])
         page.put(new_text, f"Adding {len(entries)} new reprints to Editions", botflag=False)
 
     elif re.search("=+[A-z]* ?[Gg]allery=+", text):
@@ -474,22 +493,41 @@ def save_reprint(site, title, entries: List[dict]):
         if "==Media==" in before:
             pass
         else:
-            lines.append("==Media==")
-            lines.append("===Editions===")
-            d = re.search("\|release date ?= ?\*?([\[\]A-Za-z, 0-9/]+)", text)
-            date = ("; " + d.group(1)) if d else ""
-            p = re.search("\|publisher ?= ?\*?([\[\]A-Za-z., 0-9/]+)", text)
-            pub = ("; " + p.group(1)) if p else ""
-            for i in re.findall("\|isbn[23]? ?= ?([0-9-]+)", text):
-                lines.append(f"\n*{{{{ISBN|{i}}}}}{date}{pub}")
-
-            for e in entries:
-                template = "{{" + f"Edelweiss|url=#sku={e['sku']}|text={e['title']}|nobackup=1" + "}}"
-                lines.append(f"\n*{{{{ISBN|{e['isbn']}}}}}; {e['publicationDate']}; {e['publisher']}; {e['format']}<ref name=\"Edelweiss-{e['sku']}\">{template}</ref>")
-            lines.append("")
+            build_new_media_section(text, lines, entries)
             lines.append("===Cover gallery===")
+        new_text = "".join([before, "\n".join(lines), after])
+        page.put(new_text, f"Creating Editions section and adding {len(entries)} new reprints", botflag=False)
+
+    elif re.search("=+Appearances=+", text):
+        before, split, after = re.split("=+Appearances=+", text)
+        lines = []
+        if "==Media==" in before:
+            pass
+        else:
+            build_new_media_section(text, lines, entries)
+            lines.append("==Appearances==")
         new_text = "".join([before, "\n".join(lines), after])
         page.put(new_text, f"Creating Editions section and adding {len(entries)} new reprints", botflag=False)
 
     else:
         return f"- Cannot add {len(entries)} new reprints to {page.title()} due to lack of Editions and/or Media subsection"
+
+
+def build_editions(lines: list, entries: list):
+    for e in entries:
+        template = "{{" + f"Edelweiss|url=#sku={e['sku']}|text={e['title']}|nobackup=1" + "}}"
+        lines.append(f"\n*{{{{ISBN|{e['isbn']}}}}}; {e['publicationDate']}; {e['publisher']}; {e['format']}<ref name=\"Edelweiss-{e['sku']}\">{template}</ref>")
+    lines.append("")
+
+
+def build_new_media_section(text, lines: list, entries: list):
+    lines.append("==Media==")
+    lines.append("===Editions===")
+    d = re.search("\|release date ?= ?\*?([\[\]A-Za-z, 0-9/]+)", text)
+    date = ("; " + d.group(1)) if d else ""
+    p = re.search("\|publisher ?= ?\*?([\[\]A-Za-z., 0-9/]+)", text)
+    pub = ("; " + p.group(1)) if p else ""
+    for i in re.findall("\|isbn[23]? ?= ?([0-9-]+)", text):
+        lines.append(f"\n*{{{{ISBN|{i}}}}}{date}{pub}")
+
+    build_editions(lines, entries)

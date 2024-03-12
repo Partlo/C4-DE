@@ -491,6 +491,8 @@ def build_item_ids_for_section(page: Page, name, original: List[Item], data: Ful
         d = determine_id_for_item(o, page.site, data.unique, data.target, other.unique, other.target, remap, canon, log)
         if not d and o.parent:
             p = Page(page.site, o.parent)
+            if "[[w:c:" in o.original:
+                continue
             if is_redirect(p):
                 if log:
                     print(f"Followed redirect {o.parent} to {p.getRedirectTarget().title()}")
@@ -1135,7 +1137,7 @@ def build_new_text(target: Page, infoboxes: dict, types: dict, appearances: Full
         target, results, appearances, sources, remap, use_index, include_date, log)
 
     if unknown or unknown_apps or unknown_src or unknown_final:
-        with codecs.open("C:/Users/Michael/Documents/projects/C4DE/c4de/sources/unknown.txt", mode="a",
+        with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/sources/unknown.txt", mode="a",
                          encoding="utf-8") as f:
             for x in unknown:
                 f.write(u'%s\t%s\n' % (x, target.title()))
@@ -1161,11 +1163,11 @@ def analyze_target_page(target: Page, infoboxes: dict, types: dict, appearances:
 
     new_txt = build_final_text(target, results, redirects, new_apps, new_nca, new_sources, new_ncs, log)
 
-    with codecs.open("C:/Users/Michael/Documents/projects/C4DE/c4de/protocols/test_text.txt", mode="w", encoding="utf-8") as f:
+    with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/test_text.txt", mode="w", encoding="utf-8") as f:
         f.writelines(new_txt)
 
     if dates:
-        with codecs.open("C:/Users/Michael/Documents/projects/C4DE/c4de/protocols/new_dates.txt", mode="a", encoding="utf-8") as f:
+        with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/new_dates.txt", mode="a", encoding="utf-8") as f:
             date_txt = []
             for d in dates:
                 if d[2] == d[3]:
@@ -1181,7 +1183,7 @@ def analyze_target_page(target: Page, infoboxes: dict, types: dict, appearances:
         target.put(new_txt, "Source Engine analysis of Appearances, Sources and references", botflag=match)
 
     results = []
-    with codecs.open("C:/Users/Michael/Documents/projects/C4DE/c4de/protocols/unknown.txt", mode="a",
+    with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/unknown.txt", mode="a",
                      encoding="utf-8") as f:
         if len(analysis.abridged) == 1:
             results.append(f"1 abridged audiobook was missing from Appearances: {analysis.abridged[0]}")
@@ -1189,7 +1191,7 @@ def analyze_target_page(target: Page, infoboxes: dict, types: dict, appearances:
             results.append(f"{len(analysis.abridged)} abridged audiobooks were missing from Appearances:")
             results.append("\n".join(f"- {a}" for a in analysis.abridged))
 
-        if analysis.mismatch:
+        if analysis.mismatch and target.namespace().id == 0:
             c, d = ("Canon", "Legends") if analysis.canon else ("Legends", "Canon")
             results.append(f"The following {len(analysis.mismatch)} entries are marked as {d} in the Masterlist, but are listed on this {c} article: (experimental feature)")
             results.append("\n".join(f"- `{a.master.original}`" for a in analysis.mismatch))
@@ -1209,5 +1211,17 @@ def analyze_target_page(target: Page, infoboxes: dict, types: dict, appearances:
                 if o.original.startswith("*"):
                     print(target.title(), o.original)
             f.writelines("\n" + "\n".join([o.original for o in unknown_src]))
+
+    final_results = []
+    for i in results:
+        if len(i) > 500:
+            x = i.split("\n")
+            for z in x:
+                if len(z) > 500:
+                    final_results += [z[o:o+500] for o in range(0, len(z), 500)]
+                else:
+                    final_results.append(z)
+        else:
+            final_results.append(i)
 
     return results

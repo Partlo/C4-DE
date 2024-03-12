@@ -38,6 +38,9 @@ from c4de.sources.index import create_index
 from c4de.sources.infoboxer import list_all_infoboxes
 from c4de.sources.updates import get_future_products_list, handle_results, search_for_missing
 
+import logging
+logging.getLogger("discord").setLevel(logging.WARN)
+
 
 SELF = 880096997217013801
 CADE = 346767878005194772
@@ -46,7 +49,7 @@ MAIN = "wookieepedia"
 COMMANDS = "other-commands"
 REQUESTS = "bot-requests"
 ANNOUNCEMENTS = "announcements"
-ADMIN_HELP = "admin-help"
+ADMIN_REQUESTS = "admin-requests"
 NOM_CHANNEL = "status-article-nominations"
 REVIEW_CHANNEL = "status-article-reviews"
 SOCIAL_MEDIA = "social-media-team"
@@ -77,7 +80,7 @@ class C4DE_Bot(commands.Bot):
     def __init__(self, *, loop=None, **options):
         intents = Intents.default()
         intents.members = True
-        super().__init__("", loop=loop, intents=intents, **options)
+        super().__init__("", loop=loop, intents=intents, log_handler=None, **options)
         log("C4-DE online!")
         self.timezone_offset = 5
 
@@ -247,7 +250,7 @@ class C4DE_Bot(commands.Bot):
             u = re.search("/wiki/Wookieepedia:.*?_article_nominations/(.*?)(_\(.*?nomination\))?>", message.content)
             if u:
                 return {"user": m.group(1), "article": u.group(1)}
-        m = re.search("New review requested for .*?(Featured|Good|Comprehensive) article: (.*?)\**\n", message.content)
+        m = re.search("New review requested for .*?(Featured|Good|Comprehensive) article: (.*?)( written by.*?)?\n", message.content)
         if m:
             return {"user": None, "article": m.group(2)}
         return None
@@ -425,7 +428,7 @@ class C4DE_Bot(commands.Bot):
         related = [
             "**Additional Protocols:**",
             f"- Reports new Senate Hall and Administrator's Noticeboard threads, Consensus Track and Trash Compactor "
-            f"votes, file rename requests, and articles flagged for deletion to #announcements and #admin-help. "
+            f"votes, file rename requests, and articles flagged for deletion to #announcements and #admin-requests. "
             f"(runs every 5 minutes)",
             f"- Checks the RSS feeds of a variety of sites, such as StarWars.com and SWTOR.com, and reports new "
             f"articles to #star-wars-news",
@@ -455,7 +458,7 @@ class C4DE_Bot(commands.Bot):
         log("Loading web sources file")
         try:
             by_year = {"Unknown": [], "Current": []}
-            with codecs.open("C:/Users/Michael/Documents/projects/C4DE/web.txt", mode="r", encoding="utf-8") as f:
+            with codecs.open("C:/Users/cadec/Documents/projects/C4DE/web.txt", mode="r", encoding="utf-8") as f:
                 for i in f.readlines():
                     d, c = i.split("\t", 1)
                     if d.startswith("1") or d.startswith("2"):
@@ -623,7 +626,7 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def is_analyze_source_command(message: Message):
-        match = re.search("(analy[zs]e|build|check) sources? (for )?(?P<article>.*?)(?P<date> with dates?)?(?P<text> (by|and|with) text)?$", message.content)
+        match = re.search("(analy[zs]e|build|check) sources? (for |on )?(?P<article>.*?)(?P<date> with dates?)?(?P<text> (by|and|with) text)?$", message.content)
         if match:
             return match.groupdict()
         return None
@@ -705,7 +708,7 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def flatten_text(t):
-        return re.sub("(\|book=.*?)(\|story=.*?)(\|.*?)?}}", "\\2\\1\\3}}", re.sub("<!--.*?-->", "", t.replace("&ndash;", "–").replace("&mdash;", "—").replace("\n", "").replace(" ", "")).replace("{{!}}", "|"))
+        return re.sub("(\|book=.*?)(\|story=.*?)(\|.*?)?}}", "\\2\\1\\3}}", re.sub("<!--.*?-->", "", t.replace("&ndash;", "-").replace("&mdash;", "-").replace("—", "-").replace("—", "-").replace("\n", "").replace(" ", "")).replace("{{!}}", "|"))
 
     async def handle_create_index_command(self, message: Message, command: dict):
         try:
@@ -902,7 +905,7 @@ class C4DE_Bot(commands.Bot):
                 continue
             link = self.prepare_link(page)
             message = f"**{page}** has been open for 14 days and can now be archived\n<{SITE_URL}/{link}>"
-            await self.text_channel("admin-help").send(message)
+            await self.text_channel(ADMIN_REQUESTS).send(message)
         self.overdue_cts = overdue
 
     CHANNEL_FILTERS = {
@@ -968,7 +971,7 @@ class C4DE_Bot(commands.Bot):
                 if not p.exists():
                     update.append(message_id)
 
-            for message in await self.text_channel(ADMIN_HELP).history(limit=200).flatten():
+            for message in await self.text_channel(ADMIN_REQUESTS).history(limit=200).flatten():
                 try:
                     if message.id in update:
                         await message.edit(content=f"~~{message.content}~~ (completed)")
@@ -984,7 +987,7 @@ class C4DE_Bot(commands.Bot):
                     await self.report_error(f"Deleted Pages (messages): {message.content} -> {e}", type(e), e)
 
             if update:
-                log(f"Could not find messages {update} in #admin-help to update")
+                log(f"Could not find messages {update} in #{ADMIN_REQUESTS} to update")
         except TimeoutError:
             pass
         except Exception as e:
@@ -1003,7 +1006,7 @@ class C4DE_Bot(commands.Bot):
                         x = re.search("\{\{FTBR\|.*\|(.*?)\}\}", f.get())
                         new_name_text = f" to **{x.group(1)}**" if x else ""
                         m = f"⚠️ **{f.lastNonBotUser()}** requested **{f.title()}** be renamed{new_name_text}\n<{f.full_url()}>"
-                        msg = await self.text_channel(ADMIN_HELP).send(m)
+                        msg = await self.text_channel(ADMIN_REQUESTS).send(m)
                         self.admin_messages[msg.id] = f.title()
                 except Exception as e:
                     await self.report_error(f"FTBR: {f.title()}", type(e), e)
@@ -1028,7 +1031,7 @@ class C4DE_Bot(commands.Bot):
 
         for title, url in to_delete.items():
             try:
-                m = await self.text_channel("admin-help").send(f"❗ **{title}** has been flagged for deletion\n<{url}>")
+                m = await self.text_channel(ADMIN_REQUESTS).send(f"❗ **{title}** has been flagged for deletion\n<{url}>")
                 self.admin_messages[m.id] = title
             except Exception as e:
                 await self.report_error(f"RSS: Deletion: {title}", type(e), e)
@@ -1091,7 +1094,10 @@ class C4DE_Bot(commands.Bot):
         nd = datetime.now().strftime("%Y-%m-%d")
         try:
             page = Page(self.site, f"Wookieepedia:Sources/Web/{datetime.now().year}")
-            text = page.get()
+            try:
+                text = page.get()
+            except NoPageError:
+                text = "{{Wookieepedia:Sources/Web/Header}}"
             for d, t in templates:
                 if t.split("|archivedate=", 1)[0].rsplit("|", 1)[0] not in text:
                     text += f"\n*{d or nd}: {t}"
@@ -1119,7 +1125,7 @@ class C4DE_Bot(commands.Bot):
         else:
             s = (m['site'].split('.com:')[0] + '.com') if '.com:' in m['site'] else m['site']
             t = f"New Article on {s}"
-        f = m["title"].replace("''", "*")
+        f = m["title"].replace("''", "*").replace("’", "'")
         msg = "{0} **{1}:**    {2}\n- <{3}>".format(self.emoji_by_name(site_data["emoji"]), t, f, m["url"])
 
         if success and site_data.get("addToArchive") and not already_archived:
@@ -1151,12 +1157,14 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def build_citation_template(msg: dict, youtube, site_data: dict, archivedate):
-        t = msg['title'].replace("|", "&#124;")
+        t = msg['title'].replace("|", "&#124;").strip()
         x = msg.get('template') or site_data['template']
         if youtube:
             result = f"{x}|{msg['videoId']}|{t}"
         else:
             url = msg["url"].replace(site_data["baseUrl"] + "/", "")
+            if url.endswith("/"):
+                url = url[:-1]
             result = f"{x}|url={url}|text={t}"
         if archivedate:
             result += f"|archivedate={archivedate}"

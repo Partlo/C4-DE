@@ -41,7 +41,7 @@ pydot >= 1.2
 python-stdnum >= 1.16
 
 # GUI
-Pillow >= 8.1.1 ; python_version >= '3.6'
+# Pillow >= 8.1.1 ; python_version >= '3.6'
 
 # core pagegenerators
 google >= 1.7
@@ -60,7 +60,12 @@ memento_client>=0.5.1,!=0.6.0
 # pywikibot~=6.4.0
 requests~=2.25.1
 discord~=1.7.3
+discord.py==1.7.0
 Pillow~=8.3.1
 pyparsing~=2.4.7
 setuptools~=57.0.0
 PyMySQL~=1.0.2
+waybackpy
+selenium
+get_chrome_driver
+feedparser
