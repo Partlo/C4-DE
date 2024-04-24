@@ -30,7 +30,7 @@ from c4de.protocols.cleanup import archive_stagnant_senate_hall_threads, remove_
 from c4de.protocols.edelweiss import run_edelweiss_protocol, calculate_isbns_for_all_pages
 from c4de.protocols.rss import check_rss_feed, check_latest_url, check_wookieepedia_feeds, check_sw_news_page, \
     check_review_board_nominations, check_policy, check_consensus_track_duration, check_user_rights_nominations, \
-    check_blog_list, check_ea_news, check_unlimited, check_ubisoft_news
+    check_blog_list, check_ea_news, check_unlimited, check_ubisoft_news, compare_site_map
 
 from c4de.sources.analysis import analyze_target_page, get_analysis_from_page
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, build_template_types
@@ -71,7 +71,7 @@ class C4DE_Bot(commands.Bot):
     :type rss_data: dict[str, dict]
     :type internal_rss_cache: dict[str, list[str]]
     :type external_rss_cache: dict[str, dict[str, list[str]]]
-    :type board_nominations: dict[str, list[str]]
+    :type board_nominations: dict[str, dict]
     :type policy_updates: dict[str, list[str]]
     :type rights_cache: dict[str, list[str]]
     :type report_dm: discord.DMChannel
@@ -250,7 +250,7 @@ class C4DE_Bot(commands.Bot):
             u = re.search("/wiki/Wookieepedia:.*?_article_nominations/(.*?)(_\(.*?nomination\))?>", message.content)
             if u:
                 return {"user": m.group(1), "article": u.group(1)}
-        m = re.search("New review requested for .*?(Featured|Good|Comprehensive) article: (.*?)( written by.*?)?\n", message.content)
+        m = re.search("New review requested for .*?(Featured|Good|Comprehensive) article: (.*?)( \(.*?review\))?( written by.*?)?\n", message.content)
         if m:
             return {"user": None, "article": m.group(2)}
         return None
@@ -484,14 +484,21 @@ class C4DE_Bot(commands.Bot):
             error_log(type(e), e)
 
     async def ghost_touch(self, message: Message):
-        match = re.search("[Gg]host touch Category:(.*?)$", message.content)
+        match = re.search("[Gg]host touch (-ref:|Category:)?(.*?)$", message.content)
         if match:
             await message.add_reaction(TIMER)
-            category = Category(self.site, match.group(1))
-            if not category.exists():
-                await message.add_reaction(EXCLAMATION)
-                return
-            for page in category.articles():
+            if match.group(1) == "Category:":
+                category = Category(self.site, match.group(2))
+                if not category.exists():
+                    await message.add_reaction(EXCLAMATION)
+                    return
+                articles = category.articles()
+            elif match.group(1) == "-ref:":
+                p = Page(self.site, match.group(2))
+                articles = p.backlinks(follow_redirects=False)
+            else:
+                articles = [Page(self.site, match.group(2))]
+            for page in articles:
                 try:
                     text = page.get()
                     page.put(text, "Bot: Ghost edit to update WhatLinksHere. Tell Cade if you see this.", botflag=False)
@@ -544,6 +551,49 @@ class C4DE_Bot(commands.Bot):
         if not data:
             raise Exception("Cannot load RSS data")
         self.project_data = data
+
+    async def handle_initial_redirect_request(self, message: Message, command: dict):
+        redirect_name = command['redirect']
+        target_name = command['target']
+
+        redirect = Page(self.site, redirect_name)
+        target = Page(self.site, target_name)
+        if not target.exists():
+            await message.channel.send(f"Requested target page {target.title()} does not exist.")
+            return
+
+        rlc, rlc2 = 0, 0
+        for i in redirect.backlinks(follow_redirects=False):
+            if i.namespace() in [1, 2, 3, 100]:
+                rlc2 += 1
+            else:
+                rlc += 1
+
+        tlc, tlc2 = 0, 0
+        for i in target.backlinks(follow_redirects=False):
+            if i.namespace() in [1, 2, 3, 100]:
+                tlc2 += 1
+            else:
+                tlc += 1
+
+        if (rlc + rlc2) == 0:
+            await message.channel.send(f"No pages link to specified redirect [{redirect_name}]")
+            return
+        elif rlc == 0:
+            await message.channel.send(f"No editable pages link to specified redirect [{redirect_name}]; {rlc2} links found in User, Talk or Forum namespaces")
+            return
+
+        response = [
+            f"Redirect: <{redirect.full_url().replace('%2F', '/').replace('%3A', ':')}>",
+            f"- {rlc} fixable links found; {rlc2} links found in User, Talk, or Forum namespaces",
+            f"Target: <{target.full_url().replace('%2F', '/').replace('%3A', ':')}>",
+            f"- {tlc} fixable links found; {tlc2} links found in User, Talk, or Forum namespaces"
+            f"Replacements:",
+            f"- `[[{redirect.title()}]]` to `[[{target.title()}]]`",
+            f"- `[[{redirect.title()}|` to `[[{target.title()}|`",
+            "React to this message with :bb8thumsup: to proceed."
+        ]
+
 
     @staticmethod
     def is_single_preload_command(message: Message):
@@ -848,23 +898,39 @@ class C4DE_Bot(commands.Bot):
     @tasks.loop(minutes=15)
     async def check_membership_nominations(self):
         log("Checking board membership nominations")
-        current_nominations = check_review_board_nominations(self.site)
+        current_nominations, interested = check_review_board_nominations(self.site)
         messages = []
         for board, noms in current_nominations.items():
             for user in noms:
-                if user not in self.board_nominations[board]:
+                if user not in self.board_nominations["Nominations"][board]:
                     username = self.prepare_link(user)
                     emote = self.emoji_by_name(BOARD_EMOTES[board])
-                    messages.append((board, f"{emote} **{user} has been nominated for membership in the {board}!**\n<{SITE_URL}/Wookieepedia:Review_board_membership_nominations#{username}>"))
+                    messages.append((True, board, f"{emote} **{user} has been nominated for membership in the {board}!**\n<{SITE_URL}/Wookieepedia:Review_board_membership_nominations#{username}>"))
 
-        for (board, message) in messages:
+        for board, noms in interested.items():
+            for user in list(noms.keys()):
+                if user not in self.board_nominations["Interested"][board]:
+                    emote = self.emoji_by_name("grogu")
+                    messages.append((False, board, f"{emote} **{user} has expressed interest in joining the {board}!**\n<{SITE_URL}/Wookieepedia:Review board recruitment>"))
+                else:
+                    noms[user] = self.board_nominations["Interested"][board][user]
+                    if datetime.now().hour == 12 and datetime.now().minute <= 15:
+                        last_checked = self.board_nominations["Interested"][board][user]
+                        as_date = datetime.strptime(last_checked, "%Y-%m-%d")
+                        diff = (datetime.now() - as_date).days
+                        if diff > 0 and diff % 30 == 0:
+                            emote = self.emoji_by_name("grogu")
+                            messages.append((False, board, f"{emote} 30 days have passed since **{user}** expressed interest in joining the {board}; please provide feedback if this has not already been done"))
+
+        for (announce, board, message) in messages:
             try:
-                await self.text_channel(ANNOUNCEMENTS).send(message)
+                if announce:
+                    await self.text_channel(ANNOUNCEMENTS).send(message)
                 await self.text_channel(board.lower()).send(message)
             except Exception as e:
                 error_log(f"Encountered {type(e)} while checking board nominations", e)
 
-        self.board_nominations = current_nominations
+        self.board_nominations = {"Nominations": current_nominations, "Interested": interested}
 
         with open(BOARD_CACHE, "w") as f:
             f.writelines(json.dumps(self.board_nominations, indent=4))
@@ -981,6 +1047,8 @@ class C4DE_Bot(commands.Bot):
                 except discord.errors.HTTPException as e:
                     if "rate limit" in str(e):
                         time.sleep(5)
+                    elif "Maximum number of edits" in str(e):
+                        await message.add_reaction(self.emoji_by_name("trash"))
                     else:
                         await self.report_error(f"Deleted Pages (messages): {message.content} -> {e}", type(e), e)
                 except Exception as e:
@@ -1046,10 +1114,15 @@ class C4DE_Bot(commands.Bot):
         messages_to_post = []
         templates = []
 
+        db_archive = self.parse_archive("Databank")
+        new_db_entries = []
+        updated_db_entries = {}
         for site, site_data in self.rss_data["sites"].items():
             try:
                 if site == "StarWars.com":
                     messages = check_sw_news_page(site_data["url"], self.external_rss_cache["sites"], site_data["title"])
+                    other, updated_db_entries = compare_site_map(self.site, ["Star Wars: The Bad Batch", "The Acolyte"], messages)
+                    messages += other
                 elif site_data["template"] == "Unlimitedweb":
                     messages = check_unlimited(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
                 elif site_data["template"] == "AMGweb":
@@ -1064,23 +1137,35 @@ class C4DE_Bot(commands.Bot):
                     messages = check_rss_feed(site_data["rss"], self.external_rss_cache["sites"], site, site_data["title"],
                                               site_data.get("nonSW", False))
 
-                archive = self.parse_archive(site_data.get("addToArchive"), site_data["template"])
+                archive = self.parse_archive(site_data["template"])
                 for m in reversed(messages):
-                    msg, d, template = await self.prepare_new_rss_message(m, site_data["baseUrl"], site_data, False, archive)
-                    messages_to_post += msg
-                    templates.append((d, template))
+                    try:
+                        msg, d, template = await self.prepare_new_rss_message(
+                            m, site_data["baseUrl"], site_data, False, db_archive if m['site'] == "Databank" else archive)
+                        messages_to_post += msg
+                        if m["site"] == "Databank":
+                            new_db_entries.append(template)
+                        else:
+                            templates.append((d, template))
+                    except Exception as e:
+                        error_log(type(e), e.args)
             except Exception as e:
                 error_log(f"Encountered {type(e)} while checking RSS for {site}", e)
+            if updated_db_entries:
+                break
 
         for site, site_data in self.rss_data["YouTube"].items():
-            archive = self.parse_archive(site_data.get("addToArchive"), site_data["template"])
+            archive = self.parse_archive(site_data["template"])
             messages = check_rss_feed(
                 f"https://www.youtube.com/feeds/videos.xml?channel_id={site_data['channelId']}",
                 self.external_rss_cache["YouTube"], site, "<h1 class=\"title.*?><.*?>(.*?)</.*?></h1>", site_data.get("nonSW", False))
             for m in reversed(messages):
-                msg, d, template = await self.prepare_new_rss_message(m, "https://www.youtube.com", site_data, True, archive)
-                messages_to_post += msg
-                templates.append((d, template))
+                try:
+                    msg, d, template = await self.prepare_new_rss_message(m, "https://www.youtube.com", site_data, True, archive)
+                    messages_to_post += msg
+                    templates.append((d, template))
+                except Exception as e:
+                    error_log(type(e), e.args)
 
         for channel, message in messages_to_post:
             try:
@@ -1088,9 +1173,19 @@ class C4DE_Bot(commands.Bot):
             except Exception as e:
                 await self.report_error(f"RSS: {message}", type(e), e)
 
+        if updated_db_entries:
+            await self.handle_updated_db_entries(updated_db_entries)
+
         with open(EXTERNAL_RSS_CACHE, "w") as f:
             f.writelines(json.dumps({k: {i: c[-250:] for i, c in v.items()} for k, v in self.external_rss_cache.items()}, indent=4))
 
+        if templates:
+            await self.update_web_sources(templates)
+        if new_db_entries:
+            await self.update_databank(new_db_entries)
+        log("Completed external RSS check")
+
+    async def update_web_sources(self, templates: list):
         nd = datetime.now().strftime("%Y-%m-%d")
         try:
             page = Page(self.site, f"Wookieepedia:Sources/Web/{datetime.now().year}")
@@ -1105,12 +1200,66 @@ class C4DE_Bot(commands.Bot):
                 page.put(text, "Adding new sources", botflag=False)
         except Exception as e:
             await self.report_error(f"RSS: Saving sources", type(e), e)
-        log("Completed external RSS check")
+
+    async def handle_updated_db_entries(self, updated_db_entries):
+        new_archivedates = {}
+        z = ["The following Databank entries were listed on an Episode Guide page, and may have been updated:"]
+        for d, t in updated_db_entries.items():
+            try:
+                success, archivedate = archive_url(f"https://starwars.com/{d}", force_new=True)
+                if success:
+                    new_archivedates[d.replace("databank/", "")] = archivedate
+            except Exception as e:
+                error_log(type(e), e.args)
+            y = f"- {t}: <https://starwars.com/{d}>"
+            if len(y) + len(z[-1]) > 500:
+                z.append(y)
+            else:
+                z[-1] += f"\n{y}"
+        for i in z:
+            try:
+                await self.text_channel("spoiler-editing").send(i)
+            except Exception as e:
+                await self.report_error(f"RSS: {i}", type(e), e)
+
+        # if new_archivedates:
+        #     page = Page(self.site, "Module:ArchiveAccess/Databank")
+        #     new_text = page.get()
+        #     for u, d in new_archivedates.items():
+        #         new_text = re.sub("\[['\"]" + u + "['\"]\].*?=.*?['\"][0-9]+?['\"]", f"['{u}'] = '{d}'", new_text)
+        #     if new_text != page.get():
+        #         page.put(new_text, "Updating archivedates for changed Databank entries")
+
+    async def update_databank(self, new_entries: list):
+        try:
+            page = Page(self.site, f"Wookieepedia:Sources/Web/Databank")
+            try:
+                text = page.get()
+            except NoPageError:
+                text = "{{Wookieepedia:Sources/Web/Header}}"
+            all_entries = [x for x in text.splitlines() if x.startswith("*{{Databank")]
+            all_entries += [f"*{t}" for t in new_entries]
+
+            items = []
+            for e in all_entries:
+                t = re.search("{{Databank\|.*?\|(.*?)(\|.*?)?}}", e)
+                txt = t.group(1).lower().replace("'", "").replace('"', "")
+                items.append((txt, e))
+
+            new_text = "\n".join(x for i, x in sorted(items))
+            if new_text != page.get():
+                page.put(new_text, "Adding new sources", botflag=False)
+        except Exception as e:
+            await self.report_error(f"RSS: Saving sources", type(e), e)
 
     async def prepare_new_rss_message(self, m: dict, base_url: str, site_data: dict, youtube: bool, archive: dict) -> Tuple[List[Tuple[str, str]], str, str]:
         target = m["url"].replace(base_url + "/", "")
         if target.endswith("/"):
             target = target[:-1]
+        if youtube:
+            target = target.replace("watch?=", "")
+        if m['site'] == "Databank":
+            target = target.replace("databank/", "")
         already_archived = archive and archive.get(target)
         if already_archived:
             log(f"URL already archived and recorded: {m['url']}")
@@ -1122,15 +1271,18 @@ class C4DE_Bot(commands.Bot):
 
         if youtube:
             t = f"New Video on the official {m['site']} YouTube channel"
+        elif m["site"] == "Databank":
+            t = f"New Entry on the Databank"
         else:
             s = (m['site'].split('.com:')[0] + '.com') if '.com:' in m['site'] else m['site']
             t = f"New Article on {s}"
         f = m["title"].replace("''", "*").replace("’", "'")
         msg = "{0} **{1}:**    {2}\n- <{3}>".format(self.emoji_by_name(site_data["emoji"]), t, f, m["url"])
 
-        if success and site_data.get("addToArchive") and not already_archived:
+        if success and not already_archived:
             try:
-                self.add_urls_to_archive(site_data["template"], target, archivedate)
+                template = "Databank" if m["site"] == "Databank" else site_data["template"]
+                self.add_urls_to_archive(template, target, archivedate)
                 include_archivedate = False
             except Exception as e:
                 await self.report_error(m["url"], type(e), e)
@@ -1144,6 +1296,9 @@ class C4DE_Bot(commands.Bot):
             msg += f"\n- Unable to archive URL: {archivedate.splitlines()[0] if archivedate else ''}"
 
         results = [(UPDATES, msg)]
+        if (m["site"] == "Databank" or (m["site"] == "StarWars.com" and "Episode Guide" in m['title'])
+                or (m["site"] == "StarWars.com" and "Declassified" in m['title'] and "Highlights" in m['title'])):
+            results.append(("spoiler-editing", msg))
         for c in site_data.get("channels", []):
             results.append((c, msg))
 
@@ -1161,6 +1316,9 @@ class C4DE_Bot(commands.Bot):
         x = msg.get('template') or site_data['template']
         if youtube:
             result = f"{x}|{msg['videoId']}|{t}"
+        elif msg["site"] == "Databank":
+            url = msg["url"].replace(site_data["baseUrl"] + "/", "").replace("databank/", "")
+            result = f"Databank|{url}|{t}"
         else:
             url = msg["url"].replace(site_data["baseUrl"] + "/", "")
             if url.endswith("/"):
@@ -1177,6 +1335,8 @@ class C4DE_Bot(commands.Bot):
         return Page(self.site, f"Module:ArchiveAccess/{template}")
 
     def add_urls_to_archive(self, template, new_url, archivedate):
+        if template == "ThisWeek" or template == "HighRepublicShow":
+            template = "SWYouTube"
         page = self.get_archive_for_site(template)
         text = page.get()
         if page.title().startswith("Template"):
@@ -1193,23 +1353,21 @@ class C4DE_Bot(commands.Bot):
             self.site.login()
             page.put(new_text, f"Archiving {archivedate} for new URL: {new_url}", botflag=False)
 
-    def parse_archive(self, has_archive, template):
-        if has_archive:
-            page = self.get_archive_for_site(template)
-            if not page.exists():
-                return None
-            archive = {}
-            for u, d in re.findall("\[['\"](.*?)['\"]\] ?= ?['\"]?([0-9]+)/?['\"]?", page.get()):
-                archive[u.replace("\\'", "'")] = d
-            return archive
-        return None
+    def parse_archive(self, template):
+        page = self.get_archive_for_site(template)
+        if not page.exists():
+            return None
+        archive = {}
+        for u, d in re.findall("\[['\"](.*?)['\"]\] ?= ?['\"]?([0-9]+)/?['\"]?", page.get()):
+            archive[u.replace("\\'", "'")] = d
+        return archive
 
     @staticmethod
     def build_archive_template_text(text, new_url, archivedate):
         special_start = "<!-- Start" in text
         new_text = []
         found, start = False, False,
-        u = new_url.replace("=", "{{=}}")
+        u = new_url.replace("watch?v=", "").replace("=", "{{=}}")
         for line in text.splitlines():
             if not start and special_start:
                 start = "<!-- Start" in line

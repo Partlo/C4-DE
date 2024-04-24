@@ -53,6 +53,8 @@ def remove_spoiler_tags_from_page(site, page, limit=30, offset=5):
     for field in target:
         if field.startswith("time="):
             named["time"] = field.split("=", 1)[1]
+        elif field.startswith("thr="):
+            named["thr"] = field.split("=", 1)[1]
         elif field.startswith("quote"):
             f, v = field.split("=", 1)
             named[f] = v

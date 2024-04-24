@@ -136,3 +136,9 @@
 *'''3.5.4''': March 12, 2024
 **Restored Edelweiss protocol to working status using Firefox
 **Various tweaks and fixes to the Source Engine logic
+*'''3.6.0''': March 12, 2024
+**Added site map traversal to the SW.com RSS feed logic, which means it will report new Databank entries and episode guides in addition to the usual news articles
+**New Databank entries will be reported to #canon
+*'''3.6.1''': April 24, 2024
+**Enhanced reporting around review board recruitment
+**Various RSS bug fixes

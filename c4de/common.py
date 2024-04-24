@@ -180,22 +180,24 @@ def build_analysis_response(site, nom_type):
     return lines
 
 
-def archive_url(url):
-    try:
-        r = requests.get(f"https://web.archive.org/web/{url}")
-        if re.search("/web/([0-9]+)/", r.url):
-            log(f"URL is archived already: {url}")
-            return True, r.url.split("/web/", 1)[1].split("/", 1)[0]
-    except (TimeoutError, ConnectionError, requests.exceptions.ConnectionError, urllib3.exceptions.MaxRetryError):
-        log(f"ERROR: Timeout/connection error while attempting to archive {url}")
-    except Exception as e:
-        error_log(url, type(e), e)
+def archive_url(url, force_new=False):
+    if not force_new:
+        try:
+            r = requests.get(f"https://web.archive.org/web/{url}", timeout=30)
+            if re.search("/web/([0-9]+)/", r.url):
+                log(f"URL is archived already: {url}")
+                return True, r.url.split("/web/", 1)[1].split("/", 1)[0]
+        except (TimeoutError, ConnectionError, requests.exceptions.ConnectionError, urllib3.exceptions.MaxRetryError):
+            log(f"ERROR: Timeout/connection error while attempting to archive {url}")
+        except Exception as e:
+            error_log(url, type(e), e)
 
     err_msg = None
     try:
         log(f"Archiving in the wayback: {url}")
         wayback = waybackpy.Url(url, USER_AGENT)
         archive = wayback.save()
+        log(f"Successful archive: {archive.archive_url}")
         return True, archive.archive_url.split("/web/", 1)[1].split("/", 1)[0]
     except WaybackError:
         err_msg = "URL cannot be archived by wayback machine as it is a redirect"

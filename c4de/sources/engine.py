@@ -242,6 +242,10 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
         if m:
             return Item(z, mode, a, target=None, template=template, parent="Holonet", url=m.group(3).replace("|", "/"),
                         text=m.group(5))
+    elif template == "CelebrationTrailer":
+        m = re.search("\{\{CelebrationTrailer\|['\[]*(?P<m>.*?)(\|.*?)?['\]]*\|(?P<c>.*?)\}\}", s)
+        if m:
+            return Item(z, mode, a, target=m.groupdict()['c'], issue=m.groupdict()['m'])
     elif template == "HBCite":
         m = re.search("\{\{HBCite\|([0-9]+)", s)
         if m:
@@ -595,11 +599,13 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
             return x
 
     if o.parent and o.target:
-        x = match_parent_target(o, by_target, other_targets)
+        x = match_parent_target(o, o.target, by_target, other_targets)
         if not x and o.target and not followed_redirect:
             if follow_redirect(o, site, True):
                 followed_redirect = True
-                x = match_parent_target(o, by_target, other_targets)
+                x = match_parent_target(o, o.target, by_target, other_targets)
+        if not x and o.template == "StoryCite" and "(short story)" not in o.target:
+            x = match_parent_target(o, f"{o.target} (short story)", by_target, other_targets)
         if x:
             return x
 
@@ -645,20 +651,20 @@ def match_issue_target(o: Item, by_target: Dict[str, List[Item]], other_targets:
     return None
 
 
-def match_parent_target(o: Item, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]]):
-    if by_target and o.target in by_target and len(by_target[o.target]) > 1:
-        for t in by_target[o.target]:
+def match_parent_target(o: Item, target, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]]):
+    if by_target and target in by_target and len(by_target[target]) > 1:
+        for t in by_target[target]:
             if t.parent == o.parent:
                 return ItemId(o, t, False, False, by_parent=True)
-    elif other_targets and o.target in other_targets and len(other_targets[o.target]) > 1:
-        for t in other_targets[o.target]:
+    elif other_targets and target in other_targets and len(other_targets[target]) > 1:
+        for t in other_targets[target]:
             if t.parent == o.parent:
                 return ItemId(o, t, False, True, by_parent=True)
     elif o.parent and "Star Wars Legends Epic Collection" in o.parent and o.template == "StoryCite":
-        if by_target and o.target in by_target:
-            return ItemId(o, by_target[o.target][0], True, False, by_parent=True)
-        elif other_targets and o.target in other_targets:
-            return ItemId(o, other_targets[o.target][0], True, True, by_parent=True)
+        if by_target and target in by_target:
+            return ItemId(o, by_target[target][0], True, False, by_parent=True)
+        elif other_targets and target in other_targets:
+            return ItemId(o, other_targets[target][0], True, True, by_parent=True)
     return None
 
 

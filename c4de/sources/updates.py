@@ -145,10 +145,19 @@ def get_future_products_list(site: Site, infoboxes=None):
 
 
 def parse_page(p: Page, types):
+    text = p.get()
+    for link in p.linkedPages():
+        if link.exists() and link.isRedirectPage():
+            x = link.getRedirectTarget()
+            text = text.replace(f"[[{link.title()}|", f"[[{x.title()}|")
+            text = text.replace(f"[[{link.title()}]]", f"[[{x.title()}]]")
+            text = text.replace(f"|{link.title()}|", f"|{x.title()}|")
+            text = text.replace(f"|{link.title()}" + "}", f"|{x.title()}" + "}")
+
     unique = {}
     full = {}
     target = {}
-    for i, line in enumerate(p.get().splitlines()):
+    for i, line in enumerate(text.splitlines()):
         parse_line(line, i, p, types, full, unique, target)
 
     return FullListData(unique, full, target, set(), set())
@@ -252,6 +261,8 @@ def should_check_product(inf, t, p: Page, c: Category):
         # print(f"Skipping person article: {p.title()} in {c.title()}")
         return False
     elif inf == "toy line" and p.title().startswith("LEGO"):
+        return False
+    elif "[[Category:Book collections" in t:
         return False
     elif f"[[{c.title()}| " in t or f"[[{c.title()}|*" in t or f"[[Category:{p.title()}| " in t:
         # print(f"Skipping root page {p.title()} for {c.title()}")

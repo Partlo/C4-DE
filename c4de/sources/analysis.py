@@ -471,8 +471,8 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
     unknown_final = []
     new_apps, final_apps = build_new_section("==Appearances==", new_apps, results.app_mode, dates, results.canon, include_date, log, use_index, mismatch, both_continuities, unknown_final)
     new_nca, final_nca = build_new_section("===Non-canon appearances===", new_nca, UNCHANGED, dates, results.canon, include_date, log, use_index, mismatch, both_continuities, unknown_final)
-    new_src, final_sources = build_new_section("==Sources==", new_src, BY_DATE, dates, results.canon, new_src and len(new_src.found) > 1, log, use_index, mismatch, both_continuities, unknown_final)
-    new_ncs, final_ncs = build_new_section("===Non-canon sources===", new_ncs, BY_DATE, dates, results.canon, new_ncs and len(new_ncs.found) > 1, log, use_index, mismatch, both_continuities, unknown_final)
+    new_src, final_sources = build_new_section("==Sources==", new_src, BY_DATE, dates, results.canon, True, log, use_index, mismatch, both_continuities, unknown_final)
+    new_ncs, final_ncs = build_new_section("===Non-canon sources===", new_ncs, BY_DATE, dates, results.canon, True, log, use_index, mismatch, both_continuities, unknown_final)
     analysis = AnalysisResults(final_apps, final_nca, final_sources, final_ncs, results.canon, abridged, mismatch)
     return new_apps, new_nca, new_src, new_ncs, dates, unknown_apps, unknown_src, unknown_final, analysis
 

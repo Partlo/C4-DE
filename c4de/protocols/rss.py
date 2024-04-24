@@ -41,7 +41,7 @@ def check_new_pages_rss_feed(site, url, cache: Dict[str, List[str]]):
                 elif e.title.startswith("Forum:TC:") or e.title.startswith("Wookieepedia:Trash compactor"):
                     pt, ch, message = "Trash Compactor", ANNOUNCEMENTS, f"🗑️ **New Trash Compactor thread**\n<{e.link}>"
                 elif e.title.startswith("User blog:"):
-                    if "Category:Staff blogs" in e.description:
+                    if "Category:Staff blogs" in e.description or "Category:Technical Updates" in e.description or "{{blog_footer}}" in e.description.lower() or "{{blog footer}}" in e.description.lower():
                         pt, ch, message = "Fandom Blog", ANNOUNCEMENTS, f"<:fandom:872166055693393940>**New Fandom Staff blog post**\n<{e.link}>"
             elif re.match("^<p>.*? deleted page.*?</p>", e.description):
                 continue
@@ -542,7 +542,19 @@ def check_review_board_nominations(site: Site):
             if u != "USERNAME":
                 noms[board].append(u)
 
-    return noms
+    page = Page(site, "Wookieepedia:Review board recruitment")
+    text = page.get()
+    interested = {"EduCorps": {}, "AgriCorps": {}, "Inquisitorius": {}}
+    for section in text.split("===Expression")[1:]:
+        board = section.split("|", 1)[0].split("Wookieepedia:")[-1]
+        if board not in interested:
+            continue
+
+        for u in re.findall("(\[\[User:|{{U\|)(?P<user>.*?)(\|.*?)?(\]\]|\}\})", section):
+            if u[1] != "USERNAME":
+                interested[board][u[1]] = datetime.now().strftime("%Y-%m-%d")
+
+    return noms, interested
 
 
 def check_user_rights_nominations(site: Site):
@@ -678,7 +690,153 @@ def compile_tracked_urls(site):
     return urls
 
 
-def compare_site_map(site):
+IGNORE = """
+ahsoka-props-costumes-sdcc-2023
+art-inspired-by-the-mandalorian
+badge-art-swce23
+character-posters-ahsoka
+community/force-for-change-at-the-force-awakens-world-premiere
+community/star-wars-fans
+community/star-wars-legion-gallery-part-1
+community/star-wars-legion-gallery-part-2
+community/star-wars-legion-gallery-part-3
+covers-the-high-republic
+dark-horse-the-high-republic-phase-iii-artwork-reveal
+disneyplus/lego-star-wars
+fashion-illustrator-marilee-heyer-sketches
+films/star-wars-episode-ix-the-rise-of-skywalker
+first-look-the-mandalorian-season-two
+gift-the-galaxy-good-morning-america
+heroes-concept-art-the-high-republic
+lego-star-wars-holiday-special-concept-art
+lego-star-wars-the-force-awakens-screenshots
+lego-star-wars-the-skywalker-saga
+mandalorian-mayhem-rocket-league-screenshots
+marvel-star-wars-rebels-variant-covers
+news/20-favorite-quotes-the-mandalorian-season-one
+news/the-recruit-episode-guide-star-wars-resistance
+rebels-season-two-fan-art-contest-winners
+screenshots-minecraft-star-wars-path-of-the-jedi-dlc
+shag-beeline-creative-return-of-the-jedi-collection
+star-wars-battlefront-screenshots
+star-wars-celebration-live-backstage
+star-wars-eclipse-screenshots
+star-wars-force-arena-mobile-screenshots
+star-wars-frames-a-new-hope
+star-wars-frames-the-empire-strikes-back
+star-wars-heroes-path-screenshots
+star-wars-hunters-screenshots
+star-wars-insider-the-mighty-walt-marvel-covers
+star-wars-jedi-fallen-order-journey-screenshots
+star-wars-jedi-survivor-screenshots
+star-wars-journey-to-batuu-gameplay-screenshots
+star-wars-the-high-republic-character-encyclopedia-nycc-2023
+star-wars-uprising-screenshots
+stellan-gios-lightsaber-the-high-republic
+swce-2023-online-store-products
+tales-from-the-death-star-nycc-2023
+the-bad-batch-mobile-wallpaper
+the-empire-strikes-back-ralph-mcquarrie
+thra-6-preview
+thra-7-preview
+thra-8-preview
+villains-concept-art-the-high-republic
+
+art-awakens-official-rules
+eras
+go-rogue-contest
+news/star-wars-celebration-europe-2023-tickets-retire
+projectlegion
+series/star-wars-resistance/shorts-collection
+series/the-mandalorian/bounty-hunting-highlights
+star-wars-rebels-season-2-fan-art-contest
+the-high-republic-cavan-scott"""
+
+
+def compare_site_map(site, series, already_tracked=None):
+    skip = [m['url'] for m in (already_tracked or [])]
     urls = compile_tracked_urls(site)
     sitemap = build_site_map(False)
-    return set(sitemap) - set(urls)
+
+    guides, db, series_db = augment_site_map(site, series, urls)
+    sitemap = sitemap.union(list(guides) + list(db.keys()) + list(series_db.keys()))
+    updated_db_entries = {u: t for u, t in db.items() if u in urls}
+
+    diff = []
+    ignore = IGNORE.splitlines()
+    for x in sorted(sitemap):
+        if x in urls or x in ignore or x == "https://www.starwars.com":
+            continue
+        # elif "-concept-art-gallery" in x or "-episode-stills" in x or "-trivia-gallery" in x or x.startswith("video/"):
+        elif x.startswith("video/"):
+            continue
+
+        u = f"https://www.starwars.com/{x}"
+        if x in skip or u in skip:
+            continue
+        r = requests.get(u)
+        if r.url != u:
+            continue
+        elif '<section class="module image_gallery' in r.text and x not in guides:
+            continue
+        title = re.search("<title>(.*?)</title>", r.text)
+        if title:
+            title = title.group(1).replace(" | StarWars.com", "").strip()
+        else:
+            title = "Unable to Determine Title"
+        title = title.replace("’", "'").replace('&#39;', "'").replace('&quot;', '"')
+        s = "Databank" if x.startswith("databank/") else "StarWars.com"
+        if u in updated_db_entries:
+            updated_db_entries.pop(u)
+        diff.append({"site": s, "url": u, "title": title, "date": datetime.now().strftime('%Y-%m-%d')})
+    return diff, updated_db_entries
+
+
+def convert_to_url(s):
+    return s.lower().split("(")[0].strip().replace(" ", "-")
+
+
+def augment_site_map(site, series, urls):
+    urls_to_check = set()
+    db_entries = {}
+    series_db_entries = {}
+    for s in series:
+        st = convert_to_url(s.replace("Star Wars: ", ""))
+        _, series_urls, series_db = check_series_page(f"https://starwars.com/series/{st}")
+        urls_to_check.update(series_urls)
+        series_db_entries.update(series_db)
+
+        cat = Category(site, f"Category:{s} episodes")
+        if not cat.exists():
+            continue
+        for p in cat.articles():
+            if p.title().startswith("Episode "):
+                continue
+            episode = convert_to_url(p.title())
+            u = f"series/{st}/{episode}-episode-guide"
+            if u in urls:
+                continue
+
+            exists, ep_urls, ep_db = check_series_page(f"https://starwars.com/{u}")
+            if exists:
+                urls_to_check.add(u)
+                urls_to_check.update(ep_urls)
+                log(f"Found {len(list(ep_db))} entries on {u}")
+                db_entries.update(ep_db)
+    return urls_to_check, db_entries, series_db_entries
+
+
+def check_series_page(url):
+    urls_to_check, db_entries = set(), {}
+    r = requests.get(url)
+    if r.status_code == 200 and r.url == url:
+        soup = BeautifulSoup(r.content, "html.parser")
+        for l in soup.find_all("ol", class_="slider-list"):
+            if 'data-title' in l.attrs and "Galleries" in l['data-title']:
+                for a in l.find_all("a", class_="entity-link"):
+                    urls_to_check.add(a['href'].split('.com/')[-1])
+            elif 'data-title' in l.attrs and "Databank" in l['data-title']:
+                for a in l.find_all("a", class_="title-link"):
+                    db_entries[a['href'].split('.com/')[-1]] = a['data-title']
+
+    return r.status_code == 200, urls_to_check, db_entries
