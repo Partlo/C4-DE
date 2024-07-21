@@ -137,11 +137,12 @@ class FullListData:
 
 
 class PageComponents:
-    def __init__(self, before, canon, mode):
+    def __init__(self, before, canon, non_canon, mode):
         self.before = before
         self.final = ""
         self.original = before
         self.canon = canon
+        self.non_canon = non_canon
         self.app_mode = mode
 
         self.ncs = SectionComponents([], [], [], '')

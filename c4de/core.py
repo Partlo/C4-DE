@@ -1,6 +1,7 @@
 import codecs
 import re
 import json
+import subprocess
 import sys
 import traceback
 
@@ -30,7 +31,8 @@ from c4de.protocols.cleanup import archive_stagnant_senate_hall_threads, remove_
 from c4de.protocols.edelweiss import run_edelweiss_protocol, calculate_isbns_for_all_pages
 from c4de.protocols.rss import check_rss_feed, check_latest_url, check_wookieepedia_feeds, check_sw_news_page, \
     check_review_board_nominations, check_policy, check_consensus_track_duration, check_user_rights_nominations, \
-    check_blog_list, check_ea_news, check_unlimited, check_ubisoft_news, compare_site_map
+    check_blog_list, check_ea_news, check_unlimited, check_ubisoft_news, compare_site_map, handle_site_map, \
+    check_target_url, compile_tracked_urls
 
 from c4de.sources.analysis import analyze_target_page, get_analysis_from_page
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, build_template_types
@@ -127,6 +129,9 @@ class C4DE_Bot(commands.Bot):
         with open(ADMIN_CACHE, "r") as f:
             self.admin_messages = {int(k): v for k, v in json.load(f).items()}
 
+        with open(EDELWEISS_CACHE, "r") as f:
+            self.edelweiss_cache = json.load(f)
+
         self.overdue_cts = []
         self.project_data = {}
         self.files_to_be_renamed = []
@@ -134,6 +139,7 @@ class C4DE_Bot(commands.Bot):
 
         self.infoboxes = {}
         self.templates = {}
+        self.redirect_messages = {}
         self.appearances = None
         self.sources = None
         self.remap = None
@@ -187,6 +193,7 @@ class C4DE_Bot(commands.Bot):
             self.check_senate_hall_threads.start()
             self.check_spoiler_templates.start()
             self.check_future_products.start()
+            self.run_canon_legends_switch.start()
             self.check_for_sources_rebuild.start()
             self.load_isbns.start()
             self.check_edelweiss.start()
@@ -199,6 +206,7 @@ class C4DE_Bot(commands.Bot):
             #         await message.edit(content=f"📢 **LucaRoR has been nominated for Rollback rights!**\n<{SITE_URL}/Wookieepedia:Requests_for_user_rights/Rollback/LucaRoR>")
             #     elif message.id == 1089753200040611952:
             #         await message.edit(content=f"📢 **AnilSerifoglu has been nominated for Rollback rights!**\n<{SITE_URL}/Wookieepedia:Requests_for_user_rights/Rollback/AnilSerifoglu>")
+
 
     # noinspection PyTypeChecker
     def text_channel(self, name) -> TextChannel:
@@ -245,12 +253,12 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def is_new_nomination_message(message: Message):
-        m = re.search("New .*? article nomination.*? by \**(.*?)\**\n", message.content)
+        m = re.search("New .*? article nomination.*? by \**(.*?)\**:", message.content)
         if m:
             u = re.search("/wiki/Wookieepedia:.*?_article_nominations/(.*?)(_\(.*?nomination\))?>", message.content)
             if u:
                 return {"user": m.group(1), "article": u.group(1)}
-        m = re.search("New review requested for .*?(Featured|Good|Comprehensive) article: (.*?)( \(.*?review\))?( written by.*?)?\n", message.content)
+        m = re.search("New review.*? requested for .*?(Featured|Good|Comprehensive) article: \[(.*?)\].*?$", message.content)
         if m:
             return {"user": None, "article": m.group(2)}
         return None
@@ -284,6 +292,12 @@ class C4DE_Bot(commands.Bot):
                 return
 
     async def handle_direct_message(self, message: Message):
+        print(f"DM: {message.author}: {message.content}")
+
+        if "recheck nominations" in message.content:
+            await self.recheck_nominations()
+            return
+
         if message.author.id != CADE:
             return
 
@@ -299,6 +313,13 @@ class C4DE_Bot(commands.Bot):
                     if nom:
                         await self.handle_new_nomination(m, nom)
                     break
+            for m in await self.text_channel(REVIEW_CHANNEL).history(limit=200).flatten():
+                if m.id == message_id:
+                    nom = self.is_new_nomination_message(m)
+                    if nom:
+                        await self.handle_new_nomination(m, nom)
+                    break
+            return
 
         await self.handle_commands(message, True)
 
@@ -316,6 +337,14 @@ class C4DE_Bot(commands.Bot):
                 await self.text_channel(channel).send(text)
             except Exception as e:
                 await self.report_error(message.content, type(e), e)
+
+    async def recheck_nominations(self):
+        for m in await self.text_channel(NOM_CHANNEL).history(limit=200).flatten():
+            if m.author.id == 863199002614956043 and not any("bb8thumbsup" in str(r.emoji) for r in m.reactions):
+                nom = self.is_new_nomination_message(m)
+                if nom:
+                    await self.handle_new_nomination(m, nom)
+        return
 
     async def delete_message(self, id_string, channel):
         message_ids = [i.strip() for i in id_string.split(",")]
@@ -337,9 +366,13 @@ class C4DE_Bot(commands.Bot):
 
         if "edelweiss" in message.content.lower():
             self.run_edelweiss = False
-            messages, _ = run_edelweiss_protocol(self.site)
+            messages, _ = run_edelweiss_protocol(self.site, self.edelweiss_cache)
             for m in messages:
                 await channel.send(m)
+            return
+
+        if "recheck nominations" in message.content:
+            await self.recheck_nominations()
             return
 
         if "load web" in message.content.lower():
@@ -383,9 +416,10 @@ class C4DE_Bot(commands.Bot):
             return
 
         if "spoiler" in message.content.lower():
+            tv_dates, default_show = self.extract_tv_spoiler_data()
             for page in Category(self.site, "Articles with expired spoiler notices").articles(namespaces=0):
                 try:
-                    remove_spoiler_tags_from_page(self.site, page, offset=self.timezone_offset)
+                    remove_spoiler_tags_from_page(self.site, page, tv_dates, default_show, offset=self.timezone_offset)
                 except Exception as e:
                     error_log(f"Encountered {type(e)} while removing spoiler template from {page.title()}", e)
                     await self.text_channel(COMMANDS).send(f"Encountered {type(e)} while removing expired spoiler template from {page.title()}. Please check template usage for anomalies.")
@@ -591,9 +625,41 @@ class C4DE_Bot(commands.Bot):
             f"Replacements:",
             f"- `[[{redirect.title()}]]` to `[[{target.title()}]]`",
             f"- `[[{redirect.title()}|` to `[[{target.title()}|`",
-            "React to this message with :bb8thumsup: to proceed."
+            "React to this last message with :bb8thumsup: to proceed."
         ]
 
+        contents = []
+        for r in response:
+            if len(contents) == 0 or (len(r) + len(contents[-1])) >= 500:
+                contents.append(r)
+            else:
+                contents[-1] = contents[-1] + r
+
+        messages = [await message.channel.send(c) for c in contents]
+        self.redirect_messages[messages[-1].id] = (message.channel.name, redirect.title(), target.title(), f"""-ref:"{redirect.title()}" "[[{redirect.title()}]]" "[[{target.title()}]]" "[[{redirect.title()}|" "[[{target.title()}|" """)
+
+    @tasks.loop(minutes=2)
+    async def handle_redirect_confirmations(self):
+        if not self.redirect_messages:
+            return
+        for message_id, (channel_name, redirect, target, cmd) in self.redirect_messages.items():
+            channel = self.text_channel(channel_name)
+            for message in channel.history(limit=250).flatten():
+                if message.id == message_id:
+                    if any("bb8thumbsup" in str(r.emoji) for r in message.reactions):
+                        subprocess.run(f"""cd C:/Users/cadec/Documents/projects/C4DE/robo & C:/Users/cadec/Envs/C4DE/Scripts/python replace.py {cmd} -summary:"Redirect fixes" -always""", shell=True)
+                        await channel.send(f"Beginning replacement for {redirect} --> {target}")
+                        self.redirect_messages.pop(message.id)
+
+    @tasks.loop(minutes=60)
+    async def run_canon_legends_switch(self):
+        now = datetime.now()
+        if not (now.weekday() == 0 and now.hour == 4):
+            return
+
+        category = Category(self.site, "Category:Articles with /Canon")
+        await self.text_channel("admin-help").send(f"Beginning Canon/Legends swap for {len(list(category.articles()))} articles")
+        subprocess.run(f"""cd C:/Users/cadec/Documents/projects/C4DE/robo & C:/Users/cadec/Envs/C4DE/Scripts/python switch_canon_legends.py""", shell=True)
 
     @staticmethod
     def is_single_preload_command(message: Message):
@@ -681,6 +747,13 @@ class C4DE_Bot(commands.Bot):
             return match.groupdict()
         return None
 
+    @staticmethod
+    def is_target_url_check_command(message: Message):
+        match = re.search("check url: <?(?P<url>http.*?)>?$", message.content)
+        if match:
+            return match.groupdict()
+        return None
+
     async def handle_new_nomination(self, message: Message, command: dict):
         try:
             a = command['article'].replace('*', '')
@@ -707,15 +780,16 @@ class C4DE_Bot(commands.Bot):
                 return
 
             current_text = target.get(force=True)
+            url = f"<{target.full_url()}?diff=next&oldid={rev_id}>"
             if self.flatten_text(current_text) == self.flatten_text(old_text):
                 log(f"No major changes found for article: {target.title()}")
                 return
             elif command['user']:
                 user_ids = self.get_user_ids()
                 user_str = self.get_user_id(command['user'], user_ids)
-                await message.reply(f"{user_str}: Sources Engine found changes needed for this article; please review when you get a chance:\n<{target.full_url()}?diff=next&oldid={rev_id}>")
+                await message.reply(f"{user_str}: Sources Engine [found changes needed for this article]({url}); please review when you get a chance")
             else:
-                await message.reply(f"Sources Engine found changes needed for this article; please review:\n<{target.full_url()}?diff=next&oldid={rev_id}>")
+                await message.reply(f"Sources Engine [found changes needed for this article]({url}); please review")
             for o in results:
                 await message.reply(o)
         except Exception as e:
@@ -746,7 +820,7 @@ class C4DE_Bot(commands.Bot):
             if rev.revid == rev_id:
                 await message.channel.send(f"No changes made to article")
             else:
-                await message.channel.send(f"Completed: <{target.full_url().replace('%2F', '/')}?diff=next&oldid={rev_id}>")
+                await message.channel.send(f"Completed: [View Changes](<{target.full_url().replace('%2F', '/')}?diff=next&oldid={rev_id}>)")
             for o in results:
                 await message.channel.send(o)
         except Exception as e:
@@ -776,7 +850,7 @@ class C4DE_Bot(commands.Bot):
             await message.remove_reaction(TIMER, self.user)
 
             if result.exists():
-                await message.channel.send(f"Completed: <{result.full_url().replace('%2F', '/').replace('%3A', ':')}>")
+                await message.channel.send(f"Completed: [{result.title()}](<{result.full_url().replace('%2F', '/').replace('%3A', ':')}>)")
                 text = target.get()
                 if "{{Indexpage}}" not in text:
                     if "==Appearances==" in text:
@@ -829,10 +903,22 @@ class C4DE_Bot(commands.Bot):
         log("Scheduled Operation: Checking {{Spoiler}} templates")
         for page in Category(self.site, "Articles with expired spoiler notices").articles(namespaces=0):
             try:
-                remove_spoiler_tags_from_page(self.site, page, offset=self.timezone_offset)
+                tv_dates, default_show = self.extract_tv_spoiler_data()
+                remove_spoiler_tags_from_page(self.site, page, tv_dates, default_show, offset=self.timezone_offset)
             except Exception as e:
                 error_log(f"Encountered {type(e)} while removing spoiler template from {page.title()}", e)
                 await self.text_channel(COMMANDS).send(f"Encountered {type(e)} while removing expired spoiler template from {page.title()}. Please check template usage for anomalies.")
+
+    def extract_tv_spoiler_data(self):
+        data = re.findall("\| ([a-z]+) ([0-9]+) = .*?\|([0-9]+-[0-9]+-[0-9]+)\|",
+                          Page(self.site, "Template:TVspoiler/data").get())
+        tv_dates = {}
+        for s, n, d in data:
+            if s not in tv_dates:
+                tv_dates[s] = {}
+            tv_dates[s][int(n)] = d
+        default_show = re.search("{{{show\|([a-z]+)}}}", Page(self.site, "Template:TVspoiler").get()).group(1)
+        return tv_dates, default_show
 
     @tasks.loop(hours=1)
     async def load_isbns(self):
@@ -857,10 +943,12 @@ class C4DE_Bot(commands.Bot):
             self.run_edelweiss = True
             return
         log("Scheduled Operation: Checking Edelweiss")
-        messages, reprints = run_edelweiss_protocol(self.site, True)
+        messages, reprints = run_edelweiss_protocol(self.site, self.edelweiss_cache, True)
         if reprints:
             messages.append("Errors encountered while adding reprint ISBNs to pages:")
             messages += reprints
+        with open(EDELWEISS_CACHE, "w") as f:
+            f.writelines(json.dumps(self.edelweiss_cache))
         for m in messages:
             try:
                 await self.text_channel(UPDATES).send(m)
@@ -885,7 +973,7 @@ class C4DE_Bot(commands.Bot):
             for post in posts:
                 if post['link'] not in self.policy_updates.get(date, []):
                     link = self.prepare_link(post['link'])
-                    messages.append(f"🗨️ **{post['link']}** has completed with the following result: **{post['result']}**\n<{SITE_URL}/{link}>")
+                    messages.append(f"🗨️ [**{post['link']}**](<{SITE_URL}/{link}>) has completed with the following result: **{post['result']}**")
 
         for message in messages:
             await self.text_channel(ANNOUNCEMENTS).send(message)
@@ -905,13 +993,13 @@ class C4DE_Bot(commands.Bot):
                 if user not in self.board_nominations["Nominations"][board]:
                     username = self.prepare_link(user)
                     emote = self.emoji_by_name(BOARD_EMOTES[board])
-                    messages.append((True, board, f"{emote} **{user} has been nominated for membership in the {board}!**\n<{SITE_URL}/Wookieepedia:Review_board_membership_nominations#{username}>"))
+                    messages.append((True, board, f"{emote} **{user} has been [nominated for membership in the {board}!](<{SITE_URL}/Wookieepedia:Review_board_membership_nominations#{username}>)**"))
 
         for board, noms in interested.items():
             for user in list(noms.keys()):
                 if user not in self.board_nominations["Interested"][board]:
                     emote = self.emoji_by_name("grogu")
-                    messages.append((False, board, f"{emote} **{user} has expressed interest in joining the {board}!**\n<{SITE_URL}/Wookieepedia:Review board recruitment>"))
+                    messages.append((False, board, f"{emote} **{user} has [expressed interest in joining the {board}!](<{SITE_URL}/Wookieepedia:Review_board_recruitment>)**"))
                 else:
                     noms[user] = self.board_nominations["Interested"][board][user]
                     if datetime.now().hour == 12 and datetime.now().minute <= 15:
@@ -920,7 +1008,7 @@ class C4DE_Bot(commands.Bot):
                         diff = (datetime.now() - as_date).days
                         if diff > 0 and diff % 30 == 0:
                             emote = self.emoji_by_name("grogu")
-                            messages.append((False, board, f"{emote} 30 days have passed since **{user}** expressed interest in joining the {board}; please provide feedback if this has not already been done"))
+                            messages.append((False, board, f"{emote} {diff} days have passed since **{user}** expressed interest in joining the {board}; please provide feedback if this has not already been done"))
 
         for (announce, board, message) in messages:
             try:
@@ -945,9 +1033,9 @@ class C4DE_Bot(commands.Bot):
                 if user not in self.rights_cache[right]:
                     username = self.prepare_link(user)
                     if right == "Removal":
-                        messages.append(f"📢 **{user} has been nominated for removal of their user rights. Please weigh in here.**\n<{SITE_URL}/Wookieepedia:Requests_for_removal_of_user_rights/{right}/{username}>")
+                        messages.append(f"📢 **{user} has been nominated for removal of their user rights. Please weigh in [here](<{SITE_URL}/Wookieepedia:Requests_for_removal_of_user_rights/{username}>)**")
                     else:
-                        messages.append(f"📢 **{user} has been nominated for {right} rights!**\n<{SITE_URL}/Wookieepedia:Requests_for_user_rights/{right}/{username}>")
+                        messages.append(f"📢 **{user} has been nominated for {right} rights! Cast your vote [here!](<{SITE_URL}/Wookieepedia:Requests_for_user_rights/{right}/{username}>)**")
 
         for message in messages:
             await self.text_channel(ANNOUNCEMENTS).send(message)
@@ -984,9 +1072,9 @@ class C4DE_Bot(commands.Bot):
         log("Checking bot requests")
         try:
             messages = []
-            for m in await self.text_channel(REQUESTS).history(limit=250).flatten():
+            for m in await self.text_channel(REQUESTS).history(limit=500).flatten():
                 try:
-                    if m.author != self.user and any("bb8thumbsup" in str(r.emoji) for r in m.reactions):
+                    if any("bb8thumbsup" in str(r.emoji) for r in m.reactions):
                         messages.append(m)
                 except Exception as e:
                     await self.report_error(f"Bot Request Archival: {e}", type(e), e)
@@ -999,7 +1087,7 @@ class C4DE_Bot(commands.Bot):
                     text += f"\n\n=={today}=="
                 users = {}
                 for m in reversed(messages):
-                    if m.author.display_name != "Wiki-Bot":
+                    if m.author.display_name != "Wiki-Bot" and m.author != self.user:
                         if m.author.display_name not in users:
                             if Page(self.site, f"User:{m.author.display_name}").exists():
                                 users[m.author.display_name] = "{{U|" + m.author.display_name + "}}"
@@ -1073,7 +1161,7 @@ class C4DE_Bot(commands.Bot):
                     if f.title() not in self.files_to_be_renamed:
                         x = re.search("\{\{FTBR\|.*\|(.*?)\}\}", f.get())
                         new_name_text = f" to **{x.group(1)}**" if x else ""
-                        m = f"⚠️ **{f.lastNonBotUser()}** requested **{f.title()}** be renamed{new_name_text}\n<{f.full_url()}>"
+                        m = f"⚠️ **{f.lastNonBotUser()}** requested [**{f.title()}**](<{f.full_url()}>) be renamed{new_name_text}\n"
                         msg = await self.text_channel(ADMIN_REQUESTS).send(m)
                         self.admin_messages[msg.id] = f.title()
                 except Exception as e:
@@ -1099,13 +1187,61 @@ class C4DE_Bot(commands.Bot):
 
         for title, url in to_delete.items():
             try:
-                m = await self.text_channel(ADMIN_REQUESTS).send(f"❗ **{title}** has been flagged for deletion\n<{url}>")
+                m = await self.text_channel(ADMIN_REQUESTS).send(f"❗ [**{title}**](<{url}>) has been flagged for deletion\n")
                 self.admin_messages[m.id] = title
             except Exception as e:
                 await self.report_error(f"RSS: Deletion: {title}", type(e), e)
 
         with open(INTERNAL_RSS_CACHE, "w") as f:
             f.writelines(json.dumps({k: v[-50:] for k, v in self.internal_rss_cache.items()}, indent=4))
+
+    async def handle_target_url_check(self, message: Message, command: dict):
+
+        if "starwars.com" not in command['url']:
+            await message.add_reaction(EXCLAMATION)
+            return
+
+        messages_to_post = []
+        templates = []
+        new_db_entries = []
+        updated_db_entries = {}
+
+        urls = compile_tracked_urls(self.site)
+        exists, ep_urls, ep_db = check_target_url(command['url'], urls)
+        if not exists:
+            await message.add_reaction(EXCLAMATION)
+            return
+        elif not ep_urls:
+            await message.add_reaction(THUMBS_UP)
+            return
+
+        updated_db_entries = {u: t for u, t in ep_db.items() if u in urls}
+        messages, updated_db_entries = handle_site_map(ep_urls.union(list(ep_db.keys())), urls, [], updated_db_entries, ep_urls)
+        if not messages:
+            await message.add_reaction(THUMBS_UP)
+            return
+
+        site_data = self.rss_data["sites"]["StarWars.com"]
+        archive = self.parse_archive(site_data["template"])
+        db_archive = self.parse_archive("Databank")
+        for m in reversed(messages):
+            try:
+                msg, d, template = await self.prepare_new_rss_message(
+                    m, site_data["baseUrl"], site_data, False, db_archive if m['site'] == "Databank" else archive)
+                messages_to_post += msg
+                print(d, template)
+                if m["site"] == "Databank":
+                    new_db_entries.append(template)
+                else:
+                    templates.append((d, template))
+            except Exception as e:
+                error_log(type(e), e.args)
+
+        await self.report_rss_results(messages_to_post, templates, updated_db_entries, new_db_entries)
+
+        await message.add_reaction(THUMBS_UP)
+        return
+
 
     @tasks.loop(minutes=10)
     async def check_external_rss(self):
@@ -1121,7 +1257,7 @@ class C4DE_Bot(commands.Bot):
             try:
                 if site == "StarWars.com":
                     messages = check_sw_news_page(site_data["url"], self.external_rss_cache["sites"], site_data["title"])
-                    other, updated_db_entries = compare_site_map(self.site, ["Star Wars: The Bad Batch", "The Acolyte"], messages)
+                    other, updated_db_entries = compare_site_map(self.site, ["The Acolyte"], messages, self.external_rss_cache["sites"]["StarWars.com"])
                     messages += other
                 elif site_data["template"] == "Unlimitedweb":
                     messages = check_unlimited(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
@@ -1143,6 +1279,7 @@ class C4DE_Bot(commands.Bot):
                         msg, d, template = await self.prepare_new_rss_message(
                             m, site_data["baseUrl"], site_data, False, db_archive if m['site'] == "Databank" else archive)
                         messages_to_post += msg
+                        print(d, template)
                         if m["site"] == "Databank":
                             new_db_entries.append(template)
                         else:
@@ -1166,6 +1303,10 @@ class C4DE_Bot(commands.Bot):
                     templates.append((d, template))
                 except Exception as e:
                     error_log(type(e), e.args)
+
+        await self.report_rss_results(messages_to_post, templates, updated_db_entries, new_db_entries)
+
+    async def report_rss_results(self, messages_to_post, templates, updated_db_entries, new_db_entries):
 
         for channel, message in messages_to_post:
             try:
@@ -1194,7 +1335,8 @@ class C4DE_Bot(commands.Bot):
             except NoPageError:
                 text = "{{Wookieepedia:Sources/Web/Header}}"
             for d, t in templates:
-                if t.split("|archivedate=", 1)[0].rsplit("|", 1)[0] not in text:
+                x = t.split("|archivedate=", 1)[0].rsplit("|", 1)[0]
+                if f"{x}|" not in text and f"{x}}}" not in text:
                     text += f"\n*{d or nd}: {t}"
             if text != page.get():
                 page.put(text, "Adding new sources", botflag=False)
@@ -1253,11 +1395,13 @@ class C4DE_Bot(commands.Bot):
             await self.report_error(f"RSS: Saving sources", type(e), e)
 
     async def prepare_new_rss_message(self, m: dict, base_url: str, site_data: dict, youtube: bool, archive: dict) -> Tuple[List[Tuple[str, str]], str, str]:
-        target = m["url"].replace(base_url + "/", "")
+        if youtube:
+            target = m["videoId"]
+        else:
+            target = m["url"].replace(base_url + "/", "")
+
         if target.endswith("/"):
             target = target[:-1]
-        if youtube:
-            target = target.replace("watch?=", "")
         if m['site'] == "Databank":
             target = target.replace("databank/", "")
         already_archived = archive and archive.get(target)
@@ -1266,7 +1410,7 @@ class C4DE_Bot(commands.Bot):
             success, include_archivedate, archivedate = True, False, archive[target]
         else:
             log(f"Archiving URL: {m['url']}")
-            success, archivedate = archive_url(m["url"])
+            success, archivedate = archive_url(m["url"], timeout=60 if youtube else 30)
             include_archivedate = success
 
         if youtube:
@@ -1277,6 +1421,8 @@ class C4DE_Bot(commands.Bot):
             s = (m['site'].split('.com:')[0] + '.com') if '.com:' in m['site'] else m['site']
             t = f"New Article on {s}"
         f = m["title"].replace("''", "*").replace("’", "'")
+        f = re.sub("^(''[^'\n]+'')'s ", "\\1{{'s}} ", f)
+        f = re.sub("( ''[^'\n]+'')'s ", "\\1{{'s}} ", f)
         msg = "{0} **{1}:**    {2}\n- <{3}>".format(self.emoji_by_name(site_data["emoji"]), t, f, m["url"])
 
         if success and not already_archived:
@@ -1293,7 +1439,8 @@ class C4DE_Bot(commands.Bot):
         if success:
             msg += f"\n- Wayback Archive Date: {archivedate}"
         else:
-            msg += f"\n- Unable to archive URL: {archivedate.splitlines()[0] if archivedate else ''}"
+            x = archivedate.splitlines()[0] if archivedate else ''
+            msg += f"\n- Unable to archive URL: {'Max retries exceeded with URL' if 'Max retries' in x else x}"
 
         results = [(UPDATES, msg)]
         if (m["site"] == "Databank" or (m["site"] == "StarWars.com" and "Episode Guide" in m['title'])

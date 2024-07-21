@@ -23,6 +23,12 @@ ANNOUNCEMENTS = "announcements"
 ADMIN_REQUESTS = "admin-requests"
 
 
+def fix_title(title: str):
+    if title.count(":") >= 2 and (title.startswith("Wookieepedia") or title.startswith("Forum")):
+        return title.split(":", 2)[-1]
+    return title
+
+
 def check_new_pages_rss_feed(site, url, cache: Dict[str, List[str]]):
     d = feedparser.parse(url)
     is_new = "NewPages" in url
@@ -33,13 +39,13 @@ def check_new_pages_rss_feed(site, url, cache: Dict[str, List[str]]):
             pt, ch, message, d = None, None, None, None
             if is_new:
                 if e.title.startswith("Forum:SH:"):
-                    pt, ch, message = "Senate Hall", ANNOUNCEMENTS, f"📣 **New Senate Hall thread**\n<{e.link}>"
+                    pt, ch, message = "Senate Hall", ANNOUNCEMENTS, f"📣 **New Senate Hall thread**: [{fix_title(e.title)}](<{e.link}>)"
                 elif e.title.startswith("Forum:NB:"):
-                    pt, ch, message = "Administrator's Noticeboard", ANNOUNCEMENTS, f"📢 **New Administrators' noticeboard thread**\n<{e.link}>"
+                    pt, ch, message = "Administrator's Noticeboard", ANNOUNCEMENTS, f"📢 **New Administrators' noticeboard thread**: [{fix_title(e.title)}](<{e.link}>)"
                 elif e.title.startswith("Forum:CT:"):
-                    pt, ch, message = "Consensus Track", ANNOUNCEMENTS, f"📢 **New Consensus track vote**\n<{e.link}>"
+                    pt, ch, message = "Consensus Track", ANNOUNCEMENTS, f"📢 **New Consensus track vote**: [{fix_title(e.title)}](<{e.link}>)"
                 elif e.title.startswith("Forum:TC:") or e.title.startswith("Wookieepedia:Trash compactor"):
-                    pt, ch, message = "Trash Compactor", ANNOUNCEMENTS, f"🗑️ **New Trash Compactor thread**\n<{e.link}>"
+                    pt, ch, message = "Trash Compactor", ANNOUNCEMENTS, f"🗑️ **New Trash Compactor thread**: [{fix_title(e.title)}](<{e.link}>)"
                 elif e.title.startswith("User blog:"):
                     if "Category:Staff blogs" in e.description or "Category:Technical Updates" in e.description or "{{blog_footer}}" in e.description.lower() or "{{blog footer}}" in e.description.lower():
                         pt, ch, message = "Fandom Blog", ANNOUNCEMENTS, f"<:fandom:872166055693393940>**New Fandom Staff blog post**\n<{e.link}>"
@@ -50,10 +56,10 @@ def check_new_pages_rss_feed(site, url, cache: Dict[str, List[str]]):
             elif e.title.startswith("Forum:TC:") and re.match("^<p>.*?delete.*?</p>", e.description.lower()):
                 continue
             elif did_edit_add_deletion_template(site, e.title, e.description) or "<p>CSD</p>" in e.description or "<p>delete</p>" in e.description.lower():
-                pt, ch, message = "CSD", ADMIN_REQUESTS, f"❗ **{e.author}** requested deletion of **{e.title}**\n<{e.link}>"
+                pt, ch, message = "CSD", ADMIN_REQUESTS, f"❗ **{e.author}** requested deletion of [**{e.title}**](<{e.link}>)"
                 d = e.title
             elif re.match("^<p>.*?CSD.*?</p>", e.description) or re.match("^<p>.*?delete[^d].*?</p>", e.description.lower()):
-                pt, ch, message = "CSD", ADMIN_REQUESTS, f"❓ **{e.author}** used 'delete' or 'CSD' in edit summary on **{e.title}**; may be false positive.\n<{e.link}>"
+                pt, ch, message = "CSD", ADMIN_REQUESTS, f"❓ **{e.author}** used 'delete' or 'CSD' in edit summary on [**{e.title}**](<{e.link}>); may be false positive"
                 d = e.title
             else:
                 continue
@@ -136,25 +142,25 @@ def check_wookieepedia_feeds(site: Site, cache: Dict[str, List[str]]):
     for e in entries:
         diff = parse_bot_request_diff(e.description)
         diff_text = f"\n{diff}" if diff else ""
-        messages.append(("bot-requests", f"🔧 **WP:BR** was edited by **{e.author}**\n<{e.link}>{diff_text}", None))
+        messages.append(("bot-requests", f"🔧 **WP:BR** was edited by **{e.author}**: [view change](<{e.link}>)\n{diff_text}", None))
 
     entries = parse_history_rss_feed("https://starwars.fandom.com/wiki/Forum:SH:General_bug_thread?action=history&feed=rss", cache, "Bug Thread")
     for e in entries:
         diff = parse_bot_request_diff(e.description)
         diff_text = f"\n{diff}" if diff else ""
-        messages.append((ADMIN_REQUESTS, f"🔧 **Forum:SH:General bug thread** was edited by **{e.author}**\n<{e.link}>{diff_text}", None))
+        messages.append((ADMIN_REQUESTS, f"🔧 **Forum:SH:General bug thread** was edited by **{e.author}**: [view change](<{e.link}>)\n{diff_text}", None))
 
     entries = parse_history_rss_feed("https://starwars.fandom.com/wiki/Wookieepedia:Vandalism_in_progress?action=history&feed=rss", cache, "Vandalism")
     for e in entries:
-        messages.append((ADMIN_REQUESTS, f"❗ **WP:VIP** was edited by **{e.author}**\n<{e.link}>", None))
+        messages.append((ADMIN_REQUESTS, f"❗ **WP:VIP** was edited by **{e.author}**: [view change](<{e.link}>)", None))
 
     entries = parse_history_rss_feed("https://starwars.fandom.com/wiki/Wookieepedia:Spamfilter_problems?action=history&feed=rss", cache, "Spamfilter")
     for e in entries:
-        messages.append((ADMIN_REQUESTS, f"⚠️ **WP:SF** was edited by **{e.author}**\n<{e.link}>", None))
+        messages.append((ADMIN_REQUESTS, f"⚠️ **WP:SF** was edited by **{e.author}**: [view change](<{e.link}>)", None))
 
     entries = parse_history_rss_feed("https://starwars.fandom.com/wiki/Wookieepedia:Image_requests?action=history&feed=rss", cache, "Image")
     for e in entries:
-        messages.append(("images-and-audio", f"📷  **Wookieepedia:Image requests** was edited by **{e.author}**\n<{e.link}>", None))
+        messages.append(("images-and-audio", f"📷  **Wookieepedia:Image requests** was edited by **{e.author}**: [view change](<{e.link}>)", None))
 
     return messages, to_delete
 
@@ -500,15 +506,19 @@ def check_latest_url(url, cache: dict, site, title_regex):
 
     title = check_title_formatting(response.text, title_regex, title)
 
-    if title and "star wars" in title.lower():
+    if match_terms(title.lower()):
         return [{"site": site, "title": title, "url": response.url, "content": ""}]
-    elif "star-wars" in response.url.lower():
+    elif match_terms(response.url.lower()):
         return [{"site": site, "title": title, "url": response.url, "content": ""}]
     elif title:
         log(f"Skipping notification for non-SW article {title}")
     else:
         log(f"Skipping notification for non-SW article {response.url}")
     return []
+
+
+def match_terms(val):
+    return any(x in val or x.replace(" ", "-") in val for x in ["star wars", "ahsoka", "ewoks", "mandalorian"])
 
 
 def check_title_formatting(text, title_regex, title):
@@ -518,7 +528,7 @@ def check_title_formatting(text, title_regex, title):
     title = re.sub(r"<em>(.*?)( )?</em>", r"''\1''\2", title)
     title = re.sub(r"<i( .*?)?>(.*?)( )?</i>", r"''\2''\3", title)
     title = re.sub(r"<span[^>]*?italic.*?>(.*?)( )?</span>", r"''\1''\2", title)
-    title = re.sub(r"<span[^>]*?italic.*?>(.*?)( )?</span>", r"''\1''\2", title)
+    title = re.sub(r"<span[^>]*?>(.*?)( )?</span>", r"\1\2", title)
     title = title.replace("“", '"').replace("”", '"').replace("’", "'").replace("‘", "'")
     title = title.replace("|", "&#124;")
     title = re.sub(" &#124; ?D[Ii][Ss][Nn][Ee][Yy] ?(\+|Plus)[ ]*(& Disney Junior)?[ ]*$", "", title)
@@ -538,7 +548,7 @@ def check_review_board_nominations(site: Site):
         if board not in noms:
             continue
 
-        for u in re.findall("====\{\{U\|(.*?)\}\}====", section):
+        for u in re.findall("====\{\{U\|(.*?)\}\}.*?====", section):
             if u != "USERNAME":
                 noms[board].append(u)
 
@@ -572,8 +582,9 @@ def check_user_rights_nominations(site: Site):
     page2 = Page(site, "Wookieepedia:Requests for removal of user rights")
     text2 = page2.get()
     noms["Removal"] = []
-    for u in re.findall("====\{\{U\|(.*?)\}\} \(.*?\)====", text2):
-        noms["Removal"].append(u)
+    for u in re.findall("\n{{/(.*?)}}", text2):
+        if u != "USERNAME":
+            noms["Removal"].append(u)
 
     return noms
 
@@ -753,7 +764,7 @@ star-wars-rebels-season-2-fan-art-contest
 the-high-republic-cavan-scott"""
 
 
-def compare_site_map(site, series, already_tracked=None):
+def compare_site_map(site, series, already_tracked, cache):
     skip = [m['url'] for m in (already_tracked or [])]
     urls = compile_tracked_urls(site)
     sitemap = build_site_map(False)
@@ -762,6 +773,10 @@ def compare_site_map(site, series, already_tracked=None):
     sitemap = sitemap.union(list(guides) + list(db.keys()) + list(series_db.keys()))
     updated_db_entries = {u: t for u, t in db.items() if u in urls}
 
+    return handle_site_map(sitemap, urls, skip, updated_db_entries, guides)
+
+
+def handle_site_map(sitemap: set, urls, skip, updated_db_entries, guides):
     diff = []
     ignore = IGNORE.splitlines()
     for x in sorted(sitemap):
@@ -786,6 +801,8 @@ def compare_site_map(site, series, already_tracked=None):
             title = "Unable to Determine Title"
         title = title.replace("’", "'").replace('&#39;', "'").replace('&quot;', '"')
         s = "Databank" if x.startswith("databank/") else "StarWars.com"
+        if s == "Databank" and ("- " in title or "|" in title):
+            title = re.sub(" ?[-\|] (The Acolyte|Star Wars Databank|Databank)", "", title)
         if u in updated_db_entries:
             updated_db_entries.pop(u)
         diff.append({"site": s, "url": u, "title": title, "date": datetime.now().strftime('%Y-%m-%d')})
@@ -793,7 +810,7 @@ def compare_site_map(site, series, already_tracked=None):
 
 
 def convert_to_url(s):
-    return s.lower().split("(")[0].strip().replace(" ", "-")
+    return s.lower().split("(")[0].strip().replace("/", "").replace("  ", " ").replace(" ", "-")
 
 
 def augment_site_map(site, series, urls):
@@ -806,6 +823,14 @@ def augment_site_map(site, series, urls):
         urls_to_check.update(series_urls)
         series_db_entries.update(series_db)
 
+        data = requests.get(f"https://www.starwars.com/_grill/filter/series/{st}?filter=All&mod=8&slug=all").json()
+        for a in data['data']:
+            series_db_entries[a['href'].split('.com/')[-1]] = re.sub(" ?- ?The Acolyte", "", a['title'])
+        while data.get('next'):
+            data = requests.get(f"https://www.starwars.com/_grill/filter/series/{st}{data['next']}").json()
+            for a in data['data']:
+                series_db_entries[a['href'].split('.com/')[-1]] = re.sub(" ?- ?The Acolyte", "", a['title'])
+
         cat = Category(site, f"Category:{s} episodes")
         if not cat.exists():
             continue
@@ -813,17 +838,38 @@ def augment_site_map(site, series, urls):
             if p.title().startswith("Episode "):
                 continue
             episode = convert_to_url(p.title())
-            u = f"series/{st}/{episode}-episode-guide"
-            if u in urls:
-                continue
+            if "'" in p.title():
+                if check_episode(st, episode.replace("'", ""), urls, urls_to_check, db_entries):
+                    continue
+            check_episode(st, episode, urls, urls_to_check, db_entries)
+        check_episode(st, "season-1-episode-8-the-acolyte", urls, urls_to_check, db_entries)
 
-            exists, ep_urls, ep_db = check_series_page(f"https://starwars.com/{u}")
-            if exists:
-                urls_to_check.add(u)
-                urls_to_check.update(ep_urls)
-                log(f"Found {len(list(ep_db))} entries on {u}")
-                db_entries.update(ep_db)
     return urls_to_check, db_entries, series_db_entries
+
+
+def check_target_url(url, urls):
+    x, u = url.split(".com/", 1)
+    if u in urls:
+        return True, None, None
+    exists, ep_urls, ep_db = check_series_page(f"https://www.starwars.com/{u}")
+    if exists:
+        ep_urls.add(u)
+        log(f"Found {len(list(ep_db))} entries and {len(ep_urls)} pages on {u}")
+    return exists, ep_urls, ep_db
+
+
+def check_episode(st, episode, urls, urls_to_check, db_entries):
+    u = f"series/{st}/{episode}-episode-guide"
+    if u in urls:
+        return True
+
+    exists, ep_urls, ep_db = check_series_page(f"https://www.starwars.com/{u}")
+    if exists:
+        urls_to_check.add(u)
+        urls_to_check.update(ep_urls)
+        log(f"Found {len(list(ep_db))} entries and {len(ep_urls)} pages on {u}")
+        db_entries.update(ep_db)
+    return exists
 
 
 def check_series_page(url):
@@ -831,12 +877,12 @@ def check_series_page(url):
     r = requests.get(url)
     if r.status_code == 200 and r.url == url:
         soup = BeautifulSoup(r.content, "html.parser")
-        for l in soup.find_all("ol", class_="slider-list"):
+        for l in [*soup.find_all("ol", class_="slider-list"), *soup.find_all("section", class_="incredibles_slider"), *soup.find_all("div", "display_filters")]:
             if 'data-title' in l.attrs and "Galleries" in l['data-title']:
                 for a in l.find_all("a", class_="entity-link"):
                     urls_to_check.add(a['href'].split('.com/')[-1])
             elif 'data-title' in l.attrs and "Databank" in l['data-title']:
                 for a in l.find_all("a", class_="title-link"):
-                    db_entries[a['href'].split('.com/')[-1]] = a['data-title']
+                    db_entries[a['href'].split('.com/')[-1]] = re.sub(" ?- ?The Acolyte", "", a['data-title'])
 
     return r.status_code == 200, urls_to_check, db_entries

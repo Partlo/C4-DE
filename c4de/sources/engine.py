@@ -30,11 +30,13 @@ REFERENCE_MAGAZINES = {
     "BuildR2Cite": ("Star Wars: Build Your Own R2-D2", ""),
     "BuildXWingCite": ("Star Wars: Build Your Own X-Wing", ""),
     "BustCollectionCite": ("Star Wars Bust Collection", ""),
+    "FalconCite": ("Star Wars: Millennium Falcon", ""),
     "FFCite": ("The Official Star Wars Fact File", ""),
     "FFCite\|y=2013": ("The Official Star Wars Fact File Part", "2013"),
     "FFCite\|y=2014": ("The Official Star Wars Fact File Part", "2014"),
     "FigurineCite": ("Star Wars: The Official Figurine Collection", ""),
     "HelmetCollectionCite": ("Star Wars Helmet Collection", ""),
+    "LSWCite": ("LEGO Star Wars", ""),
     "ShipsandVehiclesCite": ("Star Wars Starships & Vehicles", ""),
     "StarshipsVehiclesCite": ("Star Wars: The Official Starships & Vehicles Collection", "")
 }
@@ -353,6 +355,9 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
         else:
             print(s)
 
+    if template == "TCW" and "TCW|Destiny" in s:
+        return Item(z, mode, a, target="Destiny (Star Wars: The Clone Wars)", template=template)
+
     # InsiderCite - link= parameter
     m = re.search("{{[^\|\[\}\n]+\|link=(.*?)\|.*?\|(.*?)(\|(.*?))?}}", s)
     if m:
@@ -665,6 +670,9 @@ def match_parent_target(o: Item, target, by_target: Dict[str, List[Item]], other
             return ItemId(o, by_target[target][0], True, False, by_parent=True)
         elif other_targets and target in other_targets:
             return ItemId(o, other_targets[target][0], True, True, by_parent=True)
+
+    if target and target[0].upper() != target[0]:
+        return match_parent_target(o, target[0].capitalize() + target[1:], by_target, other_targets)
     return None
 
 
@@ -977,11 +985,16 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
             non_canon = ("{{c|non-canon" in i['item'].lower() or "{{nc" in i['item'].lower())
             reprint = "{{c|republish" in i['item'].lower()
             c = ''
+            alternate = ''
             if "{{C|" in i['item']:
                 cr = re.search("({{C\|([Aa]bridged|[Rr]epublished|[Uu]nlicensed|[Nn]on[ -]?canon)}})", i['item'])
                 if cr:
                     c = ' ' + cr.group(1)
                     i['item'] = i['item'].replace(cr.group(1), '').strip()
+                a = re.search("( {{C\|(original|alternate): (?P<a>.*?)}})", i['item'])
+                if a:
+                    alternate = a.groupdict()['a']
+                    i['item'] = i['item'].replace(a.group(1), '').strip()
             x = extract_item(i['item'], True, i['page'], types, master=True)
             if x:
                 x.canon = None if i.get('extra') else i.get('canon')
@@ -989,6 +1002,7 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 x.date = i['date']
                 x.future = x.date and (x.date == 'Future' or x.date > today)
                 x.extra = c
+                x.alternate_url = alternate
                 x.unlicensed = unlicensed
                 x.non_canon = non_canon
                 x.reprint = reprint
@@ -996,7 +1010,7 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 full_appearances[x.full_id()] = x
                 unique_appearances[x.unique_id()] = x
                 if x.target:
-                    o = (0.2 if x.abridged else 0.1) if "audiobook" in x.target or "script" in x.target else 0
+                    o = increment(x)
                     canon_index = match_audiobook(x.target, canon)
                     if canon_index:
                         x.canon_index = canon_index + o
@@ -1027,6 +1041,15 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
     return FullListData(unique_appearances, full_appearances, target_appearances, parantheticals, both_continuities)
 
 
+def increment(x: Item):
+    if x.abridged:
+        return 0.2
+    elif "audio drama)" in x.target:
+        return 0.3
+    elif "audiobook" in x.target or "script" in x.target:
+        return 0.1
+    return 0
+
 SPECIAL_INDEX_MAPPING = {
     "Doctor Aphra (script)": "Doctor Aphra: An Audiobook Original",
     "Forces of Destiny: The Leia Chronicles & The Rey Chronicles": "Forces of Destiny: The Leia Chronicles",
@@ -1043,7 +1066,7 @@ def match_audiobook(target, data):
     elif target.startswith("Star Wars: Jedi Temple Challenge") and "Star Wars: Jedi Temple Challenge" in data:
         return data["Star Wars: Jedi Temple Challenge"] + int(target.replace("Star Wars: Jedi Temple Challenge - Episode ", "")) / 100
 
-    for x in ["audiobook", "unabridged audiobook", "abridged audiobook", "script"]:
+    for x in ["audiobook", "unabridged audiobook", "abridged audiobook", "script", "audio drama", "German audio drama"]:
         if target.replace(f"({x})", "(novelization)") in data:
             return data[target.replace(f"({x})", "(novelization)")]
         elif target.replace(f"({x})", "(novel)") in data:

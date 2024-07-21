@@ -142,3 +142,11 @@
 *'''3.6.1''': April 24, 2024
 **Enhanced reporting around review board recruitment
 **Various RSS bug fixes
+*'''3.7.0''': May 2, 2024
+**Streamlined reporting of links to reduce clutter
+**Various tweaks
+*'''3.8.0''': July 21, 2024
+**Source Engine fixes
+**Fixed Edelweiss reporting
+**Fixed TVspoiler handling
+**Automatic Canon/Legends switch subprocess

@@ -39,10 +39,11 @@ def archive_senate_hall_thread(site, page, offset):
             page.put(new_text, f"Archiving stagnant Senate Hall thread", botflag=False)
 
 
-def remove_spoiler_tags_from_page(site, page, limit=30, offset=5):
+def remove_spoiler_tags_from_page(site, page, tv_dates, tv_default, limit=30, offset=5):
     text = page.get()
 
-    line = re.search("\n\{\{(Movie|Show)?[Ss]poiler\|(.*?)\}\}.*?\n", text)
+    text = re.sub("(\{\{(Movie|Show|TV)?[Ss]poiler\|([^\n]+?)\}\})\{\{", "\\1{{", text)
+    line = re.search("\n\{\{(Movie|Show|TV)?[Ss]poiler\|(.*?)\}\}.*?\n", text)
     if not line:
         print(f"Cannot find spoiler tag on {page.title()}")
         return "no-tag"
@@ -55,14 +56,19 @@ def remove_spoiler_tags_from_page(site, page, limit=30, offset=5):
             named["time"] = field.split("=", 1)[1]
         elif field.startswith("thr="):
             named["thr"] = field.split("=", 1)[1]
+        elif field.startswith("show="):
+            named["show"] = field.split("=", 1)[1]
         elif field.startswith("quote"):
             f, v = field.split("=", 1)
             named[f] = v
         else:
             fields.append(field.replace('}', ''))
 
+    print(named, fields)
     if named.get("time") == "skip":
         return "skip"
+    elif line.group(1) == "TV":
+        time, new_text = remove_expired_tv_spoiler(text, fields, named, tv_dates, tv_default, limit=limit)
     elif not named.get("time"):
         print(f"{page.title()}: No time defined in the Spoiler template")
         return "none"
@@ -72,7 +78,7 @@ def remove_spoiler_tags_from_page(site, page, limit=30, offset=5):
         if time > (datetime.now() + timedelta(hours=offset)):
             print(f"{page.title()}: Spoilers for {t} do not expire until {time}")
             return time
-        new_text = re.sub("\{\{(Movie|Show)?[Ss]poiler.*?\}\}.*?\n", "", text)
+        new_text = re.sub("\{\{(Movie|TV|Show)?[Ss]poiler.*?\}\}.*?\n", "", text)
     else:
         time, new_text = remove_expired_fields(site, text, fields, named, limit=limit)
 
@@ -116,8 +122,48 @@ def remove_expired_fields(site, text, fields: list, named: dict, limit=30):
         new_time = (min(release_dates) + timedelta(days=limit)).strftime("%Y-%m-%d")
         new_text += f"|time={new_time}"
 
-    new_text = "{{Spoiler|" + new_text + "}}"
+    new_text = "{{Spoiler|" + new_text + "}}\n"
     return new_time, re.sub("\{\{Spoiler\|.*?\}\}.*?\n", new_text, text)
+
+
+def remove_expired_tv_spoiler(text, fields: list, named: dict, tv_dates: dict, tv_default, limit=30):
+    i, j = 0, 0
+    fields_to_keep = []
+    quotes_to_keep = []
+    release_dates = []
+    now = datetime.now() + timedelta(hours=5)
+    show = named.get("show", tv_default)
+    while i < len(fields):
+        f1 = fields[i]
+        release_date = datetime.strptime(tv_dates[show][int(f1)], "%Y-%m-%d")
+        if release_date and release_date < now:
+            log(f"{f1} has a spoiler expiration date of {release_date}; removing from template")
+            i += 2
+            continue
+        elif release_date:
+            release_dates.append(release_date)
+
+        fields_to_keep.append(f1)
+        if i < len(fields) - 1:
+            fields_to_keep.append(fields[i + 1])
+        j += 1
+        if f"quote{j}" in named:
+            quotes_to_keep.append(j)
+        i += 2
+
+    if not fields_to_keep:
+        return "no-fields", re.sub("\{\{TVspoiler.*?\}\}.*?\n", "", text)
+
+    new_text = "|".join(fields_to_keep)
+    for q in quotes_to_keep:
+        new_text += f"|quote{q}=1"
+
+    new_time = None
+    if release_dates:
+        new_time = (min(release_dates) + timedelta(days=limit)).strftime("%Y-%m-%d")
+
+    new_text = "{{TVspoiler|" + new_text + "}}\n"
+    return new_time, re.sub("\{\{TVspoiler\|.*?\}\}.*?\n", new_text, text)
 
 
 def extract_release_date(site, name, limit):

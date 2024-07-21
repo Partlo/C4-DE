@@ -55,7 +55,7 @@ def build_fields_for_infobox(page) -> InfoboxInfo:
             for y in x.split(":"):
                 combo[y] = x
                 groups[x].append(y)
-    for r in re.findall("<(data|image|title) source=\"(.*?)\"/?>", text):
+    for r in re.findall("<(data|image|title) source=\"(.*?)\" ?/?>", text):
         if r[1].startswith('b') and re.match("b[0-9]+", r[1]):
             fields.append(r[1].replace("b", "battles"))
         fields.append(r[1])

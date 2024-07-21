@@ -152,7 +152,7 @@ def create_index(site, page: Page, results: AnalysisResults, save: bool):
         date_str, parsed_date = convert_date_str(i.master.date, links)
         date_ref = ''
         if date_str:
-            date_str = date_str.replace(" 0", " ")
+            date_str = re.sub("XX[A-Z]", "XX", date_str.replace(" 0", " "))
 
             if i.master.target:
                 date_ref = get_reference_for_release_date(site, i.master.target, parsed_date, refs, contents)
@@ -179,7 +179,12 @@ def create_index(site, page: Page, results: AnalysisResults, save: bool):
         lines.append("{{Reflist}}")
         if len(refs) > 20:
             lines.append("}}")
-        lines.append("\n[[Category:Index pages]]")
+    if re.search("\{\{Top\|(.*?\|)?real(\|.*?)?\}\}", page.get()):
+        lines.append("\n[[Category:Real-world index pages]]")
+    elif results.canon:
+        lines.append("\n[[Category:Canon index pages]]")
+    else:
+        lines.append("\n[[Category:Legends index pages]]")
 
     index = None
     if save:

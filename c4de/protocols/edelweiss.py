@@ -117,13 +117,15 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
         # wait for "Not Yet Published" button
         log("Waiting for Not Yet Published button")
 
-        chevron = driver.find_elements(By.CLASS_NAME, "leftNavLeftArrow")
-        if chevron:
-            chevron[0].click()
+        buttons = driver.find_elements(By.ID, "f_4_2")
+        if not buttons:
+            chevron = driver.find_elements(By.CLASS_NAME, "leftNavLeftArrow")
+            if chevron:
+                chevron[0].click()
 
         WebDriverWait(driver, 30).until(EC.visibility_of_element_located((By.ID, "f_4_2")))
         button = driver.find_element(By.ID, "f_4_2")
-        driver.execute_script("arguments[0].scrollIntoView()", button)
+        # driver.execute_script("arguments[0].scrollIntoView()", button)
         try:
             button.click()
         except WebDriverException:
@@ -132,7 +134,7 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
 
         if not driver.find_elements(By.CSS_SELECTOR, "#f_4_2.box_checked"):
             button = driver.find_element(By.ID, "f_4_2")
-            driver.execute_script("arguments[0].scrollIntoView()", button)
+            # driver.execute_script("arguments[0].scrollIntoView()", button)
             try:
                 button.click()
             except WebDriverException:
@@ -148,7 +150,14 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
         driver.get(f"https://www.edelweiss.plus/#keywordSearch&q={search_term.replace(' ', '+')}")
         WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.ID, "totalResults")))
 
-    total = int(driver.find_element(By.ID, "totalResults").text.replace("of", "").strip())
+    x = driver.find_elements(By.ID, "results")
+    if not x:
+        x = driver.find_elements(By.ID, "totalResults")
+    total = int(x[0].text.replace("of", "").strip())
+
+    chevron = driver.find_elements(By.CLASS_NAME, "leftNavLeftArrow")
+    if chevron:
+        chevron[0].click()
 
     i, j = 0, 1
     results = []
@@ -186,11 +195,15 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
                     date = item.find_elements(By.CSS_SELECTOR, ".pve_shipDate span")
                     if not date:
                         date = item.find_elements(By.CSS_SELECTOR, ".pve_shipDate")
+                    if not date:
+                        log(f"Cannot find shipping date for {title}")
+                        continue
                     publication_date = date[0].get_attribute("innerHTML").replace("On Sale Date:", "").strip()
 
                     fmt = item.find_elements(By.CLASS_NAME, "pve_format")
                     sub_names = item.find_elements(By.CLASS_NAME, "pve_subName")
                     page_fields = item.find_elements(By.CLASS_NAME, "pve_numberOfPages")
+                    status = item.find_elements(By.CLASS_NAME, "publishing-status-02")
                     item = driver.find_element(By.XPATH, f".//div[@id='{cid}']//div[contains(@class, 'ltRow')][{k}]")
                     imprint = item.find_element(By.CLASS_NAME, "headerImprint").text
                     no_image = bool(item.find_elements(By.CLASS_NAME, "noThumbImageScroll"))
@@ -213,6 +226,7 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
                         "hasImage": not no_image,
                         "isbn": isbn.strip(),
                         "sku": sku.strip(),
+                        "status": status[0].text if status else "",
                         "publisher": imprint.split(".")[-1].strip(),
                         "format": fmt[0].text if fmt else "",
                         "collecting": any("collecting:" in c.lower() for c in contents),
@@ -243,6 +257,7 @@ def page_exists(site: Site, title: str, media_type: str):
 
 
 def determine_page(site: Site, title: str, item: dict, pages_by_isbn: Dict[str, str]) -> Tuple[Optional[Page], bool]:
+    title = title.replace(" [NEW PRINTING]", "")
     if item['isbn'] in pages_by_isbn:
         return Page(site, pages_by_isbn[item['isbn']]), True
 
@@ -334,16 +349,16 @@ def analyze_products(site, products: List[dict], search_terms):
             elif item["title"] == "Star Wars Encyclopedia" and not item["hasImage"]:
                 continue
 
-            if not page and (item["title"] in false_positives or "t-shirt" in item["title"].lower() or "Weird But True" in item['title']):
+            if not page and (item["title"] in false_positives or "t-shirt" in item["title"].lower() or "Box Set" in item['title'] or "Weird But True" in item['title'] or "Card Game CDU" in item['title']):
                 continue
             elif not page and not any(s.lower() in item["title"].lower() for s in search_terms):
-                results["newItems"].append(f"(Potential False Positive): {item['title']} - {url}{archive_sku(item['sku'])}")
+                results["newItems"].append((item['sku'], f"(Potential False Positive): {item['title']} - {url}{archive_sku(item['sku'])}"))
                 continue
             elif not (page and page.exists()):
                 if item["collecting"]:
-                    results["newTPBs"].append(f"{item['title']} - {url}")
+                    results["newTPBs"].append((item['sku'], f"{item['title']} - {url}"))
                 else:
-                    results["newItems"].append(f"{item['title']} - {url}{archive_sku(item['sku'])}")
+                    results["newItems"].append((item['sku'], f"{item['title']} - {url}{archive_sku(item['sku'])}"))
                 continue
             if page.title() == "Hyperspace Stories: Qui-Gon":
                 continue
@@ -383,6 +398,16 @@ def analyze_products(site, products: List[dict], search_terms):
             elif not item.get("publicationDate"):
                 log(f"No publication date found for {item['title']}")
                 continue
+            if item["status"] and (item["status"].lower() == "canceled" or item["status"].lower() == "cancelled"):
+                if any("Canceled" in d or "Cancelled" in d for d in date_strs) or "{{Canceled" in text:
+                    log(f"Skipping canceled product {item['title']}")
+                    continue
+                else:
+                    arc = archive_sku(item['sku'])
+                    log(f"{title} has been listed as canceled")
+                    results["canceled"].append((item['sku'], f"{title} has been listed as canceled: {url}{arc}"))
+                    continue
+
             page_dates = []
             for d in date_strs:
                 c = re.sub("\([A-Z]+\)", "", d.split("{{C|")[0].strip())
@@ -398,26 +423,26 @@ def analyze_products(site, products: List[dict], search_terms):
 
             past = any([d < datetime.now() for d in page_dates])
             if item["sku"] in missing_images and item["hasImage"]:
-                results["newImages"].append(f"{title} - {url}{archive_sku(item['sku'])}")
+                results["newImages"].append((item['sku'], f"{title} - {url}{archive_sku(item['sku'])}"))
             elif any([d == item_date for d in page_dates]):
                 log(f"No date changes found for {page.title()}")
             elif past and by_isbn:
                 log(f"Reprint {item['isbn']} already recorded on {page.title()}")
             elif by_isbn and different_isbn_and_already_listed(text, item['isbn']):
-                log(f"")
+                log(f"{title} already recorded with a different ISBN")
             else:
                 arc = archive_sku(item['sku'])
                 if past:
-                    results["reprints"].append(f"{title}: {item['isbn']} - {url}{arc}")
+                    results["reprints"].append((item['sku'], f"{title}: {item['isbn']} - {url}{arc}"))
                     if page.title() not in reprints:
                         reprints[page.title()] = []
                     reprints[page.title()].append(item)
                 elif by_isbn and dupe:
                     log(f"{title}: Duplicate listing {item['isbn']} has publication date {item['publicationDate']}")
                 elif by_isbn:
-                    results["newDates"].append(f"{title}: {item['publicationDate']} (formerly {date_strs[0]}){arc}")
+                    results["newDates"].append((item['sku'], f"{title}: {item['publicationDate']} (formerly {date_strs[0]}){arc}"))
                 else:
-                    results["unknown"].append(f"Different publication dates found for {title}, but no ISBN - {url}{arc}")
+                    results["unknown"].append((item['sku'], f"Different publication dates found for {title}, but no ISBN - {url}{arc}"))
         except Exception as e:
             error_log(item['title'], type(e), e)
 
@@ -434,19 +459,19 @@ def different_isbn_and_already_listed(text, isbn):
     return False
 
 
-def run_edelweiss_protocol(site, scheduled=False):
-    driver = build_driver(headless=True, firefox=True)
+def run_edelweiss_protocol(site, cache, scheduled=False):
     search_terms = ["Star Wars", "Mandalorian"]
     sku_list = []
     products = []
     for term in search_terms:
+        driver = build_driver(headless=True, firefox=True)
         try:
             products += extract_items_from_edelweiss(driver, term, sku_list)
         except Exception as e:
             error_log(type(e), e)
             return [f"Error encountered during Edelweiss protocol: {type(e)} - {e}"], []
-        driver.get("https://google.com")
-    driver.close()
+        finally:
+            driver.close()
 
     log(f"Processing {len(products)} products")
 
@@ -458,12 +483,19 @@ def run_edelweiss_protocol(site, scheduled=False):
 
     messages = []
     headers = {"newItems": "New Listings:", "newDates": "New Publication Dates:", "newImages": "New Cover Images:",
-               "reprints": "New Reprints:", "newTPBs": "New Trade Paperbacks"}
+               "reprints": "New Reprints:", "newTPBs": "New Trade Paperbacks", "canceled": "Canceled Products"}
     for key, header in headers.items():
         if not analysis_results.get(key):
             continue
         m = [[header]]
-        for item in analysis_results[key]:
+        for sku, item in analysis_results[key]:
+            if key == "newItems" and sku in cache:
+                d = datetime.strptime(cache[sku], "%Y-%m-%d")
+                if (datetime.now() - d).days % 3 != 0:
+                    continue
+            elif key == "newItems":
+                cache[sku] = datetime.now().strftime("%Y-%m-%d")
+
             if sum(len(x) for x in m[-1]) + len(item) + 2 >= 2000:
                 m.append([])
             m[-1].append(f"- {item}")
@@ -491,51 +523,54 @@ def save_reprints(site, reprints: Dict[str, List[dict]]):
 
 
 def save_reprint(site, title, entries: List[dict]):
-    page = Page(site, title)
-    text = page.get()
-    if "==Editions==" in text:
-        i_header, international = "", ""
-        before, split1, after = re.split("(=+Editions=+\n)", text)
-        if re.search("=+[A-z]* ?[Gg]allery=+", after):
-            section, split2, after = re.split("(\n=+[A-z]* ?gallery=+)", after, 1)
-        elif re.search("\n==[A-Z]", after):
-            section, split2, after = re.split("(\n==[A-z].*?==)", after, 1)
+    try:
+        page = Page(site, title)
+        text = page.get()
+        if "==Editions==" in text:
+            i_header, international = "", ""
+            before, split1, after = re.split("(=+Editions=+\n)", text)
+            if re.search("=+[A-z]* ?[Gg]allery=+", after):
+                section, split2, after = re.split("(\n=+[A-z]* ?gallery=+)", after, 1)
+            elif re.search("\n==[A-Z]", after):
+                section, split2, after = re.split("(\n==[A-z].*?==)", after, 1)
+            else:
+                return f"- Cannot add {len(entries)} new reprints to {page.title()} due to malformed Editions section"
+
+            if "===" in section:
+                section, i_header, international = re.split("(\n=+.*?=+)", section, 1)
+
+            lines = [section.rstrip()]
+            build_editions(lines, entries)
+
+            new_text = "".join([before, split1, "\n".join(lines), i_header, international, split2, after])
+            page.put(new_text, f"Adding {len(entries)} new reprints to Editions", botflag=False)
+
+        elif re.search("=+[A-z]* ?[Gg]allery=+", text):
+            before, split, after = re.split("(=+[A-z]* ?[Gg]allery=+\n)", text)
+            lines = []
+            if "==Media==" in before:
+                pass
+            else:
+                build_new_media_section(text, lines, entries)
+                lines.append("===Cover gallery===")
+            new_text = "".join([before, "\n".join(lines), after])
+            page.put(new_text, f"Creating Editions section and adding {len(entries)} new reprints", botflag=False)
+
+        elif re.search("=+Appearances=+", text):
+            before, split, after = re.split("=+Appearances=+", text)
+            lines = []
+            if "==Media==" in before:
+                pass
+            else:
+                build_new_media_section(text, lines, entries)
+                lines.append("==Appearances==")
+            new_text = "".join([before, "\n".join(lines), after])
+            page.put(new_text, f"Creating Editions section and adding {len(entries)} new reprints", botflag=False)
+
         else:
-            return f"- Cannot add {len(entries)} new reprints to {page.title()} due to malformed Editions section"
-
-        if "===" in section:
-            section, i_header, international = re.split("(\n=+.*?=+)", section, 1)
-
-        lines = [section.rstrip()]
-        build_editions(lines, entries)
-
-        new_text = "".join([before, split1, "\n".join(lines), i_header, international, split2, after])
-        page.put(new_text, f"Adding {len(entries)} new reprints to Editions", botflag=False)
-
-    elif re.search("=+[A-z]* ?[Gg]allery=+", text):
-        before, split, after = re.split("(=+[A-z]* ?[Gg]allery=+\n)", text)
-        lines = []
-        if "==Media==" in before:
-            pass
-        else:
-            build_new_media_section(text, lines, entries)
-            lines.append("===Cover gallery===")
-        new_text = "".join([before, "\n".join(lines), after])
-        page.put(new_text, f"Creating Editions section and adding {len(entries)} new reprints", botflag=False)
-
-    elif re.search("=+Appearances=+", text):
-        before, split, after = re.split("=+Appearances=+", text)
-        lines = []
-        if "==Media==" in before:
-            pass
-        else:
-            build_new_media_section(text, lines, entries)
-            lines.append("==Appearances==")
-        new_text = "".join([before, "\n".join(lines), after])
-        page.put(new_text, f"Creating Editions section and adding {len(entries)} new reprints", botflag=False)
-
-    else:
-        return f"- Cannot add {len(entries)} new reprints to {page.title()} due to lack of Editions and/or Media subsection"
+            return f"- Cannot add {len(entries)} new reprints to {page.title()} due to lack of Editions and/or Media subsection"
+    except Exception as e:
+        log(f"Encountered {type(e)} while adding reprint to {title}")
 
 
 def build_editions(lines: list, entries: list):

@@ -72,18 +72,22 @@ def initial_cleanup(target: Page, all_infoboxes):
         before = re.sub(
             "(\]\]|\}\})(\{+ ?(1st[A-z]*|[A-z][od]|[Ll]n|[Nn]cm?|[Cc]|[Aa]mbig|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Nn]cs?|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene) ?[\|\}])",
             "\\1 \\2", before)
-    before = handle_infobox_on_page(before, target, all_infoboxes)
+    if all_infoboxes:
+        before = handle_infobox_on_page(before, target, all_infoboxes)
     before = before.replace("DisneyPlusYT", "DisneyPlusYouTube")
     before = re.sub("({{[Ss]croll[_ ]box\|)\*", "{{Scroll_box|\n*", before) \
         .replace("referene", "reference").replace("Note and references", "Notes and references") \
         .replace("Notes and reference=", "Notes and references=").replace("==References==", "==Notes and references==") \
-        .replace("Apearance", "Appearance").replace("Appearence", "Appearance")
+        .replace("Apearance", "Appearance").replace("Appearence", "Appearance").replace("&#40;&#63;&#41;", "(?)")
     before = re.sub("([A-z0-9\.>])(\[\[File:.*?\]\]\n)", "\\1\n\\2", before).replace("*{{Indexpage", "{{Indexpage")
     before = re.sub("=+'*Non-canonical (appearances|sources)'*=+", "===Non-canon \\1===", before)
+    before = re.sub("\{\{(.*?[^\n\]])\]\}(?!\})", "{{\1}}", before)
     while "== " in before or " ==" in before:
         before = before.replace("== ", "==").replace(" ==", "==")
     if "{{C|unlicensed}}" in before:
         before = re.sub("( {{[Cc]\|[Uu]nlicensed\}\})+", "", before)
+    if "{{Mentioned" in before or "{{mentioned" in before:
+        before = re.sub("\{\{[Mm]entioned[ _]only\|?\}\}", "{{Mo}}", before)
 
     if "‎" in before:
         before = before.replace("‎", "")
@@ -97,13 +101,16 @@ def build_page_components(target: Page, types: dict, appearances: FullListData, 
     redirects = build_redirects(target)
 
     canon = False
+    non_canon = False
     app_mode = BY_INDEX
     for c in target.categories():
         if "legends articles" in c.title().lower():
             app_mode = UNCHANGED
         elif "canon articles" in c.title().lower():
             canon = True
-    results = PageComponents(before, canon, app_mode)
+        elif "Non-canon Legends articles" in c.title() or "Non-canon articles" in c.title():
+            non_canon = True
+    results = PageComponents(before, canon, non_canon, app_mode)
 
     unknown = []
     final = ""
@@ -112,7 +119,7 @@ def build_page_components(target: Page, types: dict, appearances: FullListData, 
         if len(x) < 3:
             print(x)
         before = x[0]
-        final = x[1] + x[2]
+        final = "".join(x[1:])
 
     if "===Non-canon sources===" in before:
         before, nc_sources_section = before.rsplit("===Non-canon sources===", 1)
@@ -169,7 +176,7 @@ def build_page_components(target: Page, types: dict, appearances: FullListData, 
     return results, unknown, redirects
 
 
-def parse_section(section: str, types: dict, is_appearances: bool, unknown: list, after: str, log) -> SectionComponents:
+def parse_section(section: str, types: dict, is_appearances: bool, unknown: list, after: str, log, name="Target") -> SectionComponents:
     """ Parses an article's Appearances, Non-canon appearances, Sources, or External Links section, extracting an Item
     data object for each entry in the list. Also returns any preceding/trailing extra lines, such as scrollboxes. """
 
@@ -195,7 +202,7 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
 
         if s.strip().startswith("*"):
             start = False
-            handle_valid_line(s, is_appearances, log, types, data, other2, unknown, unique_ids, False)
+            handle_valid_line(s, is_appearances, log, types, data, other2, unknown, unique_ids, False, name)
         elif "{{scroll_box" in s.lower() or "{{scroll box" in s.lower():
             scroll_box = True
             other1.append(s)
@@ -213,7 +220,7 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
             continue
         elif s.strip():
             if not data and not re.search("^[\{\[]+([Ii]ncomplete|[Ss]croll|[Mm]ore[_ ]|[Ff]ile:)", s.strip()):
-                x = handle_valid_line(f"*{s}", is_appearances, log, types, data, other2, unknown, unique_ids, True)
+                x = handle_valid_line(f"*{s}", is_appearances, log, types, data, other2, unknown, unique_ids, True, name)
                 if x:
                     start = False
                     continue
@@ -224,7 +231,7 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
     return SectionComponents(data, other1, other2, after)
 
 
-def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, unknown, unique_ids, attempt=False):
+def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, unknown, unique_ids, attempt=False, name="Target"):
     if s.endswith("}}}}") and s.count("{{") < s.count("}}"):
         s = s[:-2]
     z = s[1:].replace("&ndash;", '–').replace('&mdash;', '—')
@@ -232,7 +239,7 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
     if "SWGTCG" in s and "scenario" in z:
         z = re.sub("(\{\{SWGTCG.*?)\}\} \{\{C\|(.*?scenario)\}\}", "\\1|scenario=\\2}}", z)
     x1 = re.search(
-        '( ?(<small>)? ?\{+ ?(1st[A-z]*|V?[A-z][od]|[Ff]act|DLC|[Ll]n|[Nn]cm?|[Cc]|[Aa]mbig|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Nn]cs?|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene) ?[\|\}].*?$)',
+        '( ?(<small>)? ?\{+ ?(1st[A-z]*|V?[A-z][od]|[Ff]act|DLC|[Ll]n|[Nn]cm?|[Cc]|[Aa]mbig|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Uu]nborn|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Nn]cs?|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene) ?[\|\}].*?$)',
         z)
     extra = x1.group(1) if x1 else ''
     if extra:
@@ -255,7 +262,7 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
 
     found = False
     for y in zs:
-        t = extract_item(convert_issue_to_template(y), is_appearances, "target", types)
+        t = extract_item(convert_issue_to_template(y), is_appearances, name, types)
         if t:
             found = True
             data.append(t)
@@ -438,7 +445,7 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
     for i, a in enumerate(new_apps.found):
         if "{{po}}" in (a.current.extra or '').lower():
             continue
-        audiobooks = find_matching_audiobook(a, app_targets, appearances)
+        audiobooks = find_matching_audiobook(a, app_targets, appearances, abridged)
         audiobooks += find_matching_parent_audiobook(a, app_targets, appearances)
         for b in audiobooks:
             if b.abridged:
@@ -469,10 +476,12 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
 
     mismatch = []
     unknown_final = []
+    nca_title = "==Appearances==" if results.non_canon and not new_apps.found else "===Non-canon appearances==="
+    ncs_title = "==Sources==" if results.non_canon and not new_src.found else "===Non-canon sources==="
     new_apps, final_apps = build_new_section("==Appearances==", new_apps, results.app_mode, dates, results.canon, include_date, log, use_index, mismatch, both_continuities, unknown_final)
-    new_nca, final_nca = build_new_section("===Non-canon appearances===", new_nca, UNCHANGED, dates, results.canon, include_date, log, use_index, mismatch, both_continuities, unknown_final)
+    new_nca, final_nca = build_new_section(nca_title, new_nca, BY_DATE, dates, results.canon, include_date, log, use_index, mismatch, both_continuities, unknown_final)
     new_src, final_sources = build_new_section("==Sources==", new_src, BY_DATE, dates, results.canon, True, log, use_index, mismatch, both_continuities, unknown_final)
-    new_ncs, final_ncs = build_new_section("===Non-canon sources===", new_ncs, BY_DATE, dates, results.canon, True, log, use_index, mismatch, both_continuities, unknown_final)
+    new_ncs, final_ncs = build_new_section(ncs_title, new_ncs, BY_DATE, dates, results.canon, True, log, use_index, mismatch, both_continuities, unknown_final)
     analysis = AnalysisResults(final_apps, final_nca, final_sources, final_ncs, results.canon, abridged, mismatch)
     return new_apps, new_nca, new_src, new_ncs, dates, unknown_apps, unknown_src, unknown_final, analysis
 
@@ -589,6 +598,10 @@ def build_item_ids_for_section(page: Page, name, original: List[Item], data: Ful
             t = data.target.get(f"{s} ({PARAN[c[0].current.template][0]})")
             if not t and other.target:
                 t = other.target.get(f"{s} ({PARAN[c[0].current.template][0]})")
+        if not t and c[0].current.template == "SWCT" and " - " in s:
+            t = data.target.get(s.split(" - ", 1)[-1])
+            if not t and other.target:
+                t = other.target.get(s.split(" - ", 1)[-1])
         if t:
             t[0].index = c[0].current.index
             if c[0].current.subset:
@@ -627,7 +640,9 @@ def build_new_section(name, section: SectionItemIds, mode: str, dates: list, can
     previous = None
     group = []
     new_found = []
+    i = 0
     for o in section.found:
+        i += 1
         if o.current.target:
             t = o.current.target.split("(")[0].strip() if o.current.target else None
             if t and t not in source_names:
@@ -890,7 +905,7 @@ AUDIOBOOK_MAPPING = {
 }
 
 
-def find_matching_audiobook(a: ItemId, existing: list, appearances: FullListData):
+def find_matching_audiobook(a: ItemId, existing: list, appearances: FullListData, abridged: list):
     if not a.master.target:
         return []
     elif f"{a.master.target} (novelization)" in existing or f"{a.master.target} (novel)" in existing:
@@ -911,10 +926,11 @@ def find_matching_audiobook(a: ItemId, existing: list, appearances: FullListData
     if z in AUDIOBOOK_MAPPING:
         to_check = [AUDIOBOOK_MAPPING[z]]
     else:
-        to_check = [f"{z} (audiobook)", f"{z} (unabridged audiobook)", f"{z} (abridged audiobook)", f"{z} (script)"]
+        to_check = [f"{z} (audiobook)", f"{z} (unabridged audiobook)", f"{z} (abridged audiobook)", f"{z} (script)",
+                    f" (audio drama)", f" (German audio drama)"]
 
     for y in to_check:
-        if y in appearances.target and y not in existing:
+        if y in appearances.target and y not in existing and y not in abridged:
             if f"{z} (novel)" in appearances.target and f"{z} (novel)" not in existing:
                 continue
             elif f"{z} (novelization)" in appearances.target and f"{z} (novelization)" not in existing:

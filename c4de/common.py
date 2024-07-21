@@ -4,7 +4,7 @@ import traceback
 
 import urllib3.exceptions
 import waybackpy
-from waybackpy.exceptions import WaybackError
+from waybackpy.exceptions import WaybackError, TooManyRequestsError
 from pywikibot import Page, Category
 from datetime import datetime
 
@@ -180,7 +180,7 @@ def build_analysis_response(site, nom_type):
     return lines
 
 
-def archive_url(url, force_new=False):
+def archive_url(url, force_new=False, timeout=30):
     if not force_new:
         try:
             r = requests.get(f"https://web.archive.org/web/{url}", timeout=30)
@@ -199,8 +199,13 @@ def archive_url(url, force_new=False):
         archive = wayback.save()
         log(f"Successful archive: {archive.archive_url}")
         return True, archive.archive_url.split("/web/", 1)[1].split("/", 1)[0]
-    except WaybackError:
+    except TooManyRequestsError as e:
+        err_msg = "Too many save requests, server is overwhelmed"
+    except WaybackError as e:
+        print(e)
         err_msg = "URL cannot be archived by wayback machine as it is a redirect"
+    except (TimeoutError, ConnectionError, requests.exceptions.ConnectionError, urllib3.exceptions.MaxRetryError):
+        log(f"ERROR: Timeout/connection error while attempting to archive {url}")
     except Exception as e:
         error_log(url, type(e), e)
         err_msg = str(e)
@@ -210,6 +215,8 @@ def archive_url(url, force_new=False):
         if re.search("/web/([0-9]+)/", r.url):
             log(f"URL is archived already: {url}")
             return True, r.url.split("/web/", 1)[1].split("/", 1)[0]
+    except (TimeoutError, ConnectionError, requests.exceptions.ConnectionError, urllib3.exceptions.MaxRetryError):
+        log(f"ERROR: Timeout/connection error while attempting to archive {url}")
     except Exception as e:
         error_log(url, type(e), e)
         return False, err_msg or str(e)
