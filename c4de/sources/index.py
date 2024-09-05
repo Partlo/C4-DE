@@ -181,6 +181,8 @@ def create_index(site, page: Page, results: AnalysisResults, save: bool):
             lines.append("}}")
     if re.search("\{\{Top\|(.*?\|)?real(\|.*?)?\}\}", page.get()):
         lines.append("\n[[Category:Real-world index pages]]")
+    elif re.search("\{\{Top\|(.*?\|)?nc[cl](\|.*?)?\}\}", page.get()):
+        lines.append("\n[[Category:Non-canon index pages]]")
     elif results.canon:
         lines.append("\n[[Category:Canon index pages]]")
     else:

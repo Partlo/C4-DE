@@ -85,6 +85,9 @@ class Item:
     def has_date(self):
         return self.date is not None and (self.date.startswith("1") or self.date.startswith("2") or self.date == "Current")
 
+    def match_expected(self):
+        return not self.non_canon and not self.unlicensed and not self.from_extra and not self.reprint and self.has_date() and not self.future
+
     def full_id(self):
         x = self.unique_id()
         return x if self.canon is None else f"{self.canon}|{x}"
@@ -128,21 +131,25 @@ class ItemId:
 
 
 class FullListData:
-    def __init__(self, unique: Dict[str, Item], full: Dict[str, Item], target: Dict[str, List[Item]], parantheticals: set, both_continuities: set):
+    def __init__(self, unique: Dict[str, Item], full: Dict[str, Item], target: Dict[str, List[Item]],
+                 parantheticals: set, both_continuities: set, no_canon_index: List[Item]=None, no_legends_index: List[Item]=None):
         self.unique = unique
         self.full = full
         self.target = target
         self.parantheticals = parantheticals
         self.both_continuities = both_continuities
+        self.no_canon_index = no_canon_index
+        self.no_legends_index = no_legends_index
 
 
 class PageComponents:
-    def __init__(self, before, canon, non_canon, mode):
+    def __init__(self, before, canon, non_canon, real, mode):
         self.before = before
         self.final = ""
         self.original = before
         self.canon = canon
         self.non_canon = non_canon
+        self.real = real
         self.app_mode = mode
 
         self.ncs = SectionComponents([], [], [], '')

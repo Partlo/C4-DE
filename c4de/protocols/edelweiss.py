@@ -153,7 +153,8 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
     x = driver.find_elements(By.ID, "results")
     if not x:
         x = driver.find_elements(By.ID, "totalResults")
-    total = int(x[0].text.replace("of", "").strip())
+    total = x[0].text.replace("of", "").strip()
+    total = int(total) if total else 500
 
     chevron = driver.find_elements(By.CLASS_NAME, "leftNavLeftArrow")
     if chevron:
@@ -331,6 +332,10 @@ def archive_sku(sku):
         error_log(type(e), e)
 
 
+def prepare_title(x: str):
+    return (x.title() if x.isupper() else x).replace("Lego", "LEGO")
+
+
 def analyze_products(site, products: List[dict], search_terms):
     false_positives = load_false_positives(site)
     pages_by_isbn = load_pages_by_isbn(site)
@@ -358,7 +363,8 @@ def analyze_products(site, products: List[dict], search_terms):
                 if item["collecting"]:
                     results["newTPBs"].append((item['sku'], f"{item['title']} - {url}"))
                 else:
-                    results["newItems"].append((item['sku'], f"{item['title']} - {url}{archive_sku(item['sku'])}"))
+                    title = prepare_title(item['title'])
+                    results["newItems"].append((item['sku'], f"[{title}](https://starwars.fandom.com/{title.replace(' ', '_')}) - {url}{archive_sku(item['sku'])}"))
                 continue
             if page.title() == "Hyperspace Stories: Qui-Gon":
                 continue
@@ -371,6 +377,7 @@ def analyze_products(site, products: List[dict], search_terms):
             else:
                 title = f"*{page.title()}*"
 
+            page_url = page.full_url().replace(" ", "_")
             text = page.get()
             date_strs = []
             m = re.search("\|(publish date|publication date|release date|released|published)=(.*?)(<.*?)?\n(\*(.*?)(<.*?)?\n)*", text)
@@ -405,7 +412,7 @@ def analyze_products(site, products: List[dict], search_terms):
                 else:
                     arc = archive_sku(item['sku'])
                     log(f"{title} has been listed as canceled")
-                    results["canceled"].append((item['sku'], f"{title} has been listed as canceled: {url}{arc}"))
+                    results["canceled"].append((item['sku'], f"[{title}]({page_url}) has been listed as canceled: {url}{arc}"))
                     continue
 
             page_dates = []
@@ -433,16 +440,16 @@ def analyze_products(site, products: List[dict], search_terms):
             else:
                 arc = archive_sku(item['sku'])
                 if past:
-                    results["reprints"].append((item['sku'], f"{title}: {item['isbn']} - {url}{arc}"))
+                    results["reprints"].append((item['sku'], f"[{title}]({page_url}): {item['isbn']} - {url}{arc}"))
                     if page.title() not in reprints:
                         reprints[page.title()] = []
                     reprints[page.title()].append(item)
                 elif by_isbn and dupe:
-                    log(f"{title}: Duplicate listing {item['isbn']} has publication date {item['publicationDate']}")
+                    log(f"[{title}]({page.full_url()}): Duplicate listing {item['isbn']} has publication date {item['publicationDate']}")
                 elif by_isbn:
-                    results["newDates"].append((item['sku'], f"{title}: {item['publicationDate']} (formerly {date_strs[0]}){arc}"))
+                    results["newDates"].append((item['sku'], f"[{title}]({page_url}): {item['publicationDate']} (formerly {date_strs[0]}){arc}"))
                 else:
-                    results["unknown"].append((item['sku'], f"Different publication dates found for {title}, but no ISBN - {url}{arc}"))
+                    results["unknown"].append((item['sku'], f"Different publication dates found for [{title}]({page_url}), but no ISBN - {url}{arc}"))
         except Exception as e:
             error_log(item['title'], type(e), e)
 

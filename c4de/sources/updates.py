@@ -24,6 +24,7 @@ def extract_release_date(title, text):
         for i in range(1, 4):
             if m.groupdict()[f"d{i}"]:
                 d = m.groupdict()[f"d{i}"].replace("[", "").replace("]", "").replace("*", "").strip().replace(',', '')
+                d = re.sub("\{\{C\|.*?}}", "", d)
                 d = re.sub("&ndash;[A-z]+ [0-9\|]+", "", d)
                 d = re.sub("\([A-Z]+\)", "", d)
                 d = re.sub("([A-z]+ ?[0-9]*) ([0-9]{4})( .*?)$", "\\1 \\2", d)
@@ -386,6 +387,9 @@ def handle_results(site, results: List[FutureProduct], save=True):
 
 DATES = {"Wookieepedia:Appearances/Legends": "1977",
          "Wookieepedia:Appearances/Canon": "2008",
+         "Wookieepedia:Sources/Legends/General/1977-2000": "1977",
+         "Wookieepedia:Sources/Legends/General/2000s": "2000",
+         "Wookieepedia:Sources/Legends/General/2010s": "2010",
          "Wookieepedia:Sources/Canon/General": "2014",
          "Wookieepedia:Sources/CardSets": "1977"}
 
@@ -429,28 +433,38 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
         else:
             t = f"''[[{i.page.title()}]]''"
             t = re.sub("''\[\[((.*?) \(audiobook\))\]\]''", "[[\\1|''\\2'' audiobook]]", t)
-            t = re.sub("''\[\[((.*?) \(.*?\)( [0-9]+)?)\]\]''", "[[\\1|''\\2''\\3]]", t)
+            t = re.sub("''\[\[((.*?) (\([0-9]+\)) ([0-9]+))\]\]''", "[[\\1|''\\2'' \\3 \\4]]", t)
+            t = re.sub("''\[\[(([^\|\]\(]*?) \(.*?\)( [0-9]+)?)\]\]''", "[[\\1|''\\2''\\3]]", t)
             t = re.sub("''\[\[(.*?)\|(((?!'').)*?) ([0-9]+)\]\]''", "[[\\1|''\\2'' \\3]]", t)
             t = re.sub("''\[\[([^\|\]]+?) ([0-9]+)\]\]''", "[[\\1 \\2|''\\1'' \\2]]", t)
             if "[[Untitled" in t and t.startswith("''"):
                 t = t[2:-2]
         d = build_date(i.dates)
-        final.append([t, prep_date(d), 100])
+        final.append([t, prep_date(d), 100, fix_numbers(t)])
     for x, i in data.full.items():
         d = i.date
         if i.target in changed:
             d = build_date(changed[i.target].dates)
-        final.append([i.department + i.original + i.extra, prep_date(d), i.index])
+        z = i.department + i.original + i.extra
+        final.append([z, prep_date(d), i.index, fix_numbers(z)])
 
     start_date = DATES.get(page.title())
     section = None
+    canceled = []
     lines = ["<noinclude>{{Wookieepedia:Sources/Header}}</noinclude>"]
     post = re.search("==Post-([0-9]+)==", page.get())
     post = post.group(1) if post else None
     post_found = False
-    for f in sorted(final, key=lambda a: (a[1], (a[2] or 200), a[0])):
+    for f in sorted(final, key=lambda a: (a[1], (a[2] or 200), a[3], a[0])):
         txt, d, i = f[0], f[1], f[2]
         if use_sections:
+            if d.startswith("Cancel"):
+                if section != "Canceled":
+                    section = "Canceled"
+                    canceled.append("\n==Canceled==")
+                canceled.append(f"#{d}: {txt}")
+                continue
+
             if d.startswith("1") or d.startswith("2"):
                 if post_found:
                     pass
@@ -472,6 +486,8 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
                 section = None
                 lines.append("\n==Other==")
         lines.append(f"#{d}: {txt}")
+    if canceled:
+        lines += canceled
 
     new_txt = re.sub("(?<![\n=])\n==", "\n\n==", re.sub("\n\n+", "\n\n", "\n".join(lines))).strip()
     with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/sources/test.txt", mode="w", encoding="utf-8") as f:
@@ -481,6 +497,16 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
         page.put(new_txt, "Updating Source Engine Masterlist with new future products", botflag=False)
     else:
         showDiff(page.get(), new_txt, context=2)
+
+
+NUMBERS = {"first": "01", "second": "02", "third": "03", "fourth": "04", "fifth": "05", "sixth": "06", "seventh": "07",
+           "eighth": "08", "ninth": "09", "tenth": "10"}
+
+
+def fix_numbers(t):
+    for x, y in NUMBERS.items():
+        t = t.replace(x, y).replace(x.capitalize(), y)
+    return t
 
 
 def analyze():

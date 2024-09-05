@@ -273,3 +273,50 @@ def check_infobox_category(site):
             preload_results[template.title()] = missing_from_preload
 
     return preload_results, check_results
+
+
+def parse_archive(site, template):
+    page = Page(site, f"Module:ArchiveAccess/{template}")
+    if not page.exists():
+        return None
+    archive = {}
+    for u, d in re.findall("\[['\"](.*?)['\"]\] ?= ?['\"]?([0-9]+)/?['\"]?", page.get()):
+        archive[u.replace("\\'", "'")] = d
+    return archive
+
+
+def clean_up_archive_dates(site, t=None):
+    mapping = {}
+    pages = set()
+    for category in Category(site, "Same archivedate usages").subcategories(recurse=True):
+        if category.isEmptyCategory():
+            continue
+        template = category.title(with_ns=False).split(" usages")[0]
+        if template == t:
+            pages = set(category.articles())
+        elif not t:
+            pages = pages.union(category.articles())
+        mapping[template] = parse_archive(site, template)
+
+    for page in pages:
+        text = page.get()
+        for template, data in mapping.items():
+            if f"{{{{{template}|" in text or f"{{{{{template.replace(' ', '_')}|" in text:
+                for x in re.findall("(({{" + template + "\|(url=|domain=.*?\|(url=)?)?(.*?)\|.*?)\|archivedate=([0-9]+)(\|.*?)?}})", text):
+                    if x[4] in data and x[5] == data[x[4]]:
+                        text = text.replace(x[0], x[1] + x[6] + "}}")
+        page.put(text, "Clearing stored archivedates")
+
+
+def clean_up_archive_categories(site):
+    for mc in Category(site, "Archivedate usages").subcategories():
+        for c in mc.subcategories():
+            if c.title().endswith("/Empty"):
+                for cx in c.subcategories():
+                    if not cx.isEmptyCategory():
+                        text = cx.get().replace(f"{mc.title()}/Empty]]", f"{mc.title()}]]")
+                        cx.put(text, "Marking as non-empty")
+
+            if c.isEmptyCategory():
+                text = c.get().replace(f"{mc.title()}]]", f"{mc.title()}/Empty]]")
+                c.put(text, "Marking as empty")

@@ -68,7 +68,7 @@ def analyze(*args):
             if any(c.title() in STATUS for c in page.categories()):
                 bf = False
 
-            old_text = page.get()
+            old_text = page.get(force=True)
             text = build_new_text(page, infoboxes, types, appearances, sources, remap,
                                   include_date=include_date, log=log, handle_references=True)
 

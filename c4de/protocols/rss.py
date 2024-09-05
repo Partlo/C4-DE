@@ -525,7 +525,7 @@ def check_title_formatting(text, title_regex, title):
     m = re.search(title_regex, text)
     if m:
         title = m.group(1)
-    title = re.sub(r"<em>(.*?)( )?</em>", r"''\1''\2", title)
+    title = re.sub(r"<em.*?>(.*?)( )?</em>", r"''\1''\2", title)
     title = re.sub(r"<i( .*?)?>(.*?)( )?</i>", r"''\2''\3", title)
     title = re.sub(r"<span[^>]*?italic.*?>(.*?)( )?</span>", r"''\1''\2", title)
     title = re.sub(r"<span[^>]*?>(.*?)( )?</span>", r"\1\2", title)

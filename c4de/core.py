@@ -27,7 +27,7 @@ from c4de.data.filenames import *
 from c4de.version_reader import report_version_info
 
 from c4de.protocols.cleanup import archive_stagnant_senate_hall_threads, remove_spoiler_tags_from_page, \
-    check_preload_for_missing_fields, check_infobox_category
+    check_preload_for_missing_fields, check_infobox_category, clean_up_archive_categories
 from c4de.protocols.edelweiss import run_edelweiss_protocol, calculate_isbns_for_all_pages
 from c4de.protocols.rss import check_rss_feed, check_latest_url, check_wookieepedia_feeds, check_sw_news_page, \
     check_review_board_nominations, check_policy, check_consensus_track_duration, check_user_rights_nominations, \
@@ -35,6 +35,7 @@ from c4de.protocols.rss import check_rss_feed, check_latest_url, check_wookieepe
     check_target_url, compile_tracked_urls
 
 from c4de.sources.analysis import analyze_target_page, get_analysis_from_page
+from c4de.sources.domain import FullListData
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, build_template_types
 from c4de.sources.index import create_index
 from c4de.sources.infoboxer import list_all_infoboxes
@@ -76,6 +77,8 @@ class C4DE_Bot(commands.Bot):
     :type board_nominations: dict[str, dict]
     :type policy_updates: dict[str, list[str]]
     :type rights_cache: dict[str, list[str]]
+    :type appearances: FullListData
+    :type sources: FullListData
     :type report_dm: discord.DMChannel
     """
 
@@ -187,6 +190,7 @@ class C4DE_Bot(commands.Bot):
             self.check_policy.start()
             self.check_bot_requests.start()
             self.check_deleted_pages.start()
+            self.check_empty_usage_categories.start()
             self.check_files_to_be_renamed.start()
             self.check_internal_rss.start()
             self.check_external_rss.start()
@@ -201,11 +205,9 @@ class C4DE_Bot(commands.Bot):
             log("Startup process completed.")
             self.ready = True
 
-            # for message in await self.text_channel(ANNOUNCEMENTS).history(limit=25).flatten():
-            #     if message.id == 1089920440388026530:
-            #         await message.edit(content=f"📢 **LucaRoR has been nominated for Rollback rights!**\n<{SITE_URL}/Wookieepedia:Requests_for_user_rights/Rollback/LucaRoR>")
-            #     elif message.id == 1089753200040611952:
-            #         await message.edit(content=f"📢 **AnilSerifoglu has been nominated for Rollback rights!**\n<{SITE_URL}/Wookieepedia:Requests_for_user_rights/Rollback/AnilSerifoglu>")
+            # for message in await self.text_channel("star-wars-news").history(limit=25).flatten():
+            #     if message.id == 1264945242130616444:
+            #         await message.edit(content=message.content.replace("", "Battle of Jakku"))
 
 
     # noinspection PyTypeChecker
@@ -658,7 +660,16 @@ class C4DE_Bot(commands.Bot):
             return
 
         category = Category(self.site, "Category:Articles with /Canon")
-        await self.text_channel("admin-help").send(f"Beginning Canon/Legends swap for {len(list(category.articles()))} articles")
+        messages = [f"Beginning Canon/Legends swap for {len(list(category.articles()))} articles:", ""]
+        for page in category.articles():
+            y = f"- {page.title()}"
+            if len(y) + len(messages[-1]) > 500:
+                messages.append(y)
+            else:
+                messages[-1] += f"\n{y}"
+
+        for m in messages:
+            await self.text_channel("admin-help").send(m)
         subprocess.run(f"""cd C:/Users/cadec/Documents/projects/C4DE/robo & C:/Users/cadec/Envs/C4DE/Scripts/python switch_canon_legends.py""", shell=True)
 
     @staticmethod
@@ -716,9 +727,42 @@ class C4DE_Bot(commands.Bot):
             self.appearances = load_full_appearances(self.site, self.templates, False)
             self.sources = load_full_sources(self.site, self.templates, False)
             self.remap = load_remap(self.site)
+
+            self.build_missing_page()
         except Exception as e:
             traceback.print_exc()
             await self.report_error("Sources rebuild", type(e), e)
+
+    def build_missing_page(self):
+        skip = [c.title() for c in Category(self.site, "Category:Real-world attractions").articles(recurse=True)]
+        skip += [c.title() for c in Category(self.site, "Category:Real-world arcade games").articles()]
+        skip += [c.title() for c in Category(self.site, "Category:Mobile games").articles(recurse=True)]
+        skip += [c.title() for c in Category(self.site, "Category:Web-based games").articles()]
+        skip += [c.title() for c in Category(self.site, "Category:Commercials").articles()]
+        skip += [c.title() for c in Category(self.site, "Category:RPGA adventures").articles()]
+
+        page = Page(self.site, "User:C4-DE Bot/Canon Missing")
+        text = "" if not page.exists() else page.get()
+        pages = [i for i in self.appearances.no_canon_index if i.target not in skip]
+        new_text = "\n".join(f"#{x.date}: {x.original}" for x in pages)
+        if new_text != text:
+            page.put(new_text, "Recording items missing from the canon media timeline", botflag=False)
+
+        page = Page(self.site, "User:C4-DE Bot/Legends Missing")
+        text = "" if not page.exists() else page.get()
+        pages = [i for i in self.appearances.no_legends_index if i.target not in skip]
+
+        ex_rpg = [c.title() for c in Category(self.site, "Category:West End Games adventure supplements").articles()]
+        main, rpg = [], []
+        for x in pages:
+            if x.target in ex_rpg or x.template in ["WEGCite", "DarkStryder", "Journal", "GamerCite", "LivingForce", "WizCite", "WizardsCite", "FFG", "FFGXW"]:
+                rpg.append(f"#{x.date}: {x.original}")
+            else:
+                main.append(f"#{x.date}: {x.original}")
+
+        new_text = "\n".join(main) + "\n\n==RPG==\n" + "\n".join(rpg)
+        if new_text != text:
+            page.put(new_text, "Recording items missing from the Legends media timeline", botflag=False)
 
     def have_sources_changed(self):
         for p in Category(self.site, "Category:Wookieepedia Sources Project").articles():
@@ -793,6 +837,7 @@ class C4DE_Bot(commands.Bot):
             for o in results:
                 await message.reply(o)
         except Exception as e:
+            error_log(type(e), e)
             await self.report_error("Analyze sources on new nomination", type(e), e)
             await message.remove_reaction(TIMER, self.user)
             await message.add_reaction(EXCLAMATION)
@@ -1114,6 +1159,15 @@ class C4DE_Bot(commands.Bot):
         except Exception as e:
             await self.report_error(f"Bot Request Archival: {e}", type(e), e)
 
+    @tasks.loop(minutes=60)
+    async def check_empty_usage_categories(self):
+        try:
+            clean_up_archive_categories(self.site)
+        except TimeoutError:
+            pass
+        except Exception as e:
+            await self.report_error(f"Deleted Pages: {e}", type(e), e)
+
     @tasks.loop(minutes=15)
     async def check_deleted_pages(self):
         log("Checking deleted pages")
@@ -1241,7 +1295,6 @@ class C4DE_Bot(commands.Bot):
 
         await message.add_reaction(THUMBS_UP)
         return
-
 
     @tasks.loop(minutes=10)
     async def check_external_rss(self):

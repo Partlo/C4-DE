@@ -9,7 +9,7 @@ from c4de.sources.domain import Item, ItemId, FullListData
 
 SUBPAGES = [
     "Canon/General", "Legends/General/1977-2000", "Legends/General/2000s", "Legends/General/2010s", "Canon/Toys",
-    "Legends/Toys", "CardSets"
+    "Legends/Toys", "CardSets", "Soundtracks"
 ]
 
 IGNORE_TEMPLATES = ["BookCite", "=", "Subtitles", "PAGENAME"]
@@ -36,7 +36,6 @@ REFERENCE_MAGAZINES = {
     "FFCite\|y=2014": ("The Official Star Wars Fact File Part", "2014"),
     "FigurineCite": ("Star Wars: The Official Figurine Collection", ""),
     "HelmetCollectionCite": ("Star Wars Helmet Collection", ""),
-    "LSWCite": ("LEGO Star Wars", ""),
     "ShipsandVehiclesCite": ("Star Wars Starships & Vehicles", ""),
     "StarshipsVehiclesCite": ("Star Wars: The Official Starships & Vehicles Collection", "")
 }
@@ -89,37 +88,38 @@ PREFIXES = {
 }
 
 TEMPLATES = {
-    "AdventurerCite": "The Adventurer",
-    "AdvUnCite": "Adventures Unlimited",
-    "Avalonmag": "Avalon",
+    # "AdventurerCite": "The Adventurer",
+    # "AdvUnCite": "Adventures Unlimited",
+    # "Avalonmag": "Avalon",
     "BanthaCite": "Bantha Tracks",
-    "CasusBelliCite": "Casus Belli",
-    "CollectorCite": "Star Wars Galaxy Collector",
-    "CWACite": "Star Wars: Clone Wars Adventures Volume",
-    "CWMCite": "Star Wars: The Clone Wars Magazine",
-    "DragonCite": "Dragon Magazine",
-    "InQuestCite": "InQuest Gamer",
-    "GalaxyCite": "Star Wars Galaxy Magazine",
-    "GameTradeCite": "Game Trade Magazine",
-    "GamerCite": "Star Wars Gamer",
-    "InsiderCite": "Star Wars Insider",
-    "Journal": "Star Wars Adventure Journal",
+    # "CasusBelliCite": "Casus Belli",
+    # "CollectorCite": "Star Wars Galaxy Collector",
+    # "CWACite": "Star Wars: Clone Wars Adventures Volume",
+    # "CWMCite": "Star Wars: The Clone Wars Magazine",
+    # "DragonCite": "Dragon Magazine",
+    # "InQuestCite": "InQuest Gamer",
+    # "GalaxyCite": "Star Wars Galaxy Magazine",
+    # "GameTradeCite": "Game Trade Magazine",
+    # "GamerCite": "Star Wars Gamer",
+    # "InsiderCite": "Star Wars Insider",
+    # "Journal": "Star Wars Adventure Journal",
+    # "LSWCite": "LEGO Star Wars",
     "StarWarsKidsCite": "Star Wars Kids (1997)",
     "StarWarsKidsCite|year=1997": "Star Wars Kids (1997)",
     "StarWarsKidsCite|year=1998": "Star Wars Kids (1998)",
     "StarWarsKidsCite|year=1999": "Star Wars Kids (1999)",
-    "SWAdventuresCite": "Star Wars Adventures Magazine",
-    "SWMCite": "Star Wars Magazine",
-    "SWMUKCite": "Star Wars: The Official Magazine",
-    "SWRACite": "Star Wars Rebels Animation",
-    "SWResACite": "Star Wars Resistance Animation",
-    "SWRMCite": "Star Wars Rebels Magazine",
-    "TOMCite": "Star Wars - The Official Magazine",
-    "TCWUKCite": "Star Wars Comic UK",
+    # "SWAdventuresCite": "Star Wars Adventures Magazine",
+    # "SWMCite": "Star Wars Magazine",
+    # "SWMUKCite": "Star Wars: The Official Magazine",
+    # "SWRACite": "Star Wars Rebels Animation",
+    # "SWResACite": "Star Wars Resistance Animation",
+    # "SWRMCite": "Star Wars Rebels Magazine",
+    # "TOMCite": "Star Wars - The Official Magazine",
+    # "TCWUKCite": "Star Wars Comic UK",
     "TCWUKCite|vol=4": "Star Wars Comic UK",
     "TCWUKCite|vol=6": "Star Wars: The Clone Wars Comic",
     "TCWUKCite|vol=7": "Star Wars Comic",
-    "VoyagesCite": "Voyages SF"
+    # "VoyagesCite": "Voyages SF"
 }
 
 
@@ -146,6 +146,14 @@ def build_template_types(site):
     list_templates(site, "Category:Dating citation templates", results, "Dates")
     list_templates(site, "Category:Canon dating citation templates", results, "Dates", recurse=True)
     list_templates(site, "Category:Legends dating citation templates", results, "Dates", recurse=True)
+
+    results["Magazine"] = {}
+    for p in Category(site, "Category:Magazine citation templates").articles(recurse=True):
+        txt = p.get()
+        if "BaseCitation/Magazine" in txt:
+            x = re.search("\|series=([A-z0-9\(\) ]+)", txt)
+            if x:
+                results["Magazine"][p.title(with_ns=False)] = x.group(1)
 
     return results
 
@@ -244,6 +252,8 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
         if m:
             return Item(z, mode, a, target=None, template=template, parent="Holonet", url=m.group(3).replace("|", "/"),
                         text=m.group(5))
+    elif template == "TCW" and "TCW|Destiny" in s:
+        return Item(z, mode, a, target="Destiny (Star Wars: The Clone Wars)", template=template)
     elif template == "CelebrationTrailer":
         m = re.search("\{\{CelebrationTrailer\|['\[]*(?P<m>.*?)(\|.*?)?['\]]*\|(?P<c>.*?)\}\}", s)
         if m:
@@ -355,9 +365,6 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
         else:
             print(s)
 
-    if template == "TCW" and "TCW|Destiny" in s:
-        return Item(z, mode, a, target="Destiny (Star Wars: The Clone Wars)", template=template)
-
     # InsiderCite - link= parameter
     m = re.search("{{[^\|\[\}\n]+\|link=(.*?)\|.*?\|(.*?)(\|(.*?))?}}", s)
     if m:
@@ -375,16 +382,18 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
         return Item(z, mode, a, target=m.group('set'), template=template, text=m.group('scenario'))
 
     # Magazine articles with issue as second parameter
-    m = re.search("{{[^\|\[\}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(issue[0-9]?=)?(?P<issue>(Special Edition |Souvenir Special)?H?S? ?[0-9\.]*)(\|issue[0-9]=.*?)?\|(story=|article=)?\[*(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?\]*(\|.*?)?}}", s.replace("&#61;", "="))
+    m = re.search("{{[^\|\[\}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(issue[0-9]?=)?(?P<issue>(Special Edition |Souvenir Special|Premiere Issue)?H?S? ?[0-9\.]*)(\|issue[0-9]=.*?)?\|(story=|article=)?\[*(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?\]*(\|.*?)?}}", s.replace("&#61;", "="))
     if not m:
-        m = re.search("{{[^\|\[\}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(story=|article=)?\[*(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?\]*\|(issue[0-9]?=)?(?P<issue>(Special Edition |Souvenir Special)?H?S? ?[0-9\.]*)(\|issue[0-9]=.*?)?(\|.*?)?}}", s.replace("&#61;", "="))
-    if m:
+        m = re.search("{{[^\|\[\}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(story=|article=)?\[*(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?\]*\|(issue[0-9]?=)?(?P<issue>(Special Edition |Souvenir Special|Premiere Issue)?H?S? ?[0-9\.]*)(\|issue[0-9]=.*?)?(\|.*?)?}}", s.replace("&#61;", "="))
+    if m and template != "StoryCite":
         if m.group('year'):
             p = TEMPLATES.get(f"{template}|{m.group('year')}")
         elif m.group('vol'):
             p = TEMPLATES.get(f"{template}|{m.group('vol')}")
         else:
             p = TEMPLATES.get(template)
+        if not p:
+            p = types["Magazine"].get(template)
         p = p or template.replace('Cite', '')
         article = m.group('article')
         parent = f"{p} {m.group('issue')}" if p and m.group('issue') else None
@@ -808,10 +817,10 @@ def load_appearances(site, log, canon_only=False, legends_only=False):
             if line and not line.startswith("=="):
                 if "/Header}}" in line:
                     continue
-                x = re.search("[\*#](.*?): (.*?)$", line)
+                x = re.search("[\*#](.*?)( \(.*?\))?:(<!--.*?-->)? (.*?)$", line)
                 if x:
                     i += 1
-                    data.append({"index": i, "page": sp, "date": x.group(1), "item": x.group(2), "canon": "/Canon" in sp, "extra": "/Extra" in sp})
+                    data.append({"index": i, "page": sp, "date": x.group(1), "item": x.group(4), "canon": "/Canon" in sp, "extra": "/Extra" in sp})
                 else:
                     print(f"Cannot parse line: {line}")
         if log:
@@ -824,14 +833,26 @@ def load_source_lists(site, log):
     data = []
     for sp in SUBPAGES:
         i = 0
+        skip = False
         p = Page(site, f"Wookieepedia:Sources/{sp}")
-        for line in p.get().splitlines():
+        lines = p.get().splitlines()
+        bad = []
+        for o, line in enumerate(lines):
+            # if skip:
+            #     skip = False
+            #     continue
             if line and not line.startswith("==") and not "/Header}}" in line:
+            #     if line.count("{{") > line.count("}}"):
+            #         if o + 1 != len(lines) and lines[o + 1].count("}}") > lines[o + 1].count("{{"):
+            #             line = f"{line}{lines[o + 1]}"
+            #             skip = True
+            #             bad.append(o)
+
                 x = re.search("[\*#](?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (D: )?(?P<t>.*?)( {{C\|d: .*?}})?$", line)
                 if x:
                     i += 1
                     data.append({"index": i, "page": sp, "date": x.group("d"), "item": x.group("t"),
-                                 "canon": None if sp == "CardSets" else "Canon" in sp, "ref": x.group("r")})
+                                 "canon": None if "/" not in sp else "Canon" in sp, "ref": x.group("r")})
                 else:
                     print(f"Cannot parse line: {line}")
         if log:
@@ -841,9 +862,20 @@ def load_source_lists(site, log):
         i = 0
         p = Page(site, f"Wookieepedia:Sources/Web/{y}")
         if p.exists():
-            for line in p.get().splitlines():
+            skip = False
+            lines = p.get().splitlines()
+            bad = []
+            for o, line in enumerate(lines):
                 if "/Header}}" in line:
                     continue
+                # elif skip:
+                #     skip = False
+                #     continue
+                # if line.count("{{") > line.count("}}"):
+                #     if o + 1 != len(lines) and lines[o + 1].count("}}") > lines[o + 1].count("{{"):
+                #         line = f"{line}{lines[o + 1]}"
+                #         skip = True
+                #         bad.append(o)
                 x = re.search("\*(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?) ?†?( {{C\|(original|alternate): (?P<a>.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
                 if x:
                     i += 1
@@ -970,8 +1002,8 @@ def load_full_sources(site, types, log) -> FullListData:
 
 def load_full_appearances(site, types, log, canon_only=False, legends_only=False) -> FullListData:
     appearances = load_appearances(site, log, canon_only=canon_only, legends_only=legends_only)
-    _, canon = parse_timeline(Page(site, "Timeline of canon media").get())
-    _, legends = parse_timeline(Page(site, "Timeline of Legends media").get())
+    _, canon, c_unknown = parse_new_timeline(Page(site, "Timeline of canon media").get(), types)
+    _, legends, l_unknown = parse_new_timeline(Page(site, "Timeline of Legends media").get(), types)
     count = 0
     unique_appearances = {}
     full_appearances = {}
@@ -979,6 +1011,8 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
     parantheticals = set()
     both_continuities = set()
     today = datetime.now().strftime("%Y-%m-%d")
+    no_canon_index = []
+    no_legends_index = []
     for i in appearances:
         try:
             unlicensed = "{{c|unlicensed" in i['item'].lower()
@@ -1010,14 +1044,23 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 full_appearances[x.full_id()] = x
                 unique_appearances[x.unique_id()] = x
                 if x.target:
-                    o = increment(x)
-                    canon_index = match_audiobook(x.target, canon)
-                    if canon_index:
-                        x.canon_index = canon_index + o
+                    canon_index_expected = x.canon and x.match_expected() and x.target not in AUDIOBOOK_MAPPING.values() and x.target not in c_unknown
+                    legends_index_expected = not x.canon and x.match_expected() and x.target not in AUDIOBOOK_MAPPING.values() and x.target not in l_unknown
 
-                    legends_index = match_audiobook(x.target, legends)
-                    if legends_index:
+                    o = increment(x)
+                    canon_index = match_audiobook(x.target, canon, canon_index_expected)
+                    if canon_index is not None:
+                        x.canon_index = canon_index + o
+                    elif canon_index_expected:
+                        no_canon_index.append(x)
+
+                    legends_index = match_audiobook(x.target, legends, legends_index_expected)
+                    if "The Bounty Hunter of Ord Mantell" in x.original:
+                        print(x.target, legends_index, x.original)
+                    if legends_index is not None:
                         x.legends_index = legends_index + o
+                    elif legends_index_expected:
+                        no_legends_index.append(x)
 
                     if x.target.endswith(")") and not x.target.endswith("webcomic)"):
                         parantheticals.add(x.target.rsplit(" (", 1)[0])
@@ -1037,8 +1080,11 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
         except Exception as e:
             traceback.print_exc()
             print(f"{type(e)}: {e}: {i['item']}")
+
     print(f"{count} out of {len(appearances)} unmatched: {count / len(appearances) * 100}")
-    return FullListData(unique_appearances, full_appearances, target_appearances, parantheticals, both_continuities)
+    print(f"{len(no_canon_index)} canon items found without index")
+    print(f"{len(no_legends_index)} Legends items found without index")
+    return FullListData(unique_appearances, full_appearances, target_appearances, parantheticals, both_continuities, no_canon_index, no_legends_index)
 
 
 def increment(x: Item):
@@ -1046,53 +1092,197 @@ def increment(x: Item):
         return 0.2
     elif "audio drama)" in x.target:
         return 0.3
-    elif "audiobook" in x.target or "script" in x.target:
+    elif "audiobook" in x.target or "script" in x.target or " demo" in x.target:
         return 0.1
     return 0
 
+
 SPECIAL_INDEX_MAPPING = {
     "Doctor Aphra (script)": "Doctor Aphra: An Audiobook Original",
+    "The Siege of Lothal, Part 1 (German audio drama)": "Star Wars Rebels: The Siege of Lothal",
+    "The Siege of Lothal, Part 2 (German audio drama)": "Star Wars Rebels: The Siege of Lothal",
     "Forces of Destiny: The Leia Chronicles & The Rey Chronicles": "Forces of Destiny: The Leia Chronicles",
     "Forces of Destiny: Daring Adventures: Volumes 1 & 2": "Forces of Destiny: Daring Adventures: Volume 1",
-    "The Rise of Skywalker Adaptation 1": "Star Wars: The Rise of Skywalker Graphic Novel Adaptation"
+    "The Rise of Skywalker Adaptation 1": "Star Wars: The Rise of Skywalker Graphic Novel Adaptation",
+    "Dark Lord (German audio drama)": "Dark Lord: The Rise of Darth Vader",
+    "The Phantom Menace (German audio drama)": FILMS["1"],
+    "Attack of the Clones (German audio drama)": FILMS["2"],
+    "Revenge of the Sith (German audio drama)": FILMS["3"],
+    "A New Hope (German audio drama)": FILMS["4"],
+    "The Empire Strikes Back (German audio drama)": FILMS["5"],
+    "Return of the Jedi (German audio drama)": FILMS["6"],
+    "The Force Awakens (German audio drama)": FILMS["7"],
+    "The Last Jedi (German audio drama)": FILMS["8"],
+    "The Rise of Skywalker (German audio drama)": FILMS["9"],
+    "The High Republic – Attack of the Hutts 1": "The High Republic (2021) 5",
+    "Cartel Market": "Star Wars: The Old Republic",
+    "Heir to the Empire: The 20th Anniversary Edition": "Heir to the Empire",
+    "Star Wars: Dark Forces Consumer Electronics Show demo": "Star Wars: Dark Forces",
+    "Star Wars: Dark Forces Remaster": "Star Wars: Dark Forces"
 }
 
 
-def match_audiobook(target, data):
+AUDIOBOOK_MAPPING = {
+    "Adventures in Wild Space: The Escape": "Adventures in Wild Space: Books 1–3",
+    "Adventures in Wild Space: The Snare": "Adventures in Wild Space: Books 1–3",
+    "Adventures in Wild Space: The Nest": "Adventures in Wild Space: Books 1–3",
+    "Adventures in Wild Space: The Dark": "Adventures in Wild Space: Books 4–6",
+    "Adventures in Wild Space: The Cold": "Adventures in Wild Space: Books 4–6",
+    "Adventures in Wild Space: The Rescue": "Adventures in Wild Space: Books 4–6",
+    "Join the Resistance": "Join the Resistance: Books 1-3",
+    "Join the Resistance: Escape from Vodran": "Join the Resistance: Books 1-3",
+    "Join the Resistance: Attack on Starkiller Base": "Join the Resistance: Books 1-3",
+    "The Prequel Trilogy Stories": "Star Wars Storybook Collection",
+    "The Original Trilogy Stories": "Star Wars Storybook Collection",
+    "Star Wars: Episode II Attack of the Clones (junior novelization)": "Star Wars: Episode II Attack of the Clones (audio cassette)",
+
+    "Ambush": "The Clone Wars Episode 1 - Ambush / Rising Malevolence",
+    "Rising Malevolence": "The Clone Wars Episode 1 - Ambush / Rising Malevolence",
+    "Shadow of Malevolence": "The Clone Wars Episode 2 - Shadow of Malevolence / Destroy Malevolence",
+    "Destroy Malevolence": "The Clone Wars Episode 2 - Shadow of Malevolence / Destroy Malevolence",
+    "Rookies": "The Clone Wars Episode 3 - Rookies / Downfall of a Droid",
+    "Downfall of a Droid": "The Clone Wars Episode 3 - Rookies / Downfall of a Droid",
+    "Duel of the Droids": "The Clone Wars Episode 4 - Duel of the Droids / Bombad Jedi",
+    "Bombad Jedi": "The Clone Wars Episode 4 - Duel of the Droids / Bombad Jedi",
+    "Cloak of Darkness": "The Clone Wars Episode 5 - Cloak of Darkness / Lair of Grievous",
+    "Lair of Grievous": "The Clone Wars Episode 5 - Cloak of Darkness / Lair of Grievous",
+    "Dooku Captured": "The Clone Wars Episode 6 - Dooku Captured / The Gungan General",
+    "The Gungan General": "The Clone Wars Episode 6 - Dooku Captured / The Gungan General",
+    "Jedi Crash": "The Clone Wars Episode 7 - Jedi Crash / Defenders of Peace",
+    "Defenders of Peace": "The Clone Wars Episode 7 - Jedi Crash / Defenders of Peace",
+    "Trespass": "The Clone Wars Episode 8 - Trespass / The Hidden Enemy",
+    "The Hidden Enemy": "The Clone Wars Episode 8 - Trespass / The Hidden Enemy",
+    "Blue Shadow Virus (episode)": "The Clone Wars Episode 9 - Blue Shadow Virus / Mystery of a Thousand Moons",
+    "Mystery of a Thousand Moons": "The Clone Wars Episode 9 - Blue Shadow Virus / Mystery of a Thousand Moons",
+    "Storm Over Ryloth": "The Clone Wars Episode 10 - Storm Over Ryloth / Innocents of Ryloth",
+    "Innocents of Ryloth": "The Clone Wars Episode 10 - Storm Over Ryloth / Innocents of Ryloth",
+    "Liberty on Ryloth": "The Clone Wars Episode 11 - Liberty on Ryloth / Hostage Crisis",
+    "Hostage Crisis": "The Clone Wars Episode 11 - Liberty on Ryloth / Hostage Crisis",
+    "Holocron Heist": "The Clone Wars Episode 12 - Holocron Heist / Cargo of Doom",
+    "Cargo of Doom": "The Clone Wars Episode 12 - Holocron Heist / Cargo of Doom",
+    "Children of the Force": "The Clone Wars Episode 13 - Children of the Force / Senate Spy",
+    "Senate Spy": "The Clone Wars Episode 13 - Children of the Force / Senate Spy",
+    "Landing at Point Rain": "The Clone Wars Episode 14 - Landing at Point Rain / Weapons Factory",
+    "Weapons Factory": "The Clone Wars Episode 14 - Landing at Point Rain / Weapons Factory",
+    "Legacy of Terror": "The Clone Wars Episode 15 - Legacy of Terror / Brain Invaders",
+    "Brain Invaders": "The Clone Wars Episode 15 - Legacy of Terror / Brain Invaders",
+    "Grievous Intrigue": "The Clone Wars Episode 16 - Grievous Intrigue / The Deserter",
+    "The Deserter": "The Clone Wars Episode 16 - Grievous Intrigue / The Deserter",
+    "Lightsaber Lost": "The Clone Wars Episode 17 - Lightsaber Lost / The Mandalore Plot",
+    "The Mandalore Plot": "The Clone Wars Episode 17 - Lightsaber Lost / The Mandalore Plot",
+    "Voyage of Temptation": "The Clone Wars Episode 18 - Voyage of Temptation / Duchess of Mandalore",
+    "Duchess of Mandalore": "The Clone Wars Episode 18 - Voyage of Temptation / Duchess of Mandalore",
+    "Senate Murders": "The Clone Wars Episode 19 - Senate Murders / Cat and Mouse",
+    "Cat and Mouse": "The Clone Wars Episode 19 - Senate Murders / Cat and Mouse",
+    "Bounty Hunters (episode)": "The Clone Wars Episode 20 - Bounty Hunters / The Zillo Beast",
+    "The Zillo Beast": "The Clone Wars Episode 20 - Bounty Hunters / The Zillo Beast",
+    "The Zillo Beast Strikes Back": "The Clone Wars Episode 21 - The Zillo Beast Strikes Back / Death Trap",
+    "Death Trap": "The Clone Wars Episode 21 - The Zillo Beast Strikes Back / Death Trap",
+    "R2 Come Home": "The Clone Wars Episode 22 - R2 Come Home / Lethal Trackdown",
+    "Lethal Trackdown": "The Clone Wars Episode 22 - R2 Come Home / Lethal Trackdown"
+}
+
+
+def match_audiobook(target, data, canon):
     if target in data:
         return data[target]
     elif target in SPECIAL_INDEX_MAPPING and SPECIAL_INDEX_MAPPING[target] in data:
         return data[SPECIAL_INDEX_MAPPING[target]]
     elif target.startswith("Star Wars: Jedi Temple Challenge") and "Star Wars: Jedi Temple Challenge" in data:
         return data["Star Wars: Jedi Temple Challenge"] + int(target.replace("Star Wars: Jedi Temple Challenge - Episode ", "")) / 100
+    elif target in KOTOR.values():
+        issue = next(f"Knights of the Old Republic {k}" for k, v in KOTOR.items() if v == target)
+        if issue in data:
+            return data[issue]
 
     for x in ["audiobook", "unabridged audiobook", "abridged audiobook", "script", "audio drama", "German audio drama"]:
         if target.replace(f"({x})", "(novelization)") in data:
             return data[target.replace(f"({x})", "(novelization)")]
         elif target.replace(f"({x})", "(novel)") in data:
             return data[target.replace(f"({x})", "(novel)")]
+        elif target.replace(f"({x})", "(episode)") in data:
+            return data[target.replace(f"({x})", "(episode)")]
         elif target.replace(f" ({x})", "") in data:
             return data[target.replace(f" ({x})", "")]
+    if target.replace(" audiobook)", ")") in data:
+        return data[target.replace(" audiobook)", ")")]
+    elif target.replace(" demo", "") in data:
+        return data[target.replace(" demo", "")]
+    if canon:
+        print(f"No match found: {target}")
     return None
+
+
+ERAS = {
+    "Rise of the Empire era": "32 BBY",
+    "Rebellion era": "0 ABY",
+    "New Republic era": "10 ABY"
+}
+
+
+def parse_new_timeline(text, types):
+    results = []
+    unique = {}
+    index = 0
+    unknown = None
+    text = re.sub("(\| ?[A-Z]+ ?)\n\|", "\\1|", text).replace("|simple=1", "")
+    for line in text.splitlines():
+        if "==Unknown placement==" in line:
+            unknown = {}
+            continue
+        line = re.sub("<\!--.*?-->", "", line).strip()
+
+        m = re.search("^\|(data-sort-value=.*?\|)?(?P<date>.*?)\|(\|?style.*?\||\|- ?class.*?\|)?[ ]*?[A-Z]+[ ]*?\n?\|.*?\|+[\* ]*?(?P<full>['\"]*[\[\{]+.*?[\]\}]+['\"]*) ?†?$", line)
+        if m:
+            x = extract_item(m.group('full'), True, "Timeline", types, master=False)
+            if x and x.target:
+                results.append({"index": index, "target": x.target, "date": m.group("date")})
+                if unknown is not None:
+                    unknown[x.target] = index
+                elif x.target not in unique:
+                    unique[x.target] = index
+                index += 1
+        elif "Star Wars (LINE Webtoon)" not in unique and "Star Wars (LINE Webtoon)" in line:
+            results.append({"index": index, "target": "Star Wars (LINE Webtoon)", "date": ''})
+            unique["Star Wars (LINE Webtoon)"] = index
+            index += 1
+
+    return results, unique, unknown or {}
 
 
 def parse_timeline(text):
     results = []
     unique = {}
     index = 0
-    repl = True
+    unknown = None
     text = re.sub("(\| ?[A-Z]+ ?)\n\|", "\\1|", text)
     for line in text.splitlines():
         if "==Unknown placement==" in line:
-            break
+            unknown = {}
+            continue
         line = re.sub("<\!--.*?-->", "", line).strip()
+        if "{{Film|" in line:
+            f = re.search(
+                "^\|(data-sort-value=.*?\|)?(?P<date>.*?)\|(\|?style.*?\|)? ?[A-Z]+ ?\n?\|.*?\|+[\* ]*?(['\"]*\{\{Film\|(?P<target>.*?)(\|.*?)?\}\}['\"]*) ?†?$",
+                line)
+            if f:
+                t = f.group('target').replace("&ndash;", '–').replace('&mdash;', '—').strip()
+                if t in FILMS:
+                    results.append({"index": index, "target": FILMS[t], "date": f.group("date")})
+                    if FILMS[t] not in unique:
+                        unique[FILMS[t]] = index
+                    index += 1
+                    continue
+
         m = re.search(
             "^\|(data-sort-value=.*?\|)?(?P<date>.*?)\|(\|?style.*?\|)? ?[A-Z]+ ?\n?\|.*?\|+[\* ]*?(['\"]*\[\[(?P<target>.*?)(\|.*?)?\]\]['\"]*) ?†?$",
             line)
         if m:
             t = m.group('target').replace("&ndash;", '–').replace('&mdash;', '—').strip()
             results.append({"index": index, "target": t, "date": m.group("date")})
-            if t not in unique:
+            if unknown is not None:
+                unknown[t] = index
+            elif t not in unique:
                 unique[t] = index
             index += 1
         elif "Star Wars (LINE Webtoon)" not in unique and "Star Wars (LINE Webtoon)" in line:
@@ -1100,6 +1290,6 @@ def parse_timeline(text):
             unique["Star Wars (LINE Webtoon)"] = index
             index += 1
 
-    return results, unique
+    return results, unique, unknown or {}
 
 # TODO: handle dupes between Legends/Canon
