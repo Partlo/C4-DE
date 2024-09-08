@@ -5,6 +5,7 @@ from typing import List, Dict
 
 from pywikibot import Page, Category
 from c4de.sources.domain import Item, ItemId, FullListData
+from c4de.common import build_redirects, fix_redirects
 
 
 SUBPAGES = [
@@ -61,6 +62,39 @@ KOTOR = {
     "24": "Galactic Republic Defense Ministry Daily Brief KD0092",
 }
 
+EP1 = {
+    "1": "Episode I Adventures 1: Search for the Lost Jedi",
+    "2": "Episode I Adventures 2: The Bartokk Assassins",
+    "3": "Episode I Adventures 3: The Fury of Darth Maul",
+    "4": "Episode I Adventures 4: Jedi Emergency",
+    "5": "Episode I Adventures 5: The Ghostling Children",
+    "6": "Episode I Adventures 6: The Hunt for Anakin Skywalker",
+    "7": "Episode I Adventures 7: Capture Arawynne",
+    "8": "Episode I Adventures 8: Trouble on Tatooine",
+    "9": "Episode I Adventures 9: Rescue in the Core",
+    "10": "Episode I Adventures 10: Festival of Warriors",
+    "12": "Episode I Adventures 12: The Bongo Rally",
+    "13": "Episode I Adventures 13: Danger on Naboo",
+    "14": "Episode I Adventures 14: Podrace to Freedom",
+    "15": "Episode I Adventures 15: The Final Battle"
+}
+
+SCH = {
+    "1": "Star Wars Adventures 1: Hunt the Sun Runner",
+    "2": "Star Wars Adventures 2: The Cavern of Screaming Skulls",
+    "3": "Star Wars Adventures 3: The Hostage Princess",
+    "4": "Star Wars Adventures 4: Jango Fett vs. the Razor Eaters",
+    "5": "Star Wars Adventures 5: The Shape-Shifter Strikes",
+    "6": "Star Wars Adventures 6: The Warlords of Balmorra",
+    "7": "Star Wars Adventures 7: The Ghostling Children",
+    "8": "Star Wars Adventures 8: The Hunt for Anakin Skywalker",
+    "9": "Star Wars Adventures 9: Capture Arawynne",
+    "10": "Star Wars Adventures 10: Trouble on Tatooine",
+    "11": "Star Wars Adventures 11: Danger on Naboo",
+    "12": "Star Wars Adventures 12: Podrace to Freedom",
+    "13": "Star Wars Adventures 13: The Final Battle",
+}
+
 FILMS = {
     "I": "Star Wars: Episode I The Phantom Menace",
     "1": "Star Wars: Episode I The Phantom Menace",
@@ -88,38 +122,16 @@ PREFIXES = {
 }
 
 TEMPLATES = {
-    # "AdventurerCite": "The Adventurer",
-    # "AdvUnCite": "Adventures Unlimited",
-    # "Avalonmag": "Avalon",
     "BanthaCite": "Bantha Tracks",
-    # "CasusBelliCite": "Casus Belli",
-    # "CollectorCite": "Star Wars Galaxy Collector",
-    # "CWACite": "Star Wars: Clone Wars Adventures Volume",
-    # "CWMCite": "Star Wars: The Clone Wars Magazine",
-    # "DragonCite": "Dragon Magazine",
-    # "InQuestCite": "InQuest Gamer",
-    # "GalaxyCite": "Star Wars Galaxy Magazine",
-    # "GameTradeCite": "Game Trade Magazine",
-    # "GamerCite": "Star Wars Gamer",
-    # "InsiderCite": "Star Wars Insider",
-    # "Journal": "Star Wars Adventure Journal",
-    # "LSWCite": "LEGO Star Wars",
+    "CWACite": "Star Wars: Clone Wars Adventures Volume",
+    "InQuestCite": "InQuest Gamer",
     "StarWarsKidsCite": "Star Wars Kids (1997)",
     "StarWarsKidsCite|year=1997": "Star Wars Kids (1997)",
     "StarWarsKidsCite|year=1998": "Star Wars Kids (1998)",
     "StarWarsKidsCite|year=1999": "Star Wars Kids (1999)",
-    # "SWAdventuresCite": "Star Wars Adventures Magazine",
-    # "SWMCite": "Star Wars Magazine",
-    # "SWMUKCite": "Star Wars: The Official Magazine",
-    # "SWRACite": "Star Wars Rebels Animation",
-    # "SWResACite": "Star Wars Resistance Animation",
-    # "SWRMCite": "Star Wars Rebels Magazine",
-    # "TOMCite": "Star Wars - The Official Magazine",
-    # "TCWUKCite": "Star Wars Comic UK",
     "TCWUKCite|vol=4": "Star Wars Comic UK",
     "TCWUKCite|vol=6": "Star Wars: The Clone Wars Comic",
     "TCWUKCite|vol=7": "Star Wars Comic",
-    # "VoyagesCite": "Voyages SF"
 }
 
 
@@ -151,7 +163,7 @@ def build_template_types(site):
     for p in Category(site, "Category:Magazine citation templates").articles(recurse=True):
         txt = p.get()
         if "BaseCitation/Magazine" in txt:
-            x = re.search("\|series=([A-z0-9\(\) ]+)", txt)
+            x = re.search("\|series=([A-z0-9:\(\)\-&/ ]+)[\|\n]", txt)
             if x:
                 results["Magazine"][p.title(with_ns=False)] = x.group(1)
 
@@ -186,13 +198,14 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
     s = re.sub("\|volume=([0-9])\|([0-9]+)\|", "|\\1.\\2|", z).replace("|}}", "}}")
     s = re.sub("<\!--.*?-->", "", s).replace("|20211029101753", "").replace("-episode-guidea-friend-in-need", "episode-guide-a-friend-in-need")
     s = re.sub("^(.*?\[\[.*?[^ ])#(.*?)(\|.*?\]\].*?)$", "\\1\\3", s).replace("|d=y", "").replace("Star Wars Ships and Vehicles", "Star Wars Starships & Vehicles")
+    s = re.sub(" ?\{\{Ab\|.*?}}", "", s)
     if s.count("{") == 2 and s.count("}") == 1:
         s += "}"
     if s.count("{{") > s.count("}}"):
-        print(f"Cannot parse invalid line on {page.title()}: {s}")
+        print(f"Cannot parse invalid line on {page}: {s}")
         return Item(z, "General", a, invalid=True)
     elif s.count("{{") == 0 and s.count("[[") == 0:
-        print(f"Cannot parse invalid line on {page.title()}: {s}")
+        print(f"Cannot parse invalid line on {page}: {s}")
         return Item(z, "General", a, invalid=True)
 
     if s.count("[[") == 1 and s.count("{{") == 0:
@@ -422,6 +435,10 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
             return Item(z, mode, a, target=FILMS[i], template="Film")
         elif template == "KOTORbackups" and i in KOTOR:
             return Item(z, mode, a, target=KOTOR[i], template="KOTORbackups")
+        elif template == "EpIAdv" and i in EP1:
+            return Item(z, mode, a, target=EP1[i], template="EpIAdv")
+        elif template == "SchAdv" and i in SCH:
+            return Item(z, mode, a, target=SCH[i], template="SchAdv")
         elif template and i:
             return Item(z, mode, a, target=i, template=template)
 
@@ -435,6 +452,8 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
     m = re.search("{{(?P<template>.*?)\|(.*?\|)?book[0-9]?=(?P<book>.*?)\|(.*?\|)?(adventure|story)=(?P<story>.*?)(\|.*?)?}", s)
     if not m:
         m = re.search("{{(?P<template>.*?)\|(.*?\|)?(adventure|story)=(?P<story>.*?)\|(.*?\|)?book[0-9]?=(?P<book>.*?)(\|.*?)?}", s)
+    if not m and "book=" in s:
+        m = re.search("{{(?P<template>.*?)\|(.*?\|)?(adventure|story)=(?P<story>.*?)\|(.*?)?book[0-9]?=(?P<book>.*?)(\|.*?)?}", s)
     if m:
         return Item(z, mode, a, target=m.group('story'), template=template, parent=m.group('book'))
 
@@ -469,7 +488,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Item:
     if m:
         return Item(z, mode, a, target=m.group(1), template=template)
 
-    print(f"Unknown: {mode}, {template}, {z}")
+    print(f"Unknown on {page}: {mode}, {template}, {z}")
     return None
 
 
@@ -599,16 +618,21 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
         return ItemId(o, o, True, False)
 
     if o.issue or o.no_issue:
+        is_ref = o.template in REFERENCE_MAGAZINES
         t = f"{o.mode}|None|{o.target}|None|None|None|None|None"
         if t in data:
-            return ItemId(o, data[t], o.collapsed, False)
+            return ItemId(o, data[t], o.collapsed, False, ref_magazine=is_ref)
         elif o.parent and "Special Edition" in o.parent and by_target.get(o.parent):
-            return ItemId(o, by_target[o.parent][0], True, False)
-        x = match_issue_target(o, by_target, other_targets, True)
+            return ItemId(o, by_target[o.parent][0], True, False, ref_magazine=is_ref)
+        x = match_issue_target(o, by_target, other_targets, True, is_ref)
         if not x and o.target and not followed_redirect:
             if follow_redirect(o, site, True):
                 followed_redirect = True
-                x = match_issue_target(o, by_target, other_targets, False)
+                x = match_issue_target(o, by_target, other_targets, False, is_ref)
+        if x and x.master.issue != o.issue and o.parent in by_target:
+            print(f"Found unrecognized {o.target} listing for {o.parent}")
+            parent = by_target[o.parent][0]
+            x = ItemId(o, parent, True, False, by_parent=True, ref_magazine=is_ref)
         if x:
             return x
 
@@ -647,21 +671,21 @@ def find_matching_issue(items, issue):
     return items[0]
 
 
-def match_issue_target(o: Item, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]], use_original):
+def match_issue_target(o: Item, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]], use_original, is_ref):
     if o.target and by_target and o.target in by_target:
         # print(f"Finding {o.full_id()} by target: {o.target} --> {by_target[o.target][0]}")
-        return ItemId(o, find_matching_issue(by_target[o.target], o.issue), use_original, False)
+        return ItemId(o, find_matching_issue(by_target[o.target], o.issue), use_original, False, ref_magazine=is_ref)
     elif o.target and "&hellip;" in o.target and by_target and o.target.replace("&hellip;", "...") in by_target:
-        return ItemId(o, find_matching_issue(by_target[o.target.replace("&hellip;", "...")], o.issue), use_original, False)
+        return ItemId(o, find_matching_issue(by_target[o.target.replace("&hellip;", "...")], o.issue), use_original, False, ref_magazine=is_ref)
     elif o.target and other_targets and o.target in other_targets:
         # print(f"Finding {o.full_id()} by target: {o.target} --> {other_targets[o.target][0]}")
-        return ItemId(o, find_matching_issue(other_targets[o.target], o.issue), use_original, False)
+        return ItemId(o, find_matching_issue(other_targets[o.target], o.issue), use_original, False, ref_magazine=is_ref)
     elif o.target and "&hellip;" in o.target and by_target and o.target.replace("&hellip;", "...") in other_targets:
-        return ItemId(o, find_matching_issue(other_targets[o.target.replace("&hellip;", "...")], o.issue), use_original, False)
+        return ItemId(o, find_matching_issue(other_targets[o.target.replace("&hellip;", "...")], o.issue), use_original, False, ref_magazine=is_ref)
     elif o.target and o.parent and o.parent in by_target and o.target.startswith(f"{o.parent}#"):
-        return ItemId(o, by_target[o.parent][0], True, False)
+        return ItemId(o, by_target[o.parent][0], True, False, ref_magazine=is_ref)
     elif o.target and o.parent and o.parent in other_targets and o.target.startswith(f"{o.parent}#"):
-        return ItemId(o, other_targets[o.parent][0], True, False)
+        return ItemId(o, other_targets[o.parent][0], True, False, ref_magazine=is_ref)
     return None
 
 
@@ -805,11 +829,11 @@ def match_url(o: Item, url: str, data: Dict[str, Item], replace_page: bool):
 
 def load_appearances(site, log, canon_only=False, legends_only=False):
     data = []
-    pages = ["Appearances/Legends", "Appearances/Canon", "Appearances/Extra"]
+    pages = ["Appearances/Legends", "Appearances/Canon", "Appearances/Extra", "Appearances/Audiobook"]
     if canon_only:
-        pages = ["Appearances/Canon"]
+        pages = ["Appearances/Canon", "Appearances/Audiobook"]
     elif legends_only:
-        pages = ["Appearances/Legends"]
+        pages = ["Appearances/Legends", "Appearances/Audiobook"]
     for sp in pages:
         i = 0
         p = Page(site, f"Wookieepedia:{sp}")
@@ -820,7 +844,8 @@ def load_appearances(site, log, canon_only=False, legends_only=False):
                 x = re.search("[\*#](.*?)( \(.*?\))?:(<!--.*?-->)? (.*?)$", line)
                 if x:
                     i += 1
-                    data.append({"index": i, "page": sp, "date": x.group(1), "item": x.group(4), "canon": "/Canon" in sp, "extra": "/Extra" in sp})
+                    data.append({"index": i, "page": sp, "date": x.group(1), "item": x.group(4),
+                                 "canon": "/Canon" in sp, "extra": "/Extra" in sp, "audiobook": "/Audiobook" in sp})
                 else:
                     print(f"Cannot parse line: {line}")
         if log:
@@ -1000,10 +1025,10 @@ def load_full_sources(site, types, log) -> FullListData:
     return FullListData(unique_sources, full_sources, target_sources, set(), both_continuities)
 
 
-def load_full_appearances(site, types, log, canon_only=False, legends_only=False) -> FullListData:
+def load_full_appearances(site, types, log, canon_only=False, legends_only=False, log_match=True) -> FullListData:
     appearances = load_appearances(site, log, canon_only=canon_only, legends_only=legends_only)
-    _, canon, c_unknown = parse_new_timeline(Page(site, "Timeline of canon media").get(), types)
-    _, legends, l_unknown = parse_new_timeline(Page(site, "Timeline of Legends media").get(), types)
+    cx, canon, c_unknown = parse_new_timeline(Page(site, "Timeline of canon media"), types)
+    lx, legends, l_unknown = parse_new_timeline(Page(site, "Timeline of Legends media"), types)
     count = 0
     unique_appearances = {}
     full_appearances = {}
@@ -1020,6 +1045,7 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
             reprint = "{{c|republish" in i['item'].lower()
             c = ''
             alternate = ''
+            ab = ''
             if "{{C|" in i['item']:
                 cr = re.search("({{C\|([Aa]bridged|[Rr]epublished|[Uu]nlicensed|[Nn]on[ -]?canon)}})", i['item'])
                 if cr:
@@ -1029,6 +1055,11 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 if a:
                     alternate = a.groupdict()['a']
                     i['item'] = i['item'].replace(a.group(1), '').strip()
+            x2 = re.search("\{\{[Aa]b\|.*?\}\}", i['item'])
+            if x2:
+                ab = x2.group(0)
+                i['item'] = i['item'].replace(ab, '').strip()
+
             x = extract_item(i['item'], True, i['page'], types, master=True)
             if x:
                 x.canon = None if i.get('extra') else i.get('canon')
@@ -1040,27 +1071,32 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 x.unlicensed = unlicensed
                 x.non_canon = non_canon
                 x.reprint = reprint
+                x.ab = ab
                 x.abridged = "abridged audiobook" in x.original and "unabridged" not in x.original
+                x.audiobook = not ab and ("audiobook)" in x.original or x.target in AUDIOBOOK_MAPPING.values() or i['audiobook'])
                 full_appearances[x.full_id()] = x
                 unique_appearances[x.unique_id()] = x
                 if x.target:
-                    canon_index_expected = x.canon and x.match_expected() and x.target not in AUDIOBOOK_MAPPING.values() and x.target not in c_unknown
-                    legends_index_expected = not x.canon and x.match_expected() and x.target not in AUDIOBOOK_MAPPING.values() and x.target not in l_unknown
+                    canon_index_expected = x.canon and x.match_expected() and not i['audiobook'] and x.target not in AUDIOBOOK_MAPPING.values() and x.target not in c_unknown
+                    legends_index_expected = not x.canon and x.match_expected() and not i['audiobook'] and x.target not in AUDIOBOOK_MAPPING.values() and x.target not in l_unknown
 
                     o = increment(x)
-                    canon_index = match_audiobook(x.target, canon, canon_index_expected)
+                    canon_index = match_audiobook(x.target, canon, canon_index_expected, log_match)
                     if canon_index is not None:
                         x.canon_index = canon_index + o
                     elif canon_index_expected:
                         no_canon_index.append(x)
 
-                    legends_index = match_audiobook(x.target, legends, legends_index_expected)
-                    if "The Bounty Hunter of Ord Mantell" in x.original:
-                        print(x.target, legends_index, x.original)
+                    legends_index = match_audiobook(x.target, legends, legends_index_expected, log_match)
                     if legends_index is not None:
                         x.legends_index = legends_index + o
                     elif legends_index_expected:
                         no_legends_index.append(x)
+
+                    if x.target in cx:
+                        x.timeline = cx[x.target]
+                    elif x.target in lx:
+                        x.timeline = lx[x.target]
 
                     if x.target.endswith(")") and not x.target.endswith("webcomic)"):
                         parantheticals.add(x.target.rsplit(" (", 1)[0])
@@ -1084,7 +1120,8 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
     print(f"{count} out of {len(appearances)} unmatched: {count / len(appearances) * 100}")
     print(f"{len(no_canon_index)} canon items found without index")
     print(f"{len(no_legends_index)} Legends items found without index")
-    return FullListData(unique_appearances, full_appearances, target_appearances, parantheticals, both_continuities, no_canon_index, no_legends_index)
+    return FullListData(unique_appearances, full_appearances, target_appearances, parantheticals, both_continuities,
+                        no_canon_index, no_legends_index)
 
 
 def increment(x: Item):
@@ -1134,7 +1171,7 @@ AUDIOBOOK_MAPPING = {
     "Join the Resistance: Attack on Starkiller Base": "Join the Resistance: Books 1-3",
     "The Prequel Trilogy Stories": "Star Wars Storybook Collection",
     "The Original Trilogy Stories": "Star Wars Storybook Collection",
-    "Star Wars: Episode II Attack of the Clones (junior novelization)": "Star Wars: Episode II Attack of the Clones (audio cassette)",
+    "Star Wars: Episode II Attack of the Clones (junior novelization)": "Star Wars: Episode II Attack of the Clones (junior novelization audiobook)",
 
     "Ambush": "The Clone Wars Episode 1 - Ambush / Rising Malevolence",
     "Rising Malevolence": "The Clone Wars Episode 1 - Ambush / Rising Malevolence",
@@ -1183,7 +1220,7 @@ AUDIOBOOK_MAPPING = {
 }
 
 
-def match_audiobook(target, data, canon):
+def match_audiobook(target, data, canon, log):
     if target in data:
         return data[target]
     elif target in SPECIAL_INDEX_MAPPING and SPECIAL_INDEX_MAPPING[target] in data:
@@ -1208,7 +1245,7 @@ def match_audiobook(target, data, canon):
         return data[target.replace(" audiobook)", ")")]
     elif target.replace(" demo", "") in data:
         return data[target.replace(" demo", "")]
-    if canon:
+    if canon and log:
         print(f"No match found: {target}")
     return None
 
@@ -1220,8 +1257,11 @@ ERAS = {
 }
 
 
-def parse_new_timeline(text, types):
-    results = []
+def parse_new_timeline(page: Page, types):
+    text = page.get()
+    redirects = build_redirects(page)
+    text = fix_redirects(redirects, text, "Timeline")
+    results = {}
     unique = {}
     index = 0
     unknown = None
@@ -1236,14 +1276,19 @@ def parse_new_timeline(text, types):
         if m:
             x = extract_item(m.group('full'), True, "Timeline", types, master=False)
             if x and x.target:
-                results.append({"index": index, "target": x.target, "date": m.group("date")})
+                timeline = None
+                # target = Page(page.site, x.target)
+                # if target.exists() and not target.isRedirectPage():
+                #     dt = re.search("\|timeline=[ \[]+(.*?)(\|.*?)?\]+(.*?)\n", target.get())
+                #     if dt:
+                #         timeline = dt.group(1)
+                results[x.target] = {"index": index, "date": m.group("date"), "timeline": timeline}
                 if unknown is not None:
                     unknown[x.target] = index
                 elif x.target not in unique:
                     unique[x.target] = index
                 index += 1
         elif "Star Wars (LINE Webtoon)" not in unique and "Star Wars (LINE Webtoon)" in line:
-            results.append({"index": index, "target": "Star Wars (LINE Webtoon)", "date": ''})
             unique["Star Wars (LINE Webtoon)"] = index
             index += 1
 

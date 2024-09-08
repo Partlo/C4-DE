@@ -24,7 +24,7 @@ def analyze(*args):
 
     start = datetime.now()
     types = build_template_types(gen_factory.site)
-    appearances = load_full_appearances(gen_factory.site, types, log)
+    appearances = load_full_appearances(gen_factory.site, types, log, log_match=False)
     sources = load_full_sources(gen_factory.site, types, log)
     remap = load_remap(gen_factory.site)
     infoboxes = list_all_infoboxes(gen_factory.site)

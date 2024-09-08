@@ -757,8 +757,10 @@ class C4DE_Bot(commands.Bot):
         for x in pages:
             if x.target in ex_rpg or x.template in ["WEGCite", "DarkStryder", "Journal", "GamerCite", "LivingForce", "WizCite", "WizardsCite", "FFG", "FFGXW"]:
                 rpg.append(f"#{x.date}: {x.original}")
+                # rpg.append(f"#{x.date}: {x.timeline or 'N/A'}: {x.original}")
             else:
                 main.append(f"#{x.date}: {x.original}")
+                # main.append(f"#{x.date}: {x.timeline or 'N/A'}: {x.original}")
 
         new_text = "\n".join(main) + "\n\n==RPG==\n" + "\n".join(rpg)
         if new_text != text:

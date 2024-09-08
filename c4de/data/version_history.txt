@@ -150,3 +150,7 @@
 **Fixed Edelweiss reporting
 **Fixed TVspoiler handling
 **Automatic Canon/Legends switch subprocess
+*'''3.9.0''': September 8, 2024:
+**Template:Ab and audiobook handling
+**External Links parsing
+**Various Source Engine fixes

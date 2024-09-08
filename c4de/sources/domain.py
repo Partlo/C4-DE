@@ -59,13 +59,16 @@ class Item:
         self.from_extra = None
         self.unlicensed = False
         self.abridged = False
+        self.audiobook = False
         self.reprint = False
         self.department = ''
         self.non_canon = False
         self.alternate_url = None
         self.date_ref = None
         self.extra_date = None
+        self.timeline = None
         self.self_cite = False
+        self.ab = ''
         self.extra = ''
         self.bold = False
 
@@ -83,7 +86,7 @@ class Item:
         return s.strip() if s is not None else None
 
     def has_date(self):
-        return self.date is not None and (self.date.startswith("1") or self.date.startswith("2") or self.date == "Current")
+        return self.date is not None and (self.date.startswith("1") or self.date.startswith("2") or self.date == "Current" or self.date.startswith("Cancel"))
 
     def match_expected(self):
         return not self.non_canon and not self.unlicensed and not self.from_extra and not self.reprint and self.has_date() and not self.future
@@ -109,7 +112,7 @@ class Item:
 
 class ItemId:
     def __init__(self, current: Item, master: Item, use_original_text: bool,
-                 from_other_data=False, wrong_continuity=False, by_parent=False):
+                 from_other_data=False, wrong_continuity=False, by_parent=False, ref_magazine=False):
         self.current = current
         self.master = master
         self.use_original_text = use_original_text or current.old_version
@@ -119,6 +122,7 @@ class ItemId:
         self.from_other_data = from_other_data
         self.wrong_continuity = wrong_continuity
         self.by_parent = by_parent
+        self.ref_magazine = ref_magazine
 
         self.replace_references = master.original and "]]'' ([[" not in master.original
 
@@ -126,6 +130,8 @@ class ItemId:
         return self.current.override_date if self.current.override_date else self.master.date
 
     def sort_text(self):
+        if self.ref_magazine:
+            return f"{self.current.index} {self.current.original}"
         return (self.current.text if self.current.mode == "DB" else self.current.original).replace("''", "")\
             .replace('"', '').replace("|", " |").replace("}}", " }}").lower()
 
@@ -156,6 +162,7 @@ class PageComponents:
         self.src = SectionComponents([], [], [], '')
         self.nca = SectionComponents([], [], [], '')
         self.apps = SectionComponents([], [], [], '')
+        self.links = SectionComponents([], [], [], '')
 
 
 class AnalysisResults:
@@ -186,6 +193,7 @@ class SectionComponents:
         self.preceding = pre
         self.trailing = suf
         self.after = after
+        self.before = ""
 
 
 class FinishedSection:

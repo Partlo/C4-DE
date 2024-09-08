@@ -176,6 +176,11 @@ def parse_line(line, i, p: Page, types, full, unique, target):
                 if cr:
                     c = ' ' + cr.group(1)
                     item = item.replace(cr.group(1), '').strip()
+            x2 = re.search("\{\{[Aa]b\|.*?\}\}", i['item'])
+            if x2:
+                ab = x2.group(0)
+                item = item.replace(ab, '').strip()
+
             x = extract_item(item, False, p.title(), types, master=True)
             if x:
                 if x.template == "SWCT" and not x.target:
@@ -261,7 +266,7 @@ def should_check_product(inf, t, p: Page, c: Category):
     elif "{{Author-stub" in t or "{{Bio-stub" in t or "{{Author-stub" in t:
         # print(f"Skipping person article: {p.title()} in {c.title()}")
         return False
-    elif inf == "toy line" and p.title().startswith("LEGO"):
+    elif inf in ["toy line", "magazine"] and p.title().startswith("LEGO"):
         return False
     elif "[[Category:Book collections" in t:
         return False
@@ -312,6 +317,8 @@ def merge_full_lists(l1, l2, l3):
 
 def handle_results(site, results: List[FutureProduct], save=True):
     types = build_template_types(site)
+    audiobook_page = Page(site, "Wookieepedia:Appearances/Audiobook")
+    audiobooks = parse_page(audiobook_page, types)
     extra_page = Page(site, "Wookieepedia:Appearances/Extra")
     extra = parse_page(extra_page, types)
     l_app_page = Page(site, "Wookieepedia:Appearances/Legends")
@@ -331,7 +338,7 @@ def handle_results(site, results: List[FutureProduct], save=True):
 
     master_data = {"Legends Appearances": l_apps, "Canon Appearances": c_apps, "Legends-2010s Sources": l_srcs1,
                    "Legends-2000s Sources": l_srcs2, "Legends-1900s Sources": l_srcs3,
-                   "Canon Sources": c_srcs, "Extra": extra, "CardSets": sets}
+                   "Canon Sources": c_srcs, "Extra": extra, "CardSets": sets, "Audiobook": audiobooks}
 
     new_items = {}
     changed_dates = {}
@@ -382,6 +389,7 @@ def handle_results(site, results: List[FutureProduct], save=True):
     build_new_page(l_src_page3, l_srcs3, "Sources|True|3", new_items, changed_dates, True, save)
 
     build_new_page(extra_page, extra, "Extra", new_items, changed_dates, True, save)
+    build_new_page(audiobook_page, audiobooks, "Audiobook", new_items, changed_dates, True, save)
     build_new_page(sets_page, sets, "CardSets", new_items, changed_dates, True, save)
 
 
@@ -408,12 +416,7 @@ def build_date(dates):
     return "Future"
 
 
-def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[FutureProduct]], all_changed: Dict[str, Dict[str, FutureProduct]], use_sections, save=False):
-    new_items = all_new.get(key) or []
-    changed = all_changed.get(key) or {}
-    if not (new_items or changed):
-        return
-
+def build_final_new_items(new_items: List[FutureProduct]):
     final = []
     for i in new_items:
         if i.infobox in ["short story", "magazine article", "magazine department"]:
@@ -441,6 +444,23 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
                 t = t[2:-2]
         d = build_date(i.dates)
         final.append([t, prep_date(d), 100, fix_numbers(t)])
+    return final
+
+
+def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[FutureProduct]], all_changed: Dict[str, Dict[str, FutureProduct]], use_sections, save=False):
+    new_items = all_new.get(key) or []
+    changed = all_changed.get(key) or {}
+    if not (new_items or changed):
+        return
+
+    final = build_final_new_items(new_items)
+    if page.title().endswith("/Extra"):
+        text = page.get() + "\n"
+        for txt, d, i, _ in final:
+            text += f"\n#{d}: {txt}"
+        page.put(text, "Updating Source Engine Masterlist with new future products", botflag=False)
+        return
+
     for x, i in data.full.items():
         d = i.date
         if i.target in changed:

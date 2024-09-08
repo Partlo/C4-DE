@@ -1,6 +1,7 @@
 import re
 import requests
 import traceback
+from typing import Dict
 
 import urllib3.exceptions
 import waybackpy
@@ -36,6 +37,41 @@ def extract_err_msg(e):
         return str(e.args[0] if str(e.args).startswith('(') else e.args)
     except Exception as _:
         return str(e.args)
+
+
+def prepare_title(t):
+    for i in ['(', ')', '?', '!']:
+        t = t.replace(i, '\\' + i)
+    return "[" + t[0].capitalize() + t[0].lower() + "]" + t[1:]
+
+
+def is_redirect(page):
+    try:
+        return page.exists() and page.isRedirectPage()
+    except Exception as e:
+        print(page.title(), e)
+        return False
+
+
+def build_redirects(page: Page):
+    results = {}
+    for r in page.linkedPages():
+        if is_redirect(r):
+            results[r.title()] = r.getRedirectTarget().title()
+    return results
+
+
+def fix_redirects(redirects: Dict[str, str], text, section_name):
+    for r, t in redirects.items():
+        if f"[[{r.lower()}" in text.lower() or f"={r.lower()}" in text.lower():
+            print(f"Fixing {section_name} redirect {r} to {t}")
+            x = prepare_title(r)
+            text = re.sub("\[\[" + x + "\|('')?(" + prepare_title(t) + ")('')?\]\]", f"\\1[[\\2]]\\1", text)
+            text = re.sub("\[\[" + x + "(\|.*?)\]\]", f"[[{t}\\1]]", text)
+            text = re.sub("\[\[(" + x + ")\]\]([A-Za-z']*?)", f"[[{t}|\\1\\2]]", text)
+            text = text.replace(f"set={r}", f"set={t}")
+            text = text.replace(f"book={r}", f"book={t}")
+    return text
 
 
 def determine_title_format(page_title, text) -> str:
