@@ -23,7 +23,8 @@ class Item:
     """
     def __init__(self, original: str, mode: str, is_app: bool, *, invalid=False, target: str = None, text: str = None,
                  parent: str = None, template: str = None, url: str = None, issue: str = None, subset: str=None,
-                 card: str = None, special=None, collapsed=False, format_text: str = None, no_issue=False, date=''):
+                 card: str = None, special=None, collapsed=False, format_text: str = None, no_issue=False,
+                 full_url: str=None, check_both=False):
         self.is_appearance = is_app
         self.tv = mode == "TV"
         self.mode = "General" if mode == "TV" else mode
@@ -31,6 +32,8 @@ class Item:
         self.invalid = invalid
         self.original = self.strip(original)
         self.target = self.strip(target)
+        if self.target and self.target[0].islower():
+            self.target = f"{self.target[0].upper()}{self.target[1:]}"
         self.text = self.strip(text)
         self.parent = self.strip(parent)
         self.issue = self.strip(issue)
@@ -57,11 +60,14 @@ class Item:
         self.future = False
         self.canon = None
         self.from_extra = None
+        self.external = mode == "External"
         self.unlicensed = False
         self.abridged = False
         self.audiobook = False
         self.reprint = False
+        self.check_both = check_both
         self.department = ''
+        self.full_url = ''
         self.non_canon = False
         self.alternate_url = None
         self.date_ref = None
@@ -97,7 +103,8 @@ class Item:
 
     def unique_id(self):
         s = ((self.card or '') + (self.special or '')) if (self.card or self.special) else None
-        i = f"{self.mode}|{self.template}|{self.target}|{self.url}|{self.parent}|{self.issue}|{s}|{self.text}"
+        t = (self.format_text or '')[:1] if self.target == "Database" else self.text
+        i = f"{self.mode}|{self.template}|{self.target}|{self.url}|{self.parent}|{self.issue}|{s}|{t}"
         return f"{i}|True" if self.old_version else i
 
     def can_self_cite(self):
@@ -166,7 +173,7 @@ class PageComponents:
 
 
 class AnalysisResults:
-    def __init__(self, apps: List[ItemId], nca: List[ItemId], src: List[ItemId], ncs: List[ItemId], canon: bool, abridged: list, mismatch: List[ItemId]):
+    def __init__(self, apps: List[ItemId], nca: List[ItemId], src: List[ItemId], ncs: List[ItemId], canon: bool, abridged: list, mismatch: List[ItemId], disambig_links: list):
         self.apps = apps
         self.nca = nca
         self.src = src
@@ -174,17 +181,19 @@ class AnalysisResults:
         self.canon = canon
         self.abridged = abridged
         self.mismatch = mismatch
+        self.disambig_links = disambig_links
 
 
 class SectionItemIds:
     def __init__(self, name, found: List[ItemId], wrong: List[ItemId], non_canon: List[ItemId],
-                 cards: Dict[str, List[ItemId]], sets: Dict[str, str]):
+                 cards: Dict[str, List[ItemId]], sets: Dict[str, str], links: list):
         self.name = name
         self.found = found
         self.wrong = wrong
         self.non_canon = non_canon
         self.cards = cards
         self.sets = sets
+        self.links = links
 
 
 class SectionComponents:
@@ -194,6 +203,9 @@ class SectionComponents:
         self.trailing = suf
         self.after = after
         self.before = ""
+
+    def has_text(self):
+        return self.preceding or self.trailing or self.after or self.before
 
 
 class FinishedSection:

@@ -168,6 +168,7 @@ def create_index(site, page: Page, results: AnalysisResults, save: bool):
 
         zt = i.current.original if i.use_original_text else i.master.original
         xt = f"*{date_str}:{date_ref} {zt} {i.current.extra.strip()}".strip()
+        xt = re.sub("\|audiobook=1", "", re.sub(" ?\{\{Ab\|.*?\}\}", "", xt))
         if xt.count("{{") < xt.count("}}") and xt.endswith("}}}}"):
             xt = xt[:-2]
         lines.append(xt)

@@ -69,16 +69,16 @@ def analyze(*args):
                 bf = False
 
             old_text = page.get(force=True)
-            text = build_new_text(page, infoboxes, types, appearances, sources, remap,
-                                  include_date=include_date, log=log, handle_references=True)
+            text = build_new_text(page, infoboxes, types, [], appearances, sources, remap,
+                                  include_date=include_date, log=log, handle_references=True, collapse_audiobooks=True)
 
             if text == old_text:
                 print(f"{i} -> {z} -> No changes found for {page.title()}")
                 continue
             z1 = re.sub("(\|[A-z _0-9]+=.*?(\n.+?)?)}}(\n((The |A )?'''|\{\{Quote))", "\\1\n}}\\3",
-                        re.sub("(\|.*?=)\}\}\n", "\\1\n}}\n", re.sub("<!--.*?-->", "", text).replace("{{!}}", "|")))
+                        re.sub("(\|.*?=)}}\n", "\\1\n}}\n", re.sub("<!--.*?-->", "", text).replace("{{!}}", "|")))
             z2 = re.sub("(\|[A-z _0-9]+=.*?(\n.+?)?)}}(\n((The |A )?'''|\{\{Quote))", "\\1\n}}\\3",
-                        re.sub("(\|.*?=)\}\}\n", "\\1\n}}\n", re.sub("(\|book=.*?)(\|story=.*?)(\|.*?)?}}", "\\2\\1\\3}}", re.sub("<!--.*?-->", "", old_text).replace("text=SWCC 2022", "text=SWCA 2022").replace("{{!}}", "|"))))
+                        re.sub("(\|.*?=)}}\n", "\\1\n}}\n", re.sub("(\|book=.*?)(\|story=.*?)(\|.*?)?}}", "\\2\\1\\3}}", re.sub("<!--.*?-->", "", old_text).replace("text=SWCC 2022", "text=SWCA 2022").replace("{{!}}", "|"))))
             z2 = re.sub("(\{\{1st.*?\|\[\[(.*?) \(.*?audiobook\)\|)''\\2'' (.*?audiobook)", "\\1\\3", z2)
 
             match = z1.replace("–", "&ndash;").replace("—", "&mdash;").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]") == \
@@ -100,7 +100,7 @@ def analyze(*args):
             if choice == 'q':
                 break
             if choice == 'y':
-                page.put(text, message, botflag=bf)
+                page.put(text, message, botflag=bf, force=True)
             if choice == 'b' and match:
                 page.put(text, message, botflag=bf)
                 always_comment = True

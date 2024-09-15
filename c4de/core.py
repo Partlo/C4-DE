@@ -142,6 +142,7 @@ class C4DE_Bot(commands.Bot):
 
         self.infoboxes = {}
         self.templates = {}
+        self.disambigs = []
         self.redirect_messages = {}
         self.appearances = None
         self.sources = None
@@ -724,6 +725,7 @@ class C4DE_Bot(commands.Bot):
                 self.source_rev_ids[p.title()] = p.latest_revision_id
             self.templates = build_template_types(self.site)
             self.infoboxes = list_all_infoboxes(self.site)
+            self.disambigs = [p.title() for p in Category(self.site, "Disambiguation pages").articles() if "(disambiguation)" not in p.title()]
             self.appearances = load_full_appearances(self.site, self.templates, False)
             self.sources = load_full_sources(self.site, self.templates, False)
             self.remap = load_remap(self.site)
@@ -816,7 +818,7 @@ class C4DE_Bot(commands.Bot):
             old_text = target.get()
 
             await message.add_reaction(TIMER)
-            results = analyze_target_page(target, self.infoboxes, self.templates, self.appearances, self.sources, self.remap,
+            results = analyze_target_page(target, self.infoboxes, self.templates, self.disambigs, self.appearances, self.sources, self.remap,
                                           save=True, include_date=False, use_index=True, handle_references=True)
             await message.remove_reaction(TIMER, self.user)
             await message.add_reaction(self.emoji_by_name("bb8thumbsup"))
@@ -859,7 +861,7 @@ class C4DE_Bot(commands.Bot):
             use_index = command.get('text') is None
 
             await message.add_reaction(TIMER)
-            results = analyze_target_page(target, self.infoboxes, self.templates, self.appearances, self.sources, self.remap,
+            results = analyze_target_page(target, self.infoboxes, self.templates, self.disambigs, self.appearances, self.sources, self.remap,
                                           save=True, include_date=use_date, use_index=use_index, handle_references=True)
             await message.remove_reaction(TIMER, self.user)
 
@@ -892,7 +894,7 @@ class C4DE_Bot(commands.Bot):
                 target = target.getRedirectTarget()
 
             await message.add_reaction(TIMER)
-            analysis = get_analysis_from_page(target, self.infoboxes, self.templates, self.appearances, self.sources, self.remap, False)
+            analysis = get_analysis_from_page(target, self.infoboxes, self.templates, self.disambigs, self.appearances, self.sources, self.remap, False, False)
             result = create_index(self.site, target, analysis, True)
             await message.remove_reaction(TIMER, self.user)
 
@@ -932,8 +934,8 @@ class C4DE_Bot(commands.Bot):
 
     async def handle_missing_search(self):
         try:
-            results = search_for_missing(self.site, self.appearances, self.sources)
-            handle_results(self.site, results)
+            results, collections = search_for_missing(self.site, self.appearances, self.sources)
+            handle_results(self.site, results, collections)
             await self.build_sources()
         except Exception as e:
             traceback.print_exc()

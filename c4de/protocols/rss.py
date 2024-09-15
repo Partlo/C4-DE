@@ -531,8 +531,8 @@ def check_title_formatting(text, title_regex, title):
     title = re.sub(r"<span[^>]*?>(.*?)( )?</span>", r"\1\2", title)
     title = title.replace("“", '"').replace("”", '"').replace("’", "'").replace("‘", "'")
     title = title.replace("|", "&#124;")
-    title = re.sub(" &#124; ?D[Ii][Ss][Nn][Ee][Yy] ?(\+|Plus)[ ]*(& Disney Junior)?[ ]*$", "", title)
-    title = re.sub(" (&#124; )?@?StarWarsKids *?x *?@?disneyjunior", "", title)
+    # title = re.sub(" &#124; ?D[Ii][Ss][Nn][Ee][Yy] ?(\+|Plus)[ ]*(& Disney Junior)?[ ]*$", "", title)
+    # title = re.sub(" (&#124; )?@?StarWarsKids *?x *?@?disneyjunior", "", title)
     if title.strip().endswith("&#124;"):
         title = title.strip()[:-6]
     return html.unescape(title).replace("’", "'").strip()

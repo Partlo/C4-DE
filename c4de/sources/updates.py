@@ -25,7 +25,7 @@ def extract_release_date(title, text):
             if m.groupdict()[f"d{i}"]:
                 d = m.groupdict()[f"d{i}"].replace("[", "").replace("]", "").replace("*", "").strip().replace(',', '')
                 d = re.sub("\{\{C\|.*?}}", "", d)
-                d = re.sub("&ndash;[A-z]+ [0-9\|]+", "", d)
+                d = re.sub("&ndash;[A-z]+ [0-9|]+", "", d)
                 d = re.sub("\([A-Z]+\)", "", d)
                 d = re.sub("([A-z]+ ?[0-9]*) ([0-9]{4})( .*?)$", "\\1 \\2", d)
                 date_strs.append((d.split("-")[0], m.groupdict().get(f"r{i}")))
@@ -92,7 +92,7 @@ def identify_infobox(t, infoboxes):
 def analyze_page(page, category, infobox):
     text = page.get()
     dates = extract_release_date(page.title(), text)
-    c = re.search("{{Top.*?\|(can|leg|ncc|ncl|new|pre|btr|old|imp|reb|njo|lgc|inf)[\|\}]", text)
+    c = re.search("{{Top.*?\|(can|leg|ncc|ncl|new|pre|btr|old|imp|reb|njo|lgc|inf)[|}]", text)
     ct = c.group(1) if c else None
     if ct in ["pre", "btr", "old", "imp", "reb", "new", "njo", "lgc", "inf"]:
         ct = "leg"
@@ -166,7 +166,7 @@ def parse_page(p: Page, types):
 
 def parse_line(line, i, p: Page, types, full, unique, target):
     if line and not line.startswith("==") and "/Header}}" not in line:
-        z = re.search("[\*#](.*?): (D: )?(.*?)$", line)
+        z = re.search("[*#](.*?): (D: )?(.*?)$", line)
         if z:
             date = z.group(1)
             item = z.group(3)
@@ -176,7 +176,7 @@ def parse_line(line, i, p: Page, types, full, unique, target):
                 if cr:
                     c = ' ' + cr.group(1)
                     item = item.replace(cr.group(1), '').strip()
-            x2 = re.search("\{\{[Aa]b\|.*?\}\}", i['item'])
+            x2 = re.search("\{\{[Aa]b\|.*?}}", item)
             if x2:
                 ab = x2.group(0)
                 item = item.replace(ab, '').strip()
@@ -243,7 +243,12 @@ def search_for_missing(site, appearances, sources):
             for p in sc.articles(namespaces=0):
                 pages_checked.add(p.title())
 
+    # TODO: Soundtracks
     counts = {"total": 0, "found": 0}
+    collections = []
+    for c in Category(site, "Media collections").subcategories():
+        check_category(c, cats_checked, pages_checked, tracked, infoboxes, collections, counts)
+
     for c in Category(site, "Star Wars media by type").subcategories():
         check_category(c, cats_checked, pages_checked, tracked, infoboxes, not_found, counts)
 
@@ -252,7 +257,7 @@ def search_for_missing(site, appearances, sources):
 
     finish = datetime.now()
     print(f"Found {counts['found']} in {(finish - start).seconds} seconds")
-    return not_found
+    return not_found, collections
 
 
 def should_check_product(inf, t, p: Page, c: Category):
@@ -315,7 +320,7 @@ def merge_full_lists(l1, l2, l3):
     return FullListData(l1.unique + l2.unique + l3.unique, l1.full + l2.full + l3.full, l1.target + l2.target + l3.target, set(), set())
 
 
-def handle_results(site, results: List[FutureProduct], save=True):
+def handle_results(site, results: List[FutureProduct], collections: List[FutureProduct], save=True):
     types = build_template_types(site)
     audiobook_page = Page(site, "Wookieepedia:Appearances/Audiobook")
     audiobooks = parse_page(audiobook_page, types)
@@ -325,6 +330,10 @@ def handle_results(site, results: List[FutureProduct], save=True):
     l_apps = parse_page(l_app_page, types)
     c_app_page = Page(site, "Wookieepedia:Appearances/Canon")
     c_apps = parse_page(c_app_page, types)
+    audio_page = Page(site, "Wookieepedia:Appearances/Audiobook")
+    audio = parse_page(c_app_page, types)
+    col_page = Page(site, "Wookieepedia:Appearances/Collections")
+    cols = parse_page(c_app_page, types)
     l_src_page1 = Page(site, "Wookieepedia:Sources/Legends/General/2010s")
     l_srcs1 = parse_page(l_src_page1, types)
     l_src_page2 = Page(site, "Wookieepedia:Sources/Legends/General/2000s")
@@ -336,13 +345,19 @@ def handle_results(site, results: List[FutureProduct], save=True):
     sets_page = Page(site, "Wookieepedia:Sources/CardSets")
     sets = parse_page(sets_page, types)
 
-    master_data = {"Legends Appearances": l_apps, "Canon Appearances": c_apps, "Legends-2010s Sources": l_srcs1,
+    master_data = {"Legends Appearances": l_apps, "Canon Appearances": c_apps, "Audiobooks": audio,
+                   "Collections": cols, "Legends-2010s Sources": l_srcs1,
                    "Legends-2000s Sources": l_srcs2, "Legends-1900s Sources": l_srcs3,
                    "Canon Sources": c_srcs, "Extra": extra, "CardSets": sets, "Audiobook": audiobooks}
 
-    new_items = {}
+    new_items = {"Audiobooks": [], "Collections": collections}
     changed_dates = {}
+
     for i in results:
+        if "audiobook" in i.page.title():
+            new_items["Audiobooks"].append(i)
+            continue
+
         is_legends = (i.canon_type == 'leg' or i.canon_type == 'ncl') if i.canon_type else False
         z = f"{i.item_type}|{is_legends}"
         if i.item_type == "CardSets" or i.item_type == "Extra":
@@ -382,6 +397,8 @@ def handle_results(site, results: List[FutureProduct], save=True):
 
     build_new_page(c_app_page, c_apps, "Appearances|False", new_items, changed_dates, True, save)
     build_new_page(l_app_page, l_apps, "Appearances|True", new_items, changed_dates, True, save)
+    build_new_page(l_app_page, l_apps, "Audiobooks", new_items, changed_dates, True, save)
+    build_new_page(l_app_page, l_apps, "Collections", new_items, changed_dates, True, save)
 
     build_new_page(c_src_page, c_srcs, "Sources|False", new_items, changed_dates, True, save)
     build_new_page(l_src_page1, l_srcs1, "Sources|True|1", new_items, changed_dates, True, save)
@@ -395,6 +412,8 @@ def handle_results(site, results: List[FutureProduct], save=True):
 
 DATES = {"Wookieepedia:Appearances/Legends": "1977",
          "Wookieepedia:Appearances/Canon": "2008",
+         "Wookieepedia:Appearances/Audiobook": "2008",
+         "Wookieepedia:Appearances/Collection": "1994",
          "Wookieepedia:Sources/Legends/General/1977-2000": "1977",
          "Wookieepedia:Sources/Legends/General/2000s": "2000",
          "Wookieepedia:Sources/Legends/General/2010s": "2010",
@@ -422,7 +441,7 @@ def build_final_new_items(new_items: List[FutureProduct]):
         if i.infobox in ["short story", "magazine article", "magazine department"]:
             t = f'"[[{i.page.title()}]]"'
             pt = i.page.get()
-            x = re.search("\|published in=.*?\[\[(.*?)(\|.*?)?\]\]", pt)
+            x = re.search("\|published in=.*?\[\[(.*?)(\|.*?)?]]", pt)
             if x and x.group(1) and "Star Wars Insider" in x.group(1):
                 mi = x.group(1).split("Insider")[-1].strip()
                 if mi.isnumeric():
@@ -435,11 +454,11 @@ def build_final_new_items(new_items: List[FutureProduct]):
                 t = f"{{{{StoryCite|book={x.group(1)}|story={i.page.title()}}}}}"
         else:
             t = f"''[[{i.page.title()}]]''"
-            t = re.sub("''\[\[((.*?) \(audiobook\))\]\]''", "[[\\1|''\\2'' audiobook]]", t)
-            t = re.sub("''\[\[((.*?) (\([0-9]+\)) ([0-9]+))\]\]''", "[[\\1|''\\2'' \\3 \\4]]", t)
-            t = re.sub("''\[\[(([^\|\]\(]*?) \(.*?\)( [0-9]+)?)\]\]''", "[[\\1|''\\2''\\3]]", t)
-            t = re.sub("''\[\[(.*?)\|(((?!'').)*?) ([0-9]+)\]\]''", "[[\\1|''\\2'' \\3]]", t)
-            t = re.sub("''\[\[([^\|\]]+?) ([0-9]+)\]\]''", "[[\\1 \\2|''\\1'' \\2]]", t)
+            t = re.sub("''\[\[((.*?) \(audiobook\))]]''", "[[\\1|''\\2'' audiobook]]", t)
+            t = re.sub("''\[\[((.*?) (\([0-9]+\)) ([0-9]+))]]''", "[[\\1|''\\2'' \\3 \\4]]", t)
+            t = re.sub("''\[\[(([^|\](]*?) \(.*?\)( [0-9]+)?)]]''", "[[\\1|''\\2''\\3]]", t)
+            t = re.sub("''\[\[(.*?)\|(((?!'').)*?) ([0-9]+)]]''", "[[\\1|''\\2'' \\3]]", t)
+            t = re.sub("''\[\[([^|\]]+?) ([0-9]+)]]''", "[[\\1 \\2|''\\1'' \\2]]", t)
             if "[[Untitled" in t and t.startswith("''"):
                 t = t[2:-2]
         d = build_date(i.dates)
@@ -465,7 +484,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
         d = i.date
         if i.target in changed:
             d = build_date(changed[i.target].dates)
-        z = i.department + i.original + i.extra
+        z = re.sub(" [ ]+", " ", i.department + i.original + " " + i.ab + " " + i.extra)
         final.append([z, prep_date(d), i.index, fix_numbers(z)])
 
     start_date = DATES.get(page.title())
@@ -475,7 +494,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
     post = re.search("==Post-([0-9]+)==", page.get())
     post = post.group(1) if post else None
     post_found = False
-    for f in sorted(final, key=lambda a: (a[1], (a[2] or 200), a[3], a[0])):
+    for f in sorted(final, key=lambda a: (" abridged" in a[0], a[1], (a[2] or 200), a[3], a[0])):
         txt, d, i = f[0], f[1], f[2]
         if use_sections:
             if d.startswith("Cancel"):
@@ -485,7 +504,11 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
                 canceled.append(f"#{d}: {txt}")
                 continue
 
-            if d.startswith("1") or d.startswith("2"):
+            if key == "Audiobooks" and " abridged" in txt:
+                if not section:
+                    section = "Abridged"
+                    lines.append("\n==Abridged==")
+            elif d.startswith("1") or d.startswith("2"):
                 if post_found:
                     pass
                 elif start_date and d[:4] == start_date:

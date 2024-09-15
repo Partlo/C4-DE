@@ -61,16 +61,25 @@ def build_redirects(page: Page):
     return results
 
 
-def fix_redirects(redirects: Dict[str, str], text, section_name):
+def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, template=False):
     for r, t in redirects.items():
+        if t in disambigs:
+            log(f"Skipping disambiguation redirect {t}")
+            continue
         if f"[[{r.lower()}" in text.lower() or f"={r.lower()}" in text.lower():
-            print(f"Fixing {section_name} redirect {r} to {t}")
+            if section_name:
+                print(f"Fixing {section_name} redirect {r} to {t}")
             x = prepare_title(r)
-            text = re.sub("\[\[" + x + "\|('')?(" + prepare_title(t) + ")('')?\]\]", f"\\1[[\\2]]\\1", text)
-            text = re.sub("\[\[" + x + "(\|.*?)\]\]", f"[[{t}\\1]]", text)
-            text = re.sub("\[\[(" + x + ")\]\]([A-Za-z']*?)", f"[[{t}|\\1\\2]]", text)
+            text = re.sub("\[\[" + x + "\|('')?(" + prepare_title(t) + ")('')?]]", f"\\1[[\\2]]\\1", text)
+            text = re.sub("\[\[" + x + "(\|.*?)]]", f"[[{t}\\1]]", text)
+            text = re.sub("\[\[(" + x + ")]]([A-Za-z']*?)", f"[[{t}|\\1\\2]]", text)
+            try:
+                text = re.sub("(\{\{[A-Za-z0-9]+\|)" + x + "}}", "\\1" + t + "}}", text)
+            except Exception as e:
+                print(e, x, t)
             text = text.replace(f"set={r}", f"set={t}")
             text = text.replace(f"book={r}", f"book={t}")
+            text = text.replace(f"story={r}", f"story={t}")
     return text
 
 
