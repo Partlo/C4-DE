@@ -4,7 +4,7 @@ import traceback
 from datetime import datetime, timedelta
 
 from pywikibot import Page, Category, showDiff
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 from c4de.sources.engine import extract_item, determine_id_for_item, PARAN, AUDIOBOOK_MAPPING, \
     convert_issue_to_template
@@ -17,6 +17,8 @@ KEEP_TEMPLATES = ["TCWA", "CalendarCite"]
 PRODUCTS = ["LEGOWebCite", "Marvel", "DarkHorse", "FFGweb", "AMGweb", "Unlimitedweb"]
 DO_NOT_MOVE = ["TCWA", "GEAttr", "DatapadCite"]
 LIST_AT_START = ["Star Wars: Galactic Defense", "Star Wars: Force Arena"]
+INDEX_AND_CATS = ["{{imagecat", "{{mediacat", "{{indexpage", "{{wq", "{{incomplete", "{{quote", "<div style=",
+                  "set in '''bold'''", "{{cleanup"]
 
 SPECIAL = {
     "Star Wars: X-Wing vs. TIE Fighter": ["Star Wars: X-Wing vs. TIE Fighter: Balance of Power"],
@@ -47,7 +49,7 @@ REPLACEMENTS = [
     ("Notes and reference=", "Notes and references="), ("==References==", "==Notes and references=="),
     ("Apearance", "Appearance"), ("Appearence", "Appearance"), ("&#40;&#63;&#41;", "(?)"), ("{{MO}}", "{{Mo}}"),
     ("{{mO}}", "{{Mo}}"), ("*{{Indexpage", "{{Indexpage"), ("DisneyPlusYT", "DisneyPlusYouTube"),
-    ("Youtube", "YouTube"), ("{{Shortstory", "{{StoryCite")
+    ("Youtube", "YouTube"), ("{{Shortstory", "{{StoryCite"), ("{{Scrollbox", "{{Scroll_box"), ("{{scrollbox", "{{Scroll_box")
 ]
 
 
@@ -88,6 +90,13 @@ def initial_cleanup(target: Page, all_infoboxes):
     before = re.sub("(\n\*[^\n]*?[\[{]+[^\n]*?[]}]+[^\n]*?)(\*[^\n]*?[\[{]+[^\n]*?[]}]+[^\n]*?\n)", "\\1\n\\2", before)
     before = re.sub("\*('*\[\[(.*?)]]'*)[^\n\[\]]*(and|\|) '*\[\[(Star Wars: )?\\2( \(.*?\)| audio drama)(\|.*?)?]]", "*\\1\n*[[\\4\\2\\5]]", before)
     before = re.sub("(\{\{.*?\|url=[^|}\n]+)\|\|text=", "\\1|text=", before)
+    before = re.sub("\*\{\{\{([A-Z])", "*{{\\1", before)
+
+    if "width=100%" in before:
+        before = re.sub("(\{\{[Ss]croll[ _]box(\n?\|.*?)?)\n?\|width=100%", "\\1", before)
+
+    if "w:c:" in before.lower():
+        before = re.sub("\[\[:?[Ww]:c:(.*?):(.*?)\|(.*?)]] on .*?w:c:\\1\|(.*?)]]", "{{Interwiki|\\1|\\4|\\2|\\3}}", before)
 
     for (x, y) in REPLACEMENTS:
         before = before.replace(x, y)
@@ -253,7 +262,7 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
         elif "{{start_box" in s.lower() or "{{start box" in s.lower() or "{{interlang" in s.lower():
             succession_box = True
             other2.append(s)
-        elif "{{imagecat" in s.lower() or "{{mediacat" in s.lower() or "{{indexpage" in s.lower():
+        elif any(x in s.lower() for x in INDEX_AND_CATS):
             other1.append(s)
         elif s == "}}":
             if cs > 0:
@@ -261,7 +270,7 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
         elif re.match("^<!--.*?-->$", s):
             continue
         elif s.strip():
-            if not data and not re.search("^[{\[]+([Ii]ncomplete|[Ss]croll|[Mm]ore[_ ]|[Ff]ile:)", s.strip()):
+            if not data and not re.search("^[{\[]+([Ii]ncomplete|[Cc]leanup[Ss]croll|[Mm]ore[_ ]|[Ff]ile:)", s.strip()):
                 x = handle_valid_line(f"*{s}", is_appearances, log, types, data, other2, unknown, unique_ids, True, name)
                 if x:
                     start = False
@@ -298,7 +307,7 @@ def parse_external_links(section: str, types: dict, is_appearances: bool, unknow
             start = False
             x = handle_valid_line(s, is_appearances, log, types, data, [], unknown, unique_ids, False, "Links")
             if not x:
-                data.append(Item(s.strip(), "External", False))
+                data.append(Item(s.strip(), "Basic", False))
 
         elif "{{scroll_box" in s.lower() or "{{scroll box" in s.lower():
             scroll_box = True
@@ -308,7 +317,7 @@ def parse_external_links(section: str, types: dict, is_appearances: bool, unknow
         elif "{{start_box" in s.lower() or "{{start box" in s.lower() or "{{interlang" in s.lower():
             succession_box = True
             other2.append(s)
-        elif "{{imagecat" in s.lower() or "{{mediacat" in s.lower() or "{{indexpage" in s.lower():
+        elif any(x in s.lower() for x in INDEX_AND_CATS):
             other1.append(s)
         elif s == "}}":
             if cs > 0:
@@ -349,15 +358,15 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
     bold = "'''" in z and re.search("'''(?!s)", z)
 
     zs = [z]
-    if "/" in z and ("{{YJA|" in z or "{{AllStars|" in z):
-        x = re.search("^(.*?\{\{(YJA|AllStars)\|)(.*?)/(.*?)(}}.*?)$", z)
+    if "/" in z and ("{{YJA|" in z or "{{All-Stars|" in z):
+        x = re.search("^(.*?\{\{(YJA|All-Stars)\|)(.*?)/(.*?)(}}.*?)$", z)
         if x:
             if log:
                 print(f"Splitting multi-entry line: {s}")
-            zs = [f"{x.group(2)}{x.group(3)}{x.group(5)}", f"{x.group(2)}{x.group(4)}{x.group(5)}"]
+            zs = [f"{x.group(1)}{x.group(3)}{x.group(5)}", f"{x.group(1)}{x.group(4)}{x.group(5)}"]
 
-    y = re.search("[\"']*?\[\[(?P<p>.*?)(\|.*?)?]][\"']*? ?n?o?v?e?l? ?(and|\|) ?['\"]*\[\[(?P<t>.*?)(\|.*?)?]]['\"]*?", s)
-    if y:
+    y = re.search("[\"']*?\[\[(?P<p>.*?)(\|.*?)?]][\"']*? ?n?o?v?e?l? ?(and|\|) ?['\"]*\[\[(?P<t>.*?)(\|.*?)?]]['\"]*?", z)
+    if y and "{{TFU|" not in z:
         if log:
             print(f"Splitting multi-entry line: {s}")
         zs = [y.groupdict()['p'], y.groupdict()['t']]
@@ -366,6 +375,8 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
     for y in zs:
         t = extract_item(convert_issue_to_template(y), is_appearances, name, types)
         if t:
+            if name == "Links":
+                print(t.template, t.mode, t.original)
             found = True
             data.append(t)
             t.extra = extra.strip()
@@ -377,7 +388,10 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
                 t.override_date = ex.group(2)
             unique_ids[t.unique_id()] = t
     if not found:
-        if "audiobook" not in s and not attempt:
+        print(s)
+        if not data and s.count("[") == 0 and s.count("]") == 0:
+            pass
+        elif "audiobook" not in s and not attempt:
             unknown.append(s)
             other2.append(s)
         if log and name != "Links":
@@ -489,15 +503,16 @@ def is_external_wiki(t):
 
 
 def analyze_section_results(target: Page, results: PageComponents, disambigs: list, appearances: FullListData, sources: FullListData,
-                            remap: dict, use_index: bool,  include_date: bool, collapse_audiobooks: bool, log) \
+                            remap: dict, use_index: bool, include_date: bool, collapse_audiobooks: bool, log) \
         -> Tuple[FinishedSection, FinishedSection, FinishedSection, FinishedSection, FinishedSection, list, list, list, list, list, AnalysisResults]:
     both_continuities = appearances.both_continuities.union(sources.both_continuities)
     dates = []
+    checked = []
     unknown_apps, unknown_src = [], []
-    new_apps = build_item_ids_for_section(target, "Appearances", results.apps.items, appearances, sources, remap, unknown_apps, results.canon, collapse_audiobooks, log)
-    new_nca = build_item_ids_for_section(target, "Non-canon appearances", results.nca.items, appearances, sources, remap, unknown_apps, results.canon, collapse_audiobooks, log)
-    new_src = build_item_ids_for_section(target, "Sources", results.src.items, sources, appearances, remap, unknown_src, results.canon, collapse_audiobooks, log)
-    new_ncs = build_item_ids_for_section(target, "Non-canon sources", results.ncs.items, sources, appearances, remap, unknown_src, results.canon, collapse_audiobooks, log)
+    new_apps = build_item_ids_for_section(target, "Appearances", results.apps.items, appearances, sources, remap, unknown_apps, results.canon, checked, collapse_audiobooks, log)
+    new_nca = build_item_ids_for_section(target, "Non-canon appearances", results.nca.items, appearances, sources, remap, unknown_apps, results.canon, checked, collapse_audiobooks, log)
+    new_src = build_item_ids_for_section(target, "Sources", results.src.items, sources, appearances, remap, unknown_src, results.canon, [], collapse_audiobooks, log)
+    new_ncs = build_item_ids_for_section(target, "Non-canon sources", results.ncs.items, sources, appearances, remap, unknown_src, results.canon, [], collapse_audiobooks, log)
 
     # move non-canon items to the appropriate lists, and swap to non-canon only if no canon entries
     if new_apps.non_canon:
@@ -562,7 +577,7 @@ def analyze_section_results(target: Page, results: PageComponents, disambigs: li
             if b.abridged:
                 print(f"Skipping abridged audiobook: {b.target}")
                 abridged.append(b.target)
-            elif not collapse_audiobooks and b.target not in app_targets:
+            elif not collapse_audiobooks and (b.parent if b.parent else b.target) not in app_targets:
                 print(f"Adding missing audiobook: {b.target} at {i}, {a.current.index}, {a.current.canon_index}, {a.current.legends_index}")
                 z = ItemId(b, b, False, False, False)
                 extra = a.current.extra or ''
@@ -640,7 +655,7 @@ def handle_ab_first(a: ItemId, audiobook_date):
 
 
 def build_item_ids_for_section(page: Page, name, original: List[Item], data: FullListData, other: FullListData, remap: dict,
-                               unknown: List[Item], canon: bool, collapse_audiobooks=True, log=True) -> SectionItemIds:
+                               unknown: List[Union[str, Item]], canon: bool, checked: list, collapse_audiobooks=True, log=True) -> SectionItemIds:
 
     found = []
     wrong = []
@@ -702,13 +717,20 @@ def build_item_ids_for_section(page: Page, name, original: List[Item], data: Ful
             else:
                 print(f"No cards found for {parent_set}")
                 extra[d.master.target] = d
-        elif not d and o.mode == "External":
-            links.append(o)
-        elif o.external:
-            links.append(o)
-        elif o.template in PRODUCTS and o.url and is_product_page(o.url.lower()):
+        elif not d and o.mode == "Basic":
             links.append(o)
         elif not d and o.original.replace("*", "").startswith("[http"):
+            links.append(o)
+        elif d and d.master.external:
+            o.mode = "Found-External"
+            links.append(o)
+        elif o.template in PRODUCTS and o.url and is_product_page(o.url.lower()):
+            o.mode = "Commercial"
+            links.append(o)
+        elif o.template == "SWArchive" and o.url and "=cargobay" in o.original:
+            o.mode = "Commercial"
+            links.append(o)
+        elif o.mode == "External":
             links.append(o)
         elif d and d.current.template in KEEP_TEMPLATES:
             found.append(d)
@@ -731,20 +753,20 @@ def build_item_ids_for_section(page: Page, name, original: List[Item], data: Ful
         elif d:
             found.append(d)
             if d.by_parent:
-                unknown.append(o)
+                unknown.append(f"Parent: {o.original}")
         elif o.template == "WebCite" or o.template == "WP" or "{{WP" in o.original:
             links.append(o)
         else:
             if log:
                 print(f"Cannot find {o.unique_id()}: {o.original}")
             save = True
-            if o.is_appearance and o.target:
+            if o.is_appearance and o.target and o.target not in checked:
                 p = Page(page.site, o.target)
                 if p.exists() and not p.isRedirectPage():
                     cats = [c.title() for c in p.categories()]
                     if "Category:Media that should be listed in Appearances" in cats:
                         if log:
-                            print(f"Removing non-Appearance entry: {o.original}")
+                            print(f"Removing non-Appearance entry on {page.title()}: {o.original}")
                         save = False
 
             unknown.append(o)
@@ -803,7 +825,7 @@ def build_new_external_links(page: Page, original: List[Item], data: FullListDat
     unknown = []
     wrong = []
     for i, o in enumerate(original):
-        if o.mode == "External":
+        if o.mode == "Basic":
             found.append(o.original if o.original.startswith("*") else f"*{o.original}")
             continue
 
@@ -846,6 +868,7 @@ def build_new_external_links(page: Page, original: List[Item], data: FullListDat
 
 def is_product_page(u: str):
     return "/product/" in u or "/products/" in u or "/previews/" in u or u.startswith("books/") or u.startswith("comics/")
+
 
 def build_new_section(name, section: SectionItemIds, mode: str, dates: list, canon: bool, include_date: bool, log: bool,
                       use_index: bool, mismatch: list, both_continuities: set, unknown_final: list,
@@ -911,7 +934,7 @@ def build_new_section(name, section: SectionItemIds, mode: str, dates: list, can
     final_items = []
     rows = 0
     sl = "" if canon else "|l=1"
-    nl = "|nl=1"
+    nl = "|n=1"
     for o in found:
         if mode == BY_DATE and o.current.index is None:
             print(f"No index? {o.current.original}, {o.master.original}")
@@ -1214,6 +1237,7 @@ def build_section_from_pieces(section: SectionComponents, items: FinishedSection
 
     pieces = [items.name] if items.text else []
     if section.before:
+        pieces.insert(0, "")
         pieces.insert(0, section.before)
     if items.rows >= 20 and not any("{{scroll" in i.lower() for i in section.preceding):
         pieces.append("{{Scroll_box|content=")
@@ -1290,12 +1314,13 @@ def build_final_text(page: Page, results: PageComponents, disambigs: list, redir
             pieces.append("==Notes and references==\n{{Reflist}}\n\n")
 
     if new_links.text or results.links.has_text():
+        pieces.append("")
         t, added_media_cat = build_section_from_pieces(results.links, new_links, log, None)
         if results.final and "Notes and references" in results.final:
             snip = re.search("(==Notes and references==\n.*?\{\{[Rr]eflist.*?\n\n*)", results.final)
             if snip:
                 results.final = results.final.replace(snip.group(1), "")
-                pieces.append(f"{snip.group(1)}\n")
+                pieces.append(f"{snip.group(1)}\n\n")
         pieces.append(t)
 
     if results.final:

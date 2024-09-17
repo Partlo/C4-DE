@@ -42,6 +42,8 @@ def extract_err_msg(e):
 def prepare_title(t):
     for i in ['(', ')', '?', '!']:
         t = t.replace(i, '\\' + i)
+    if t[0].capitalize().isnumeric():
+        return t
     return "[" + t[0].capitalize() + t[0].lower() + "]" + t[1:]
 
 
@@ -73,13 +75,15 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, temp
             text = re.sub("\[\[" + x + "\|('')?(" + prepare_title(t) + ")('')?]]", f"\\1[[\\2]]\\1", text)
             text = re.sub("\[\[" + x + "(\|.*?)]]", f"[[{t}\\1]]", text)
             text = re.sub("\[\[(" + x + ")]]([A-Za-z']*?)", f"[[{t}|\\1\\2]]", text)
-            try:
-                text = re.sub("(\{\{[A-Za-z0-9]+\|)" + x + "}}", "\\1" + t + "}}", text)
-            except Exception as e:
-                print(e, x, t)
+            if "/" not in r:
+                try:
+                    text = re.sub("(\{\{(?!WP)[A-Za-z0-9]+\|)" + x + "}}", "\\1    " + t + "}}", text).replace("    ", "")
+                except Exception as e:
+                    print(e, x, t)
             text = text.replace(f"set={r}", f"set={t}")
             text = text.replace(f"book={r}", f"book={t}")
-            text = text.replace(f"story={r}", f"story={t}")
+            text = text.replace(f"story={r}|", f"story={t}|")
+            text = text.replace(f"story={r}" + "}", f"story={t}|" + "}")
     return text
 
 

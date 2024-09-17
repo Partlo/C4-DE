@@ -14,12 +14,13 @@ class InfoboxInfo:
 
 def parse_infobox_category(cat: Category, results):
     for p in cat.articles(namespaces=10):
+        x = p.title(with_ns=False).lower().replace("_", " ")
         if p.title().endswith("400"):
-            results[p.title(with_ns=False).lower().replace("_", " ").replace('400', '')] = build_fields_for_infobox(p)
-        elif any(p.title(with_ns=False).startswith(x) for x in ["Battle", "Duel", "Campaign", "Mission", "Treaty", "War"]):
-            results[p.title(with_ns=False).lower().replace("_", " ")] = None
+            results[x.replace('400', '')] = build_fields_for_infobox(p)
+        elif any(p.title(with_ns=False).startswith(y) for y in ["Battle", "Duel", "Campaign", "Mission", "Treaty", "War"]):
+            results[x] = None
         else:
-            results[p.title(with_ns=False).lower().replace("_", " ")] = build_fields_for_infobox(p)
+            results[x] = build_fields_for_infobox(p)
     for c in cat.subcategories():
         if c.title(with_ns=False) != "Preload templates":
             parse_infobox_category(c, results)

@@ -54,7 +54,7 @@ EXTRA_INFOBOXES = ["comic series", "comic story arc", "book series", "television
 APP_CATEGORIES = ["Future audiobooks", "Future films", "Future short stories", "Future novels",
                   "Future television episodes"]
 
-INFOBOX_SKIP = ["character", "oou company", "person", "comic collection", "web article", "website"]
+INFOBOX_SKIP = ["character", "oou company", "person", "web article", "website"]
 SERIES_SKIP = ["magazine department", "magazine series"]
 
 
@@ -63,8 +63,10 @@ def determine_app_or_source(text, category, infobox):
         return "Extra"
     elif "|is_appearance=1" in text:
         return "Appearances"
-    elif category == "Future trade paperbacks" or infobox in INFOBOX_SKIP:
+    elif infobox in INFOBOX_SKIP:
         return "SKIP"
+    elif category == "Future trade paperbacks" or infobox == "comic collection" or ":Book collections" in text:
+        return "Collections"
     elif infobox.lower() == "card game" or infobox == "miniatures game":
         return "CardSets"
     elif infobox.lower() in EXTRA_INFOBOXES:
@@ -97,6 +99,8 @@ def analyze_page(page, category, infobox):
     if ct in ["pre", "btr", "old", "imp", "reb", "new", "njo", "lgc", "inf"]:
         ct = "leg"
     t = determine_app_or_source(text, (category or '').replace("Category:", ""), (infobox or '').replace("_", " "))
+    if "audiobook)" in page.title():
+        t = "Audiobooks"
     print(t, page.title(), (category or '').replace("Category:", ""), (infobox or '').replace("_", " "))
     return FutureProduct(page, category, dates, infobox, ct, t)
 
@@ -115,6 +119,7 @@ def get_future_products_list(site: Site, infoboxes=None):
     cat = Category(site, "Future products")
     infoboxes = infoboxes or list_all_infoboxes(site)
     results = []
+    collections = []
     unique = set()
     for page in cat.articles():
         if page.title().startswith("List of") or page.title().startswith("Timeline of"):
@@ -176,6 +181,7 @@ def parse_line(line, i, p: Page, types, full, unique, target):
                 if cr:
                     c = ' ' + cr.group(1)
                     item = item.replace(cr.group(1), '').strip()
+            ab = ''
             x2 = re.search("\{\{[Aa]b\|.*?}}", item)
             if x2:
                 ab = x2.group(0)
@@ -189,7 +195,7 @@ def parse_line(line, i, p: Page, types, full, unique, target):
                 x.department = z.group(2) or ''
                 x.canon = "/Canon" in p.title()
                 x.date = date
-                x.extra = c
+                x.extra = f"{ab} {c}".strip()
                 full[x.full_id()] = x
                 unique[x.unique_id()] = x
                 if x.target:
@@ -273,8 +279,6 @@ def should_check_product(inf, t, p: Page, c: Category):
         return False
     elif inf in ["toy line", "magazine"] and p.title().startswith("LEGO"):
         return False
-    elif "[[Category:Book collections" in t:
-        return False
     elif f"[[{c.title()}| " in t or f"[[{c.title()}|*" in t or f"[[Category:{p.title()}| " in t:
         # print(f"Skipping root page {p.title()} for {c.title()}")
         return False
@@ -320,10 +324,16 @@ def merge_full_lists(l1, l2, l3):
     return FullListData(l1.unique + l2.unique + l3.unique, l1.full + l2.full + l3.full, l1.target + l2.target + l3.target, set(), set())
 
 
+def build_item_type(item_type, i: FutureProduct):
+    z = item_type or ''
+    is_legends = (i.canon_type == 'leg' or i.canon_type == 'ncl') if i.canon_type else False
+    if z.startswith("Appearances") or z.startswith("Sources"):
+        z = f"{z}|{is_legends}"
+    return z
+
+
 def handle_results(site, results: List[FutureProduct], collections: List[FutureProduct], save=True):
     types = build_template_types(site)
-    audiobook_page = Page(site, "Wookieepedia:Appearances/Audiobook")
-    audiobooks = parse_page(audiobook_page, types)
     extra_page = Page(site, "Wookieepedia:Appearances/Extra")
     extra = parse_page(extra_page, types)
     l_app_page = Page(site, "Wookieepedia:Appearances/Legends")
@@ -331,9 +341,9 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
     c_app_page = Page(site, "Wookieepedia:Appearances/Canon")
     c_apps = parse_page(c_app_page, types)
     audio_page = Page(site, "Wookieepedia:Appearances/Audiobook")
-    audio = parse_page(c_app_page, types)
+    audio = parse_page(audio_page, types)
     col_page = Page(site, "Wookieepedia:Appearances/Collections")
-    cols = parse_page(c_app_page, types)
+    cols = parse_page(col_page, types)
     l_src_page1 = Page(site, "Wookieepedia:Sources/Legends/General/2010s")
     l_srcs1 = parse_page(l_src_page1, types)
     l_src_page2 = Page(site, "Wookieepedia:Sources/Legends/General/2000s")
@@ -346,22 +356,14 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
     sets = parse_page(sets_page, types)
 
     master_data = {"Legends Appearances": l_apps, "Canon Appearances": c_apps, "Audiobooks": audio,
-                   "Collections": cols, "Legends-2010s Sources": l_srcs1,
-                   "Legends-2000s Sources": l_srcs2, "Legends-1900s Sources": l_srcs3,
-                   "Canon Sources": c_srcs, "Extra": extra, "CardSets": sets, "Audiobook": audiobooks}
+                   "Collections": cols, "Legends-2010s Sources": l_srcs1, "Legends-2000s Sources": l_srcs2,
+                   "Legends-1900s Sources": l_srcs3, "Canon Sources": c_srcs, "Extra": extra, "CardSets": sets}
 
     new_items = {"Audiobooks": [], "Collections": collections}
     changed_dates = {}
 
     for i in results:
-        if "audiobook" in i.page.title():
-            new_items["Audiobooks"].append(i)
-            continue
-
-        is_legends = (i.canon_type == 'leg' or i.canon_type == 'ncl') if i.canon_type else False
-        z = f"{i.item_type}|{is_legends}"
-        if i.item_type == "CardSets" or i.item_type == "Extra":
-            z = i.item_type
+        z = build_item_type(i.item_type, i)
         if z == "Sources|True":
             d = build_date(i.dates)
             if d:
@@ -378,6 +380,7 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
                 found = True
                 if i.item_type != t.split(" ")[-1]:
                     print(f"{i.item_type}: {i.page.title()} is classified as {t}")
+                    z = build_item_type(t.split(" ")[-1], i)
                 if i.dates and not dates_match(i.dates, data.target[i.page.title()][0].date):
                     if z not in changed_dates:
                         changed_dates[z] = {}
@@ -394,11 +397,10 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
             if z not in new_items:
                 new_items[z] = []
             new_items[z].append(i)
+            print(z, i.page.title())
 
     build_new_page(c_app_page, c_apps, "Appearances|False", new_items, changed_dates, True, save)
     build_new_page(l_app_page, l_apps, "Appearances|True", new_items, changed_dates, True, save)
-    build_new_page(l_app_page, l_apps, "Audiobooks", new_items, changed_dates, True, save)
-    build_new_page(l_app_page, l_apps, "Collections", new_items, changed_dates, True, save)
 
     build_new_page(c_src_page, c_srcs, "Sources|False", new_items, changed_dates, True, save)
     build_new_page(l_src_page1, l_srcs1, "Sources|True|1", new_items, changed_dates, True, save)
@@ -406,7 +408,8 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
     build_new_page(l_src_page3, l_srcs3, "Sources|True|3", new_items, changed_dates, True, save)
 
     build_new_page(extra_page, extra, "Extra", new_items, changed_dates, True, save)
-    build_new_page(audiobook_page, audiobooks, "Audiobook", new_items, changed_dates, True, save)
+    build_new_page(audio_page, audio, "Audiobooks", new_items, changed_dates, True, save)
+    build_new_page(col_page, cols, "Collections", new_items, changed_dates, True, save)
     build_new_page(sets_page, sets, "CardSets", new_items, changed_dates, True, save)
 
 
@@ -435,7 +438,7 @@ def build_date(dates):
     return "Future"
 
 
-def build_final_new_items(new_items: List[FutureProduct]):
+def build_final_new_items(new_items: List[FutureProduct], audiobooks: List[str]):
     final = []
     for i in new_items:
         if i.infobox in ["short story", "magazine article", "magazine department"]:
@@ -461,18 +464,28 @@ def build_final_new_items(new_items: List[FutureProduct]):
             t = re.sub("''\[\[([^|\]]+?) ([0-9]+)]]''", "[[\\1 \\2|''\\1'' \\2]]", t)
             if "[[Untitled" in t and t.startswith("''"):
                 t = t[2:-2]
+
+            x, _, _ = i.page.title().partition(" (")
+            for a in audiobooks:
+                if a.startswith(f"{x} ("):
+                    t = f"{t} {{{{Ab|{a}}}}}"
+                    break
+
         d = build_date(i.dates)
         final.append([t, prep_date(d), 100, fix_numbers(t)])
     return final
 
 
-def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[FutureProduct]], all_changed: Dict[str, Dict[str, FutureProduct]], use_sections, save=False):
+def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[FutureProduct]],
+                   all_changed: Dict[str, Dict[str, FutureProduct]], use_sections, save=False):
     new_items = all_new.get(key) or []
     changed = all_changed.get(key) or {}
     if not (new_items or changed):
         return
 
-    final = build_final_new_items(new_items)
+    audiobooks = [a.page.title() for a in all_new["Audiobooks"] if key != "Audiobooks"]
+
+    final = build_final_new_items(new_items, audiobooks)
     if page.title().endswith("/Extra"):
         text = page.get() + "\n"
         for txt, d, i, _ in final:
@@ -483,8 +496,15 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
     for x, i in data.full.items():
         d = i.date
         if i.target in changed:
+            print(changed[i.target].dates)
             d = build_date(changed[i.target].dates)
         z = re.sub(" [ ]+", " ", i.department + i.original + " " + i.ab + " " + i.extra)
+        if i.target and key.startswith("Appearances"):
+            x, _, _ = i.target.partition(" (")
+            for a in audiobooks:
+                if a.startswith(f"{x} ("):
+                    z = f"{z} {{{{Ab|{a}}}}}"
+                    break
         final.append([z, prep_date(d), i.index, fix_numbers(z)])
 
     start_date = DATES.get(page.title())
@@ -494,7 +514,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
     post = re.search("==Post-([0-9]+)==", page.get())
     post = post.group(1) if post else None
     post_found = False
-    for f in sorted(final, key=lambda a: (" abridged" in a[0], a[1], (a[2] or 200), a[3], a[0])):
+    for f in sorted(final, key=lambda a: (" abridged" not in a[0], a[1], (a[2] or 200), a[3], a[0])):
         txt, d, i = f[0], f[1], f[2]
         if use_sections:
             if d.startswith("Cancel"):
@@ -515,7 +535,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
                     start_date = None
                     section = d[:4]
                     lines.append(f"\n=={section}==")
-                elif start_date and not section:
+                elif start_date and (not section or section == "Abridged"):
                     section = f"Pre-{start_date}"
                     lines.append(f"=={section}==")
                 elif not start_date and d[:4] != section:
@@ -532,7 +552,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
     if canceled:
         lines += canceled
 
-    new_txt = re.sub("(?<![\n=])\n==", "\n\n==", re.sub("\n\n+", "\n\n", "\n".join(lines))).strip()
+    new_txt = re.sub("(?<![\n=])\n==", "\n\n==", re.sub("\n\n+", "\n\n", "\n".join(l.strip() for l in lines))).strip()
     with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/sources/test.txt", mode="w", encoding="utf-8") as f:
         f.writelines(new_txt)
 
@@ -550,13 +570,3 @@ def fix_numbers(t):
     for x, y in NUMBERS.items():
         t = t.replace(x, y).replace(x.capitalize(), y)
     return t
-
-
-def analyze():
-    site = Site(user="C4-DE Bot")
-    results = get_future_products_list(site)
-    handle_results(site, results)
-
-
-if __name__ == "__main__":
-    analyze()

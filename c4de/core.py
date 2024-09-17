@@ -926,7 +926,7 @@ class C4DE_Bot(commands.Bot):
     async def handle_future_products(self):
         try:
             results = get_future_products_list(self.site)
-            handle_results(self.site, results)
+            handle_results(self.site, results, [])
             await self.build_sources()
         except Exception as e:
             traceback.print_exc()

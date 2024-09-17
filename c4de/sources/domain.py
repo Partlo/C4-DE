@@ -24,7 +24,7 @@ class Item:
     def __init__(self, original: str, mode: str, is_app: bool, *, invalid=False, target: str = None, text: str = None,
                  parent: str = None, template: str = None, url: str = None, issue: str = None, subset: str=None,
                  card: str = None, special=None, collapsed=False, format_text: str = None, no_issue=False,
-                 full_url: str=None, check_both=False):
+                 full_url: str=None, check_both=False, date=""):
         self.is_appearance = is_app
         self.tv = mode == "TV"
         self.mode = "General" if mode == "TV" else mode
@@ -50,30 +50,34 @@ class Item:
         self.format_text = format_text
         self.no_issue = no_issue
         self.old_version = self.original and ("oldversion" in self.original or "|old=true" in self.original)
-        self.index = None
-        self.canon_index = None
-        self.legends_index = None
-        self.override = None
-        self.override_date = None
+
         self.unknown = False
-        self.date = ''
-        self.future = False
-        self.canon = None
         self.from_extra = None
-        self.external = mode == "External"
+        self.canon = None
+        self.non_canon = False
+        self.external = False
         self.unlicensed = False
         self.abridged = False
         self.audiobook = False
         self.reprint = False
-        self.check_both = check_both
+
+        self.index = None
+        self.canon_index = None
+        self.legends_index = None
+        self.timeline = None
+
+        self.date = date
+        self.override = None
+        self.override_date = None
+        self.future = False
+
         self.department = ''
-        self.full_url = ''
-        self.non_canon = False
+        self.check_both = check_both
+        self.self_cite = False
+        self.full_url = full_url
         self.alternate_url = None
         self.date_ref = None
         self.extra_date = None
-        self.timeline = None
-        self.self_cite = False
         self.ab = ''
         self.extra = ''
         self.bold = False
@@ -186,7 +190,7 @@ class AnalysisResults:
 
 class SectionItemIds:
     def __init__(self, name, found: List[ItemId], wrong: List[ItemId], non_canon: List[ItemId],
-                 cards: Dict[str, List[ItemId]], sets: Dict[str, str], links: list):
+                 cards: Dict[str, List[ItemId]], sets: Dict[str, str], links: List[Item]):
         self.name = name
         self.found = found
         self.wrong = wrong
