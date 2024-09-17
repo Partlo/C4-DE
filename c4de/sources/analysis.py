@@ -4,10 +4,10 @@ import traceback
 from datetime import datetime, timedelta
 
 from pywikibot import Page, Category, showDiff
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Dict
 
-from c4de.sources.engine import extract_item, determine_id_for_item, PARAN, AUDIOBOOK_MAPPING, \
-    convert_issue_to_template
+from c4de.sources.determine import extract_item, determine_id_for_item, convert_issue_to_template, PARAN
+from c4de.sources.engine import AUDIOBOOK_MAPPING
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, AnalysisResults, SectionComponents, \
     SectionItemIds, FinishedSection
 from c4de.sources.infoboxer import handle_infobox_on_page
@@ -154,7 +154,7 @@ def build_page_components(target: Page, types: dict, disambigs: list, appearance
         if external_links:
             external_links, after = split_section_pieces(external_links)
             external_links = fix_redirects(redirects, external_links, None, disambigs)
-            results.links = parse_external_links(external_links, types, False, unknown, after, log)
+            results.links = parse_section(external_links, types, False, unknown, after, log, "Links")
 
         x = re.split("(==Notes and references|\{\{[R]eflist)", before, 1)
         if x:
@@ -231,6 +231,7 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
     """ Parses an article's Appearances, Non-canon appearances, Sources, or External Links section, extracting an Item
     data object for each entry in the list. Also returns any preceding/trailing extra lines, such as scrollboxes. """
 
+    external = name == "Links"
     data = []
     unique_ids = {}
     other1, other2 = [], []
@@ -253,60 +254,8 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
 
         if s.strip().startswith("*"):
             start = False
-            handle_valid_line(s, is_appearances, log, types, data, other2, unknown, unique_ids, False, name)
-        elif "{{scroll_box" in s.lower() or "{{scroll box" in s.lower():
-            scroll_box = True
-            other1.append(s)
-        elif scroll_box and (s.startswith("|height=") or s.startswith("|content=")):
-            other1.append(s)
-        elif "{{start_box" in s.lower() or "{{start box" in s.lower() or "{{interlang" in s.lower():
-            succession_box = True
-            other2.append(s)
-        elif any(x in s.lower() for x in INDEX_AND_CATS):
-            other1.append(s)
-        elif s == "}}":
-            if cs > 0:
-                cs = 0
-        elif re.match("^<!--.*?-->$", s):
-            continue
-        elif s.strip():
-            if not data and not re.search("^[{\[]+([Ii]ncomplete|[Cc]leanup[Ss]croll|[Mm]ore[_ ]|[Ff]ile:)", s.strip()):
-                x = handle_valid_line(f"*{s}", is_appearances, log, types, data, other2, unknown, unique_ids, True, name)
-                if x:
-                    start = False
-                    continue
-            if start:
-                other1.append(s)
-            else:
-                other2.append(s)
-    return SectionComponents(data, other1, other2, after)
-
-
-def parse_external_links(section: str, types: dict, is_appearances: bool, unknown: list, after: str, log) -> SectionComponents:
-    data = []
-    unique_ids = {}
-    other1, other2 = [], []
-    start = True
-    succession_box = False
-    scroll_box = False
-    cs = 0
-    section = re.sub("({{CardGameSet\|set=.*?)\n\|cards=", "\\1|cards=\n", section)
-    section = re.sub("'*\[\[Star Wars Miniatures]]'*: '*\[\[(.*?)(\|.*?)?]]'*", "{{SWMiniCite|set=\\1}}", section)
-    section = re.sub(" \((as .*?)\)", " {{C|\\1}}", section)
-    for s in section.splitlines():
-        if succession_box or "{{more" in s.lower():
-            other2.append(s)
-            continue
-        if "CardGameSet" in s:
-            s = re.sub("{{CardGameSet\|(set=)?.*?\|cards=", "", s)
-            cs += 1
-        if s.strip().startswith("<!-"):
-            s = re.sub("<!--.*?-->", "", s)
-
-        if s.strip().startswith("*"):
-            start = False
-            x = handle_valid_line(s, is_appearances, log, types, data, [], unknown, unique_ids, False, "Links")
-            if not x:
+            x = handle_valid_line(s, is_appearances, log, types, data, [] if external else other2, unknown, unique_ids, False, name)
+            if not x and external:
                 data.append(Item(s.strip(), "Basic", False))
 
         elif "{{scroll_box" in s.lower() or "{{scroll box" in s.lower():
@@ -325,8 +274,8 @@ def parse_external_links(section: str, types: dict, is_appearances: bool, unknow
         elif re.match("^<!--.*?-->$", s):
             continue
         elif s.strip():
-            if not data and not re.search("^[{\[]+([Ii]ncomplete|[Ss]croll|[Mm]ore[_ ]|[Ff]ile:)", s.strip()):
-                x = handle_valid_line(f"*{s}", is_appearances, log, types, data, [], unknown, unique_ids, True, "Links")
+            if not data and not re.search("^[{\[]+([Ii]ncomplete|[Cc]leanup|[Ss]croll|[Mm]ore[_ ]|[Ff]ile:)", s.strip()):
+                x = handle_valid_line(f"*{s}", is_appearances, log, types, data, [] if external else other2, unknown, unique_ids, True, name)
                 if x:
                     start = False
                     continue
@@ -654,6 +603,74 @@ def handle_ab_first(a: ItemId, audiobook_date):
         a.current.extra = re.sub("(\{\{1st[mp]*?)}}", "\\1|in book}}", a.current.extra)
 
 
+def is_external_link(d: ItemId, o: Item):
+    if not d and o.mode == "Basic":
+        return True
+    elif not d and o.original.replace("*", "").startswith("[http"):
+        return True
+    elif d and d.master.external:
+        o.mode = "Found-External"
+        return True
+    elif o.template in PRODUCTS and o.url and is_product_page(o.url.lower()):
+        o.mode = "Commercial"
+        return True
+    elif o.template == "SWArchive" and o.url and "=cargobay" in o.original:
+        o.mode = "Commercial"
+        return True
+    elif o.mode == "External":
+        return True
+
+
+def is_product_page(u: str):
+    return "/product/" in u or "/products/" in u or "/previews/" in u or u.startswith("books/") or u.startswith("comics/")
+
+
+def handle_card_item(d: ItemId, o: Item, cards: Dict[str, List[ItemId]], found: List[ItemId], wrong: List[ItemId],
+                     extra: Dict[str, ItemId], name, log):
+    if d.current.card and d.current.card == d.master.card and d.master.has_date():
+        found.append(d)
+        return
+    elif o.template == "ForceCollection":
+        found.append(d)
+        return
+
+    parent_set = d.master.parent if d.master.parent else d.master.target
+    if d.current.template == "Topps" and not d.master.has_date() and parent_set.startswith("20"):
+        d.master.date = f"{parent_set[:4]}-XX-XX"
+    if o.template == "SWCT":
+        parent_set = d.master.card or parent_set
+    if parent_set == "Topps Star Wars Living Set":
+        if o.card and o.card.strip().startswith('#'):
+            num = o.card.strip().split(' ')[0].replace('#', '')
+            if num.isnumeric():
+                n = int(num)
+                date = datetime(2019, 6, 4) + timedelta(days=(n - (n % 2)) / 2 * 7)
+                d.master.date = date.strftime("%Y-%m-%d")
+        found.append(d)
+        return
+    if parent_set not in cards:
+        cards[parent_set] = []
+
+    if parent_set and "|stext=" in d.master.original and "|stext=" not in d.current.original:
+        x = re.search("(\|stext=.*?)[|}]", d.master.original)
+        if x:
+            d.current.original = d.current.original.replace(f"|set={parent_set}", f"|set={parent_set}{x.group(1)}")
+
+    if o.card:
+        cards[parent_set].append(d)
+    elif o.special and d.from_other_data:
+        if log:
+            print(f"({name}) Listed in wrong section: {o.original}")
+        wrong.append(d)
+    elif o.special:
+        found.append(d)
+    elif o.subset:
+        found.append(d)
+    else:
+        print(f"No cards found for {parent_set}")
+        extra[d.master.target] = d
+
+
 def build_item_ids_for_section(page: Page, name, original: List[Item], data: FullListData, other: FullListData, remap: dict,
                                unknown: List[Union[str, Item]], canon: bool, checked: list, collapse_audiobooks=True, log=True) -> SectionItemIds:
 
@@ -677,60 +694,9 @@ def build_item_ids_for_section(page: Page, name, original: List[Item], data: Ful
                 o.parent = p.getRedirectTarget().title().split('#', 1)[0]
                 d = determine_id_for_item(o, page.site, data.unique, data.target, other.unique, other.target, remap, canon, log)
 
-        if d and o.mode == "Cards" and d.current.card and d.current.card == d.master.card and d.master.has_date():
-            found.append(d)
-        elif d and o.template == "ForceCollection":
-            found.append(d)
-        elif d and o.mode == "Cards":
-            parent_set = d.master.parent if d.master.parent else d.master.target
-            if d.current.template == "Topps" and not d.master.has_date() and parent_set.startswith("20"):
-                d.master.date = f"{parent_set[:4]}-XX-XX"
-            if o.template == "SWCT":
-                parent_set = d.master.card or parent_set
-            if parent_set == "Topps Star Wars Living Set":
-                if o.card and o.card.strip().startswith('#'):
-                    num = o.card.strip().split(' ')[0].replace('#', '')
-                    if num.isnumeric():
-                        n = int(num)
-                        date = datetime(2019, 6, 4) + timedelta(days=(n - (n % 2)) / 2 * 7)
-                        d.master.date = date.strftime("%Y-%m-%d")
-                found.append(d)
-                continue
-            if parent_set not in cards:
-                cards[parent_set] = []
-
-            if parent_set and "|stext=" in d.master.original and "|stext=" not in d.current.original:
-                x = re.search("(\|stext=.*?)[|}]", d.master.original)
-                if x:
-                    d.current.original = d.current.original.replace(f"|set={parent_set}", f"|set={parent_set}{x.group(1)}")
-
-            if o.card:
-                cards[parent_set].append(d)
-            elif o.special and d.from_other_data:
-                if log:
-                    print(f"({name}) Listed in wrong section: {o.original}")
-                wrong.append(d)
-            elif o.special:
-                found.append(d)
-            elif o.subset:
-                found.append(d)
-            else:
-                print(f"No cards found for {parent_set}")
-                extra[d.master.target] = d
-        elif not d and o.mode == "Basic":
-            links.append(o)
-        elif not d and o.original.replace("*", "").startswith("[http"):
-            links.append(o)
-        elif d and d.master.external:
-            o.mode = "Found-External"
-            links.append(o)
-        elif o.template in PRODUCTS and o.url and is_product_page(o.url.lower()):
-            o.mode = "Commercial"
-            links.append(o)
-        elif o.template == "SWArchive" and o.url and "=cargobay" in o.original:
-            o.mode = "Commercial"
-            links.append(o)
-        elif o.mode == "External":
+        if d and (o.mode == "Cards" or o.template == "ForceCollection"):
+            handle_card_item(d, o, cards, found, wrong, extra, name, log)
+        elif is_external_link(d, o):
             links.append(o)
         elif d and d.current.template in KEEP_TEMPLATES:
             found.append(d)
@@ -742,7 +708,7 @@ def build_item_ids_for_section(page: Page, name, original: List[Item], data: Ful
             wrong.append(d)
         elif d and d.master.non_canon and not name.startswith("Non-canon") and d.master.target != "Star Tours: The Adventures Continue" and not page.title().endswith("/LEGO"):
             non_canon.append(d)
-        elif "{{Hyperspace" in o.original and name == "Appearances":
+        elif "{{Hyperspace" in o.original and name == "Appearances":  # Hyperspace relisting of Appearances entries
             if d and d.master.template == "Hyperspace":
                 found.append(d)
             else:
@@ -866,24 +832,15 @@ def build_new_external_links(page: Page, original: List[Item], data: FullListDat
     return FinishedSection("==External links==", 0, "\n".join(f.strip() for f in found)), unknown, wrong
 
 
-def is_product_page(u: str):
-    return "/product/" in u or "/products/" in u or "/previews/" in u or u.startswith("books/") or u.startswith("comics/")
-
-
-def build_new_section(name, section: SectionItemIds, mode: str, dates: list, canon: bool, include_date: bool, log: bool,
-                      use_index: bool, mismatch: list, both_continuities: set, unknown_final: list,
-                      collapse_audiobooks: bool) -> Tuple[FinishedSection, List[ItemId]]:
-    if section is None:
-        return FinishedSection(name, 0, ""), []
-
+def compile_found(section: SectionItemIds, mode, canon):
     source_names = {}
     urls = {}
-    by_original_index = {o.current.index: o for o in section.found if o.current.index is not None}
     missing = []
     previous = None
     group = []
     new_found = []
     i = 0
+
     for o in section.found:
         i += 1
         if o.current.target:
@@ -926,6 +883,18 @@ def build_new_section(name, section: SectionItemIds, mode: str, dates: list, can
             group.append(o)
     if group:
         missing.append((previous, group))
+
+    return new_found, group, missing, source_names
+
+
+def build_new_section(name, section: SectionItemIds, mode: str, dates: list, canon: bool, include_date: bool, log: bool,
+                      use_index: bool, mismatch: list, both_continuities: set, unknown_final: list,
+                      collapse_audiobooks: bool) -> Tuple[FinishedSection, List[ItemId]]:
+    if section is None:
+        return FinishedSection(name, 0, ""), []
+
+    by_original_index = {o.current.index: o for o in section.found if o.current.index is not None}
+    new_found, group, missing, source_names = compile_found(section, mode, canon)
 
     found = handle_sorting(mode, new_found, missing, canon, use_index=use_index, log=log)
 
@@ -982,7 +951,7 @@ def build_new_section(name, section: SectionItemIds, mode: str, dates: list, can
                 final_items.append(c)
                 new_text.append(zt)
             if ct:
-                new_text.append("".join("}" for i in range(ct)))
+                new_text.append("".join("}" for _ in range(ct)))
         else:
             zt = o.current.original if o.use_original_text else o.master.original
             if o.current.subset:
@@ -1009,6 +978,7 @@ def build_new_section(name, section: SectionItemIds, mode: str, dates: list, can
                     d += f"{{{{SeriesListing{nl if o.master.non_canon else sl}}}}} "
             elif o.current.unknown or o.master.unknown:
                 d += f"{{{{UnknownListing{sl}}}}} "
+
             if d == "<!-- Unknown -->" and "{{Hyperspace" in zt and "/member/fiction" in zt:
                 d = ""
             zn = f"*{d}{zt}"
@@ -1064,11 +1034,6 @@ def build_date_text(o: ItemId, include_date):
         return '<!-- Unknown -->'
 
 
-def sort_tuple(a: Tuple[ItemId, ItemId]):
-    b, c = a
-    return b.current.original
-
-
 def handle_sorting(mode, new_found: List[ItemId], missing: List[Tuple[ItemId, List[ItemId]]], canon: bool, use_index: bool, log: bool):
     if mode == UNCHANGED:
         found = new_found
@@ -1107,10 +1072,6 @@ def handle_sorting(mode, new_found: List[ItemId], missing: List[Tuple[ItemId, Li
         start += reversed(jtc)
 
     return start + found + end
-
-
-def strip_paranthetical(t):
-    return t.split("(novel", 1)[0].split("(2015", 1)[0].strip()
 
 
 def compare_partial_dates(o: str, d1: str, d2: str, mode: str):

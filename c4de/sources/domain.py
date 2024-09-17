@@ -99,7 +99,8 @@ class Item:
         return self.date is not None and (self.date.startswith("1") or self.date.startswith("2") or self.date == "Current" or self.date.startswith("Cancel"))
 
     def match_expected(self):
-        return not self.non_canon and not self.unlicensed and not self.from_extra and not self.reprint and self.has_date() and not self.future
+        return (not self.non_canon and not self.unlicensed and not self.from_extra and not self.reprint
+                and self.has_date() and not self.future and "Jedi Temple Challenge" not in self.original)
 
     def full_id(self):
         x = self.unique_id()
