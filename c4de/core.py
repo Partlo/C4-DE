@@ -755,16 +755,26 @@ class C4DE_Bot(commands.Bot):
         pages = [i for i in self.appearances.no_legends_index if i.target not in skip]
 
         ex_rpg = [c.title() for c in Category(self.site, "Category:West End Games adventure supplements").articles()]
-        main, rpg = [], []
+        ex_fiction = [p.title() for p in Category(self.site, "Category:Legends short stories").articles(recurse=True)]
+        main, fiction, rpg = [], [], []
         for x in pages:
-            if x.target in ex_rpg or x.template in ["WEGCite", "DarkStryder", "Journal", "GamerCite", "LivingForce", "WizCite", "WizardsCite", "FFG", "FFGXW"]:
+            if x.target in ex_fiction:
+                fiction.append(f"#{x.date}: {x.original}")
+            elif x.target in ex_rpg:
+                rpg.append(f"#{x.date}: {x.original}")
+            elif x.template in ["WEGCite", "DarkStryder", "Journal", "GamerCite", "LivingForce", "WizCite", "WizardsCite", "FFG", "FFGXW", "DoD"]:
                 rpg.append(f"#{x.date}: {x.original}")
                 # rpg.append(f"#{x.date}: {x.timeline or 'N/A'}: {x.original}")
             else:
                 main.append(f"#{x.date}: {x.original}")
                 # main.append(f"#{x.date}: {x.timeline or 'N/A'}: {x.original}")
 
-        new_text = "\n".join(main) + "\n\n==RPG==\n" + "\n".join(rpg)
+        nt = ["\n".join(main)]
+        if fiction:
+            nt.append("==Short stories==\n" + "\n".join(fiction))
+        if rpg:
+            nt.append("==RPG==\n" + "\n".join(rpg))
+        new_text = "\n\n".join(nt)
         if new_text != text:
             page.put(new_text, "Recording items missing from the Legends media timeline", botflag=False)
 

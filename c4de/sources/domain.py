@@ -24,7 +24,8 @@ class Item:
     def __init__(self, original: str, mode: str, is_app: bool, *, invalid=False, target: str = None, text: str = None,
                  parent: str = None, template: str = None, url: str = None, issue: str = None, subset: str=None,
                  card: str = None, special=None, collapsed=False, format_text: str = None, no_issue=False,
-                 full_url: str=None, check_both=False, date=""):
+                 full_url: str=None, check_both=False, date="", archivedate=""):
+        self.master_page = None
         self.is_appearance = is_app
         self.tv = mode == "TV"
         self.mode = "General" if mode == "TV" else mode
@@ -70,17 +71,25 @@ class Item:
         self.override = None
         self.override_date = None
         self.future = False
+        self.archivedate = archivedate
 
         self.department = ''
         self.check_both = check_both
         self.self_cite = False
+        self.followed_redirect = False
+        self.original_target = None
         self.full_url = full_url
         self.alternate_url = None
         self.date_ref = None
         self.extra_date = None
         self.ab = ''
+        self.crp = False
         self.extra = ''
         self.bold = False
+        self.master_text = ''
+
+    def timeline_index(self, canon):
+        return self.canon_index if canon else self.legends_index
 
     def sort_index(self, canon):
         return ((self.canon_index if canon else self.legends_index) or self.index) or 100000

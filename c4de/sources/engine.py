@@ -25,9 +25,9 @@ def build_template_types(site):
 
     list_templates(site, "Category:StarWars.com citation templates", results, "Web")
     list_templates(site, "Category:Internet citation templates", results, "Web")
-    list_templates(site, "Category:Internet citation templates for use in External Links", results, "External", recurse=True)
-    list_templates(site, "Category:Social media citation templates", results, "External")
-    list_templates(site, "Category:Interwiki link templates", results, "External")
+    list_templates(site, "Category:Internet citation templates for use in External Links", results, "External")
+    list_templates(site, "Category:Social media citation templates", results, "Social")
+    list_templates(site, "Category:Commercial and product listing internet citation templates", results, "Commercial")
 
     list_templates(site, "Category:YouTube citation templates", results, "YT")
     list_templates(site, "Category:Card game citation templates", results, "Cards")
@@ -35,9 +35,7 @@ def build_template_types(site):
     list_templates(site, "Category:Toy citation templates", results, "Toys")
     list_templates(site, "Category:TV citation templates", results, "TV")
 
-    list_templates(site, "Category:Dating citation templates", results, "Dates")
-    list_templates(site, "Category:Canon dating citation templates", results, "Dates", recurse=True)
-    list_templates(site, "Category:Legends dating citation templates", results, "Dates", recurse=True)
+    list_templates(site, "Category:Interwiki link templates", results, "Interwiki")
 
     results["Magazine"] = {}
     for p in Category(site, "Category:Magazine citation templates").articles(recurse=True):
@@ -48,12 +46,21 @@ def build_template_types(site):
                 results["Magazine"][p.title(with_ns=False)] = x.group(1)
     results["Magazine"]["InsiderCite"] = "Star Wars Insider"
 
+    for k, cat in {"Nav": "Navigation templates", "Dates": "Dating citation templates"}.items():
+        results[k] = []
+        for p in Category(site, f"Category:{cat}").articles(recurse=True):
+            if p.title(with_ns=False).lower() in results:
+                print(f"ERROR: Duplicate template name: {p.title(with_ns=False).lower()}")
+            results[k].append(p.title(with_ns=False).lower())
+
     return results
 
 
+# TODO: Split Appearances category by type
+
 def load_appearances(site, log, canon_only=False, legends_only=False):
     data = []
-    pages = ["Appearances/Legends", "Appearances/Canon", "Appearances/Audiobook"]
+    pages = ["Appearances/Legends", "Appearances/Canon", "Appearances/Audiobook", "Appearances/Unlicensed"]
     other = ["Appearances/Extra", "Appearances/Collections"]
     if canon_only:
         pages = ["Appearances/Canon", "Appearances/Audiobook"]
@@ -235,6 +242,7 @@ def load_full_sources(site, types, log) -> FullListData:
                     x.target = x.card
                 if i['page'] == "Web/External":
                     x.external = True
+                x.master_page = f"Sources/{i['page']}"
                 x.canon = i.get('canon')
                 x.date = i['date']
                 x.future = x.date and (x.date == 'Future' or x.date > today)
@@ -281,7 +289,6 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
     no_legends_index = []
     for i in appearances:
         try:
-            unlicensed = "{{c|unlicensed" in i['item'].lower()
             non_canon = ("{{c|non-canon" in i['item'].lower() or "{{nc" in i['item'].lower())
             reprint = "{{c|republish" in i['item'].lower()
             c = ''
@@ -301,21 +308,30 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 ab = x2.group(0)
                 i['item'] = i['item'].replace(ab, '').strip()
 
+            x3 = re.search(" ?\{\{[Cc]rp}}", i['item'])
+            crp = False
+            if x3:
+                crp = True
+                i['item'] = i['item'].replace(x3.group(0), '').strip()
+
             x = extract_item(i['item'], True, i['page'], types, master=True)
             if x and (x.template == "Film" or x.template == "TCW") and x.unique_id() in unique_appearances:
+                both_continuities.add(x.target)
                 continue
 
             if x:
+                x.master_page = f"Appearances/{i['page']}"
                 x.canon = None if i.get('extra') else i.get('canon')
                 x.from_extra = i.get('extra')
                 x.date = i['date']
                 x.future = x.date and (x.date == 'Future' or x.date > today)
                 x.extra = c
                 x.alternate_url = alternate
-                x.unlicensed = unlicensed
+                x.unlicensed = "Unlicensed" in i['page']
                 x.non_canon = non_canon
                 x.reprint = reprint
                 x.ab = ab
+                x.crp = crp
                 x.abridged = "abridged audiobook" in x.original and "unabridged" not in x.original
                 x.audiobook = not ab and ("audiobook)" in x.original or x.target in AUDIOBOOK_MAPPING.values() or i['audiobook'])
                 full_appearances[x.full_id()] = x
@@ -479,7 +495,7 @@ def match_audiobook(target, data, canon, log):
         if issue in data:
             return data[issue]
 
-    for x in ["audiobook", "unabridged audiobook", "abridged audiobook", "script", "audio drama", "German audio drama"]:
+    for x in ["audiobook", "unabridged audiobook", "abridged audiobook", "audio", "script", "audio drama", "German audio drama"]:
         if target.replace(f"({x})", "(novelization)") in data:
             return data[target.replace(f"({x})", "(novelization)")]
         elif target.replace(f"({x})", "(novel)") in data:
@@ -509,7 +525,7 @@ ERAS = {
 def parse_new_timeline(page: Page, types):
     text = page.get()
     redirects = build_redirects(page)
-    text = fix_redirects(redirects, text, "Timeline", [])
+    text = fix_redirects(redirects, text, "Timeline", [], {})
     results = {}
     unique = {}
     index = 0
@@ -519,7 +535,7 @@ def parse_new_timeline(page: Page, types):
         if "==Unknown placement==" in line:
             unknown = {}
             continue
-        line = re.sub("<!--.*?-->", "", line).strip()
+        line = re.sub("<!--.*?-->", "", line).replace("†", "").strip()
 
         m = re.search("^\|(data-sort-value=.*?\|)?(?P<date>.*?)\|(\|?style.*?\||\|- ?class.*?\|)?[ ]*?[A-Z]+[ ]*?\n?\|.*?\|+[* ]*?(?P<full>['\"]*[\[{]+.*?[]}]+['\"]*) ?†?$", line)
         if m:

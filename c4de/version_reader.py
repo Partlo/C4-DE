@@ -23,7 +23,8 @@ def read_version_info(target_version) -> Tuple[str, str]:
                 text.append(line.strip())
 
     if not found:
-        raise Exception("Version info not found!")
+        pass
+        # raise Exception("Version info not found!")
 
     z = "\n".join(changes)
     return re.sub("(\r?\n)+", "\n", z), "\n".join(text)

@@ -416,7 +416,7 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
 DATES = {"Wookieepedia:Appearances/Legends": "1977",
          "Wookieepedia:Appearances/Canon": "2008",
          "Wookieepedia:Appearances/Audiobook": "2008",
-         "Wookieepedia:Appearances/Collection": "1994",
+         "Wookieepedia:Appearances/Collections": "1994",
          "Wookieepedia:Sources/Legends/General/1977-2000": "1977",
          "Wookieepedia:Sources/Legends/General/2000s": "2000",
          "Wookieepedia:Sources/Legends/General/2010s": "2010",

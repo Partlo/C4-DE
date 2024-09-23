@@ -160,3 +160,8 @@
 **Expanded Masterlist with [[Wookieepedia:Appearances/Collections]] and [[Wookieepedia:Sources/Web/External]] to provide coverage for the above
 **Fixed bugs with the Ab handling (thanks Lew and Imp lol)
 **Prep work for expanded External Links tracking
+*'''3.10.2''': September 23, 2024
+**Implemented External Links hierarchy according to the Layout Guide
+**Further refinement of External Links processing
+**Fixed bug with oldversion=1 sources
+**Additional cleanup tasks

@@ -59,22 +59,27 @@ def build_redirects(page: Page):
     results = {}
     for r in page.linkedPages():
         if is_redirect(r):
-            results[r.title()] = r.getRedirectTarget().title()
+            t = r.getRedirectTarget().title()
+            if not t.startswith("Category:"):
+                results[r.title()] = f":{t}" if t.startswith("Category:") else t
     return results
 
 
-def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, template=False):
+def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, remap, template=False):
     for r, t in redirects.items():
         if t in disambigs:
             log(f"Skipping disambiguation redirect {t}")
+            continue
+        elif t in remap:
+            log(f"Skipping remap redirect {t}")
             continue
         if f"[[{r.lower()}" in text.lower() or f"={r.lower()}" in text.lower():
             if section_name:
                 print(f"Fixing {section_name} redirect {r} to {t}")
             x = prepare_title(r)
-            text = re.sub("\[\[" + x + "\|('')?(" + prepare_title(t) + ")('')?]]", f"\\1[[\\2]]\\1", text)
-            text = re.sub("\[\[" + x + "(\|.*?)]]", f"[[{t}\\1]]", text)
-            text = re.sub("\[\[(" + x + ")]]([A-Za-z']*?)", f"[[{t}|\\1\\2]]", text)
+            text = re.sub("'?'?\[\[" + x + "\|('')?(" + prepare_title(t) + ")('')?]](s)?", f"\\1[[\\2]]\\1\\4", text)
+            text = re.sub("\[\[" + x + "(\|.*?)]](s)?", f"[[{t}\\1\\2]]", text)
+            text = re.sub("('')?\[\[(" + x + ")]]([A-Za-z']*)", f"[[{t}|\\1\\2\\3]]", text)
             if "/" not in r:
                 try:
                     text = re.sub("(\{\{(?!WP)[A-Za-z0-9]+\|)" + x + "}}", "\\1    " + t + "}}", text).replace("    ", "")
