@@ -33,6 +33,8 @@ class Item:
         self.invalid = invalid
         self.original = self.strip(original)
         self.target = self.strip(target)
+        if self.target:
+            self.target = self.target.replace("&ndash;", '–').replace('&mdash;', '—')
         if self.target and self.target[0].islower():
             self.target = f"{self.target[0].upper()}{self.target[1:]}"
         self.text = self.strip(text)
@@ -44,6 +46,7 @@ class Item:
         self.special = self.strip(special)
         self.subset = self.strip(subset)
         self.collapsed = collapsed
+        self.ff_data = {}
 
         if self.card:
             self.text = None
@@ -56,11 +59,13 @@ class Item:
         self.from_extra = None
         self.canon = None
         self.non_canon = False
+        self.both_continuities = False
         self.external = False
         self.unlicensed = False
         self.abridged = False
         self.audiobook = False
         self.reprint = False
+        self.has_content = False
 
         self.index = None
         self.canon_index = None
@@ -73,6 +78,7 @@ class Item:
         self.future = False
         self.archivedate = archivedate
 
+        self.parenthetical = ''
         self.department = ''
         self.check_both = check_both
         self.self_cite = False
@@ -117,8 +123,9 @@ class Item:
 
     def unique_id(self):
         s = ((self.card or '') + (self.special or '')) if (self.card or self.special) else None
-        t = (self.format_text or '')[:1] if self.target == "Database" else self.text
-        i = f"{self.mode}|{self.template}|{self.target}|{self.url}|{self.parent}|{self.issue}|{s}|{t}"
+        t = (self.format_text or self.text) if self.target == "Database" or self.target == "Puzzle" else self.text
+        x = f"i-{self.issue}" if "issue1" in self.original else self.issue
+        i = f"{self.mode}|{self.template}|{self.target}|{self.url}|{self.parent}|{x}|{s}|{t or ''}"
         return f"{i}|True" if self.old_version else i
 
     def can_self_cite(self):
@@ -129,6 +136,17 @@ class Item:
         elif self.template == "SW" and self.url.startswith("news/"):
             return True
         return self.self_cite
+
+
+REF_MAGAZINE_ORDERING = {
+    "BuildFalconCite": ["Starship Fact File", "Secrets of Spaceflight", "Guide to the Galaxy", "Build the Falcon"],
+    "BuildR2Cite": ["Building the Galaxy", "Droid Directory", "Understanding Robotics", "Build R2-D2"],
+    "BuildXWingCite": ["Creating a Starship Fleet", "Starfighter Aces", "Rocket Science", "Build the X-Wing"],
+    "BustCollectionCite": ["Star Wars Universe", "Behind the Cameras"],
+    "FalconCite": ["Starship Fact File", "Secrets of Spaceflight", "Guide to the Galaxy", "Build the Falcon"],
+    "HelmetCollectionCite": ["Databank A-Z", "Helmets", "Weapons & Uniforms", "Highlights of the Saga"],
+    "ShipsandVehiclesCite": ["History of the Ship", "Pilots and Crew Members", "Starships and Vehicles"],
+}
 
 
 class ItemId:
@@ -151,10 +169,17 @@ class ItemId:
         return self.current.override_date if self.current.override_date else self.master.date
 
     def sort_text(self):
-        if self.ref_magazine:
-            return f"{self.current.index} {self.current.original}"
+        if self.ref_magazine or self.current.template in REF_MAGAZINE_ORDERING:
+            z = REF_MAGAZINE_ORDERING.get(self.current.template) or []
+            x = z.index(self.current.target) if self.current.target in z else 9
+            return f"{self.current.index} {x} {self.current.original}"
         return (self.current.text if self.current.mode == "DB" else self.current.original).replace("''", "")\
             .replace('"', '').replace("|", " |").replace("}}", " }}").lower()
+
+
+class AnalysisConfig:
+    def __init__(self):
+        pass
 
 
 class FullListData:
@@ -227,3 +252,24 @@ class FinishedSection:
         self.name = name
         self.rows = rows
         self.text = text
+
+
+class NewComponents:
+    def __init__(self, apps: FinishedSection, nca: FinishedSection, src: FinishedSection, ncs: FinishedSection,
+                 links: FinishedSection):
+        self.apps = apps
+        self.nca = nca
+        self.src = src
+        self.ncs = ncs
+        self.links = links
+
+
+class UnknownItems:
+    def __init__(self, apps: list, src: list, final_items: list, links: list):
+        self.apps = apps
+        self.src = src
+        self.final_items = final_items
+        self.links = links
+
+    def found(self):
+        return len(self.apps) + len(self.src) + len(self.final_items) + len(self.links)

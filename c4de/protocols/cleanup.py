@@ -16,7 +16,7 @@ def archive_stagnant_senate_hall_threads(site, offset):
             continue
 
 
-def archive_senate_hall_thread(site, page, offset):
+def archive_senate_hall_thread(site, page: Page, offset):
     text = page.get()
     if "{{sticky}}" in text.lower():
         return
@@ -64,6 +64,9 @@ def remove_spoiler_tags_from_page(site, page, tv_dates, tv_default, limit=30, of
         else:
             fields.append(field.replace('}', ''))
 
+    if "Star Wars Outlaws" in fields and "time" not in named:
+        named['time'] = "2024-09-30"
+
     print(named, fields)
     if named.get("time") == "skip":
         return "skip"
@@ -74,11 +77,14 @@ def remove_spoiler_tags_from_page(site, page, tv_dates, tv_default, limit=30, of
         return "none"
     elif len(fields) <= 2:
         t = page.title() if len(fields) == 0 else fields[0]
-        time = datetime.strptime(named["time"], "%Y-%m-%d")
+        time_field = named["time"]
+        for i in [3, 6, 9, 11]:
+            time_field = time_field.replace(f"-{str(i).zfill(2)}-31", f"-{str(i + 1).zfill(2)}-01")
+        time = datetime.strptime(time_field, "%Y-%m-%d")
         if time > (datetime.now() + timedelta(hours=offset)):
             print(f"{page.title()}: Spoilers for {t} do not expire until {time}")
             return time
-        new_text = re.sub("\{\{(Movie|TV|Show)?[Ss]poiler.*?\}\}.*?\n", "", text)
+        new_text = re.sub("\{\{(Movie|TV|Show)?[Ss]poiler.*?}}.*?\n", "", text)
     else:
         time, new_text = remove_expired_fields(site, text, fields, named, limit=limit)
 
@@ -123,7 +129,7 @@ def remove_expired_fields(site, text, fields: list, named: dict, limit=30):
         new_text += f"|time={new_time}"
 
     new_text = "{{Spoiler|" + new_text + "}}\n"
-    return new_time, re.sub("\{\{Spoiler\|.*?\}\}.*?\n", new_text, text)
+    return new_time, re.sub("\{\{Spoiler\|.*?}}.*?\n", new_text, text)
 
 
 def remove_expired_tv_spoiler(text, fields: list, named: dict, tv_dates: dict, tv_default, limit=30):
@@ -280,7 +286,7 @@ def parse_archive(site, template):
     if not page.exists():
         return None
     archive = {}
-    for u, d in re.findall("\[['\"](.*?)['\"]\] ?= ?['\"]?([0-9]+)/?['\"]?", page.get()):
+    for u, d in re.findall("\[['\"](.*?)/?['\"]] ?= ?['\"]?(.*?)['\"]?", page.get()):
         archive[u.replace("\\'", "'")] = d
     return archive
 

@@ -15,7 +15,7 @@ def build_alternate(i: ItemId):
     x.index = i.master.index + 0.1
     x.canon_index = i.master.canon_index
     x.legends_index = i.master.legends_index
-    x.extra = i.master.extra
+    x.extra = i.current.extra
     return ItemId(x, x, False, False)
 
 
@@ -168,7 +168,7 @@ def create_index(site, page: Page, results: AnalysisResults, save: bool):
 
         zt = i.current.original if i.use_original_text else i.master.original
         xt = f"*{date_str}:{date_ref} {zt} {i.current.extra.strip()}".strip()
-        xt = re.sub("\|audiobook=1", "", re.sub(" ?\{\{Ab\|.*?\}\}", "", xt))
+        xt = re.sub("\|audiobook=1", "", re.sub(" ?\{\{Ab\|.*?}}", "", xt))
         if xt.count("{{") < xt.count("}}") and xt.endswith("}}}}"):
             xt = xt[:-2]
         lines.append(xt)
@@ -180,9 +180,9 @@ def create_index(site, page: Page, results: AnalysisResults, save: bool):
         lines.append("{{Reflist}}")
         if len(refs) > 20:
             lines.append("}}")
-    if re.search("\{\{Top\|(.*?\|)?real(\|.*?)?\}\}", page.get()):
+    if re.search("\{\{Top\|(.*?\|)?(real|rwm|rwp)(\|.*?)?}}", page.get()):
         lines.append("\n[[Category:Real-world index pages]]")
-    elif re.search("\{\{Top\|(.*?\|)?nc[cl](\|.*?)?\}\}", page.get()):
+    elif re.search("\{\{Top\|(.*?\|)?nc[cl](\|.*?)?}}", page.get()):
         lines.append("\n[[Category:Non-canon index pages]]")
     elif results.canon:
         lines.append("\n[[Category:Canon index pages]]")

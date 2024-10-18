@@ -5,9 +5,9 @@ from datetime import datetime
 
 from pywikibot import Site, Page, handle_args, pagegenerators, showDiff, input_choice
 
-from c4de.sources.analysis import build_new_text
+from c4de.sources.build import build_new_text
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, build_template_types
-from c4de.sources.infoboxer import list_all_infoboxes
+from c4de.sources.infoboxer import load_infoboxes
 
 
 STATUS = ["Category:Wookieepedia Featured articles", "Category:Wookieepedia Good articles", "Category:Wookieepedia Comprehensive articles"]
@@ -16,6 +16,7 @@ STATUS = ["Category:Wookieepedia Featured articles", "Category:Wookieepedia Good
 def analyze(*args):
     gen_factory = pagegenerators.GeneratorFactory()
     log = False
+    start_on = None
     for arg in handle_args(*args):
         if arg.startswith("-page:"):
             log = True
@@ -24,10 +25,10 @@ def analyze(*args):
 
     start = datetime.now()
     types = build_template_types(gen_factory.site)
-    appearances = load_full_appearances(gen_factory.site, types, log, log_match=False)
-    sources = load_full_sources(gen_factory.site, types, log)
+    appearances = load_full_appearances(gen_factory.site, types, False, log_match=False)
+    sources = load_full_sources(gen_factory.site, types, False)
     remap = load_remap(gen_factory.site)
-    infoboxes = list_all_infoboxes(gen_factory.site)
+    infoboxes = load_infoboxes(gen_factory.site)
     duration = datetime.now() - start
     print(f"Loaded {len(appearances.unique)} appearances and {len(sources.unique)} sources in {duration.seconds} seconds")
 
@@ -112,6 +113,8 @@ def analyze(*args):
                 always = True
             else:
                 continue
+        except KeyboardInterrupt as e:
+            quit()
         except Exception as e:
             traceback.print_exc()
             print(e)

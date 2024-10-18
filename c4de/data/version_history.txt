@@ -165,3 +165,7 @@
 **Further refinement of External Links processing
 **Fixed bug with oldversion=1 sources
 **Additional cleanup tasks
+*'''3.11.0''': October 18, 2024
+**Source Engine improvements as part of the mainspace sweep
+**RSS improvements
+**Other stuff I can't remember because I'm sleepy

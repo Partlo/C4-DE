@@ -4,13 +4,13 @@ from datetime import datetime
 
 from pywikibot import Page, Category
 from c4de.sources.domain import Item, FullListData
-from c4de.sources.determine import extract_item, KOTOR, FILMS
+from c4de.sources.determine import extract_item, TEMPLATE_MAPPING
 from c4de.common import build_redirects, fix_redirects
 
 
 SUBPAGES = [
     "Canon/General", "Legends/General/1977-2000", "Legends/General/2000s", "Legends/General/2010s", "Canon/Toys",
-    "Legends/Toys", "CardSets", "Soundtracks"
+    "Legends/Toys", "CardSets", "Soundtracks", "Canon/RefMagazine", "Legends/RefMagazine"
 ]
 
 
@@ -21,6 +21,7 @@ def list_templates(site, cat, data, template_type, recurse=False):
 
 
 def build_template_types(site):
+    now = datetime.now()
     results = {"db": "DB", "databank": "DB", "swe": "DB", "External": []}
 
     list_templates(site, "Category:StarWars.com citation templates", results, "Web")
@@ -53,6 +54,8 @@ def build_template_types(site):
                 print(f"ERROR: Duplicate template name: {p.title(with_ns=False).lower()}")
             results[k].append(p.title(with_ns=False).lower())
 
+    duration = datetime.now() - now
+    print(f"Loaded {len(results)} templates in {duration.seconds} seconds")
     return results
 
 
@@ -61,7 +64,7 @@ def build_template_types(site):
 def load_appearances(site, log, canon_only=False, legends_only=False):
     data = []
     pages = ["Appearances/Legends", "Appearances/Canon", "Appearances/Audiobook", "Appearances/Unlicensed"]
-    other = ["Appearances/Extra", "Appearances/Collections"]
+    other = ["Appearances/Extra", "Appearances/Series", "Appearances/Collections"]
     if canon_only:
         pages = ["Appearances/Canon", "Appearances/Audiobook"]
     elif legends_only:
@@ -105,6 +108,9 @@ def load_source_lists(site, log):
                 #         skip = True
                 #         bad.append(o)
 
+                if "Toys" in sp:
+                    line = re.sub("(\|text=.*?)(\|set=.*?)\|", "\\2\\1|", line)
+                    line = re.sub("(\|a?l?t?link=.*?) ?(\|pack=.*?)(\|.*?)?}}", "\\2\\1\\3}}", line)
                 x = re.search("[*#](?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (D: )?(?P<t>.*?)( {{C\|d: .*?}})?$", line)
                 if x:
                     i += 1
@@ -225,29 +231,39 @@ def load_full_sources(site, types, log) -> FullListData:
     target_sources = {}
     both_continuities = set()
     today = datetime.now().strftime("%Y-%m-%d")
+    ff_data = {}
     for i in sources:
         try:
-            unlicensed = "{{c|unlicensed" in i['item'].lower()
+            unlicensed = "{{c|unlicensed" in i['item'].lower() or "{{un}}" in i['item'].lower()
             non_canon = ("{{c|non-canon" in i['item'].lower() or "{{nc" in i['item'].lower())
             reprint = "{{c|republish" in i['item'].lower()
             c = ''
-            if "{{C|" in i['item']:
-                cr = re.search("({{C\|([Aa]bridged|[Rr]epublished|[Uu]nlicensed|[Nn]on[ -]?canon)}})", i['item'])
+            if "{{C|" in i['item'] or "{{nc" in i['item'].lower() or "{{un}}" in i['item'].lower():
+                cr = re.search("({{C\|([Aa]bridged|[Rr]epublished|[Uu]nlicensed|[Nn]on[ -]?canon)}}|{{[Uu]n}}|{{[Nn]cs?}})", i['item'])
                 if cr:
                     c = ' ' + cr.group(1)
                     i['item'] = i['item'].replace(cr.group(1), '').strip()
+            parenthetical = ''
+            if "|p=" in i['item']:
+                pr = re.search("\|p=(.*?)(\|.*?)?}}", i['item'])
+                if pr:
+                    parenthetical = pr.group(1)
+                    i['item'] = i['item'].replace(f"|p={parenthetical}", "").strip()
             x = extract_item(i['item'], False, i['page'], types, master=True)
             if x and not x.invalid:
                 if x.template == "SWCT" and not x.target:
                     x.target = x.card
                 if i['page'] == "Web/External":
                     x.external = True
-                x.master_page = f"Sources/{i['page']}"
+                x.master_page = i['page']
                 x.canon = i.get('canon')
                 x.date = i['date']
                 x.future = x.date and (x.date == 'Future' or x.date > today)
                 x.index = i['index']
                 x.extra = c
+                x.parenthetical = parenthetical
+                if (x.mode == "Cards" or x.mode == "Toys") and parenthetical:
+                    x.target = f"{x.target} ({parenthetical})"
                 x.unlicensed = unlicensed
                 x.non_canon = non_canon
                 x.reprint = reprint
@@ -265,11 +281,17 @@ def load_full_sources(site, types, log) -> FullListData:
                         d = set(i.canon for i in target_sources[x.target])
                         if True in d and False in d:
                             both_continuities.add(x.target)
+                if x.ff_data:
+                    if x.issue not in ff_data:
+                        ff_data[x.issue] = []
+                    ff_data[x.issue].append(x)
             else:
                 print(f"Unrecognized: {i['item']}")
                 count += 1
         except Exception as e:
             print(f"{e}: {i['item']}")
+    for k, v in ff_data.items():
+        target_sources[f"FFData|{k}"] = v
     print(f"{count} out of {len(sources)} unmatched: {count / len(sources) * 100}")
     return FullListData(unique_sources, full_sources, target_sources, set(), both_continuities)
 
@@ -307,6 +329,13 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
             if x2:
                 ab = x2.group(0)
                 i['item'] = i['item'].replace(ab, '').strip()
+            has_content = "(content)" in i['item'] and "Collections" in i['page']
+            # if i['page'] == "Appearances/Collections":
+            #     ct = re.search("\(content: \[\[(.*?)(\|.*?)?]]", i['item'])
+            #     if ct:
+            #         has_content = ct.group(1)
+            #     i['item'] = re.sub(" ?\(content: \[\[.*?]]\)", "", i['item'])
+            i['item'] = i['item'].replace(" (content)", "")
 
             x3 = re.search(" ?\{\{[Cc]rp}}", i['item'])
             crp = False
@@ -315,21 +344,23 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 i['item'] = i['item'].replace(x3.group(0), '').strip()
 
             x = extract_item(i['item'], True, i['page'], types, master=True)
-            if x and (x.template == "Film" or x.template == "TCW") and x.unique_id() in unique_appearances:
+            if x and (x.template == "Film" or x.template == "TCW" or x.target == "Star Wars: The Clone Wars (film)") and x.unique_id() in unique_appearances:
+                x.both_continuities = True
                 both_continuities.add(x.target)
                 continue
 
             if x:
-                x.master_page = f"Appearances/{i['page']}"
+                x.master_page = i['page']
                 x.canon = None if i.get('extra') else i.get('canon')
                 x.from_extra = i.get('extra')
                 x.date = i['date']
                 x.future = x.date and (x.date == 'Future' or x.date > today)
                 x.extra = c
                 x.alternate_url = alternate
-                x.unlicensed = "Unlicensed" in i['page']
+                x.unlicensed = "Unlicensed" in i['page'] or "unlicensed" in c
                 x.non_canon = non_canon
                 x.reprint = reprint
+                x.has_content = has_content
                 x.ab = ab
                 x.crp = crp
                 x.abridged = "abridged audiobook" in x.original and "unabridged" not in x.original
@@ -370,6 +401,14 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                         d = set(i.canon for i in target_appearances[x.target])
                         if True in d and False in d:
                             both_continuities.add(x.target)
+                # if has_content:
+                #     canon_index = match_audiobook(x.has_content, canon, False, False)
+                #     if canon_index is not None:
+                #         x.canon_index = canon_index + 0.5
+                #     legends_index = match_audiobook(x.has_content, legends, False, False)
+                #     if legends_index is not None:
+                #         x.legends_index = legends_index + 0.5
+
             else:
                 print(f"Unrecognized: {i['item']}")
                 count += 1
@@ -405,15 +444,15 @@ SPECIAL_INDEX_MAPPING = {
     "Forces of Destiny: Daring Adventures: Volumes 1 & 2": "Forces of Destiny: Daring Adventures: Volume 1",
     "The Rise of Skywalker Adaptation 1": "Star Wars: The Rise of Skywalker Graphic Novel Adaptation",
     "Dark Lord (German audio drama)": "Dark Lord: The Rise of Darth Vader",
-    "The Phantom Menace (German audio drama)": FILMS["1"],
-    "Attack of the Clones (German audio drama)": FILMS["2"],
-    "Revenge of the Sith (German audio drama)": FILMS["3"],
-    "A New Hope (German audio drama)": FILMS["4"],
-    "The Empire Strikes Back (German audio drama)": FILMS["5"],
-    "Return of the Jedi (German audio drama)": FILMS["6"],
-    "The Force Awakens (German audio drama)": FILMS["7"],
-    "The Last Jedi (German audio drama)": FILMS["8"],
-    "The Rise of Skywalker (German audio drama)": FILMS["9"],
+    "The Phantom Menace (German audio drama)": TEMPLATE_MAPPING["Film"]["1"],
+    "Attack of the Clones (German audio drama)": TEMPLATE_MAPPING["Film"]["2"],
+    "Revenge of the Sith (German audio drama)": TEMPLATE_MAPPING["Film"]["3"],
+    "A New Hope (German audio drama)": TEMPLATE_MAPPING["Film"]["4"],
+    "The Empire Strikes Back (German audio drama)": TEMPLATE_MAPPING["Film"]["5"],
+    "Return of the Jedi (German audio drama)": TEMPLATE_MAPPING["Film"]["6"],
+    "The Force Awakens (German audio drama)": TEMPLATE_MAPPING["Film"]["7"],
+    "The Last Jedi (German audio drama)": TEMPLATE_MAPPING["Film"]["8"],
+    "The Rise of Skywalker (German audio drama)": TEMPLATE_MAPPING["Film"]["9"],
     "The High Republic – Attack of the Hutts 1": "The High Republic (2021) 5",
     "Cartel Market": "Star Wars: The Old Republic",
     "Heir to the Empire: The 20th Anniversary Edition": "Heir to the Empire",
@@ -490,8 +529,8 @@ def match_audiobook(target, data, canon, log):
         return data[SPECIAL_INDEX_MAPPING[target]]
     elif target.startswith("Star Wars: Jedi Temple Challenge") and "Star Wars: Jedi Temple Challenge" in data:
         return data["Star Wars: Jedi Temple Challenge"] + int(target.replace("Star Wars: Jedi Temple Challenge - Episode ", "")) / 100
-    elif target in KOTOR.values():
-        issue = next(f"Knights of the Old Republic {k}" for k, v in KOTOR.items() if v == target)
+    elif target in TEMPLATE_MAPPING["KOTORbackups"].values():
+        issue = next(f"Knights of the Old Republic {k}" for k, v in TEMPLATE_MAPPING["KOTORbackups"].items() if v == target)
         if issue in data:
             return data[issue]
 

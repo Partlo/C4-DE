@@ -361,7 +361,7 @@ def check_unlimited(site, url, feed_url, cache: Dict[str, List[str]]):
     script = soup.find("script", id="__NEXT_DATA__")
     if script and any(s and "dehydratedState" in s for s in script.contents):
         target = next(s for s in script.contents if s and "dehydratedState" in s)
-        data = json.loads(target)
+        data = json.loads(str(target))
         articles = data["props"]["pageProps"]["dehydratedState"]["queries"][0]["state"]["data"]["data"]
         for a in articles:
             u = f"{url}/articles/{a['attributes']['slug']}"
@@ -374,6 +374,44 @@ def check_unlimited(site, url, feed_url, cache: Dict[str, List[str]]):
 
             results.append({"site": site, "title": t, "url": u, "content": "", "date": d})
             cache[site].append(u)
+
+    return results
+
+
+def check_hunters_news(site, url, feed_url, cache: Dict[str, List[str]]):
+    x = None
+    try:
+        x = requests.get(feed_url, timeout=15).text
+    except Exception as e:
+        error_log(e)
+    if not x:
+        return []
+
+    soup = BeautifulSoup(x, "html.parser")
+    results = []
+
+    for article in reversed(soup.find_all("div", class_="news-clip-box__box")):
+        link = article.find("a")
+        if not link:
+            continue
+        u = url + link.get('href')
+        if site not in cache:
+            cache[site] = []
+        if cache[site] and u in cache[site]:
+            continue
+
+        t = article.find("span", class_="font-display")
+        r = requests.get(u)
+        title = check_title_formatting(r.text, "<h[12] .*?<span.*?outline-heading__inner\">(.*?)</span>", t.text if t else "Unknown")
+        d = article.find("span", class_="block")
+        d = d.text if d else None
+        try:
+            d = datetime.strptime(d, "%d.%m.%Y").strftime("%Y-%m-%d")
+        except Exception:
+            pass
+
+        results.append({"site": site, "title": title, "url": u, "content": "", "date": d})
+        cache[site].append(u)
 
     return results
 
@@ -525,6 +563,8 @@ def check_title_formatting(text, title_regex, title):
     m = re.search(title_regex, text)
     if m:
         title = m.group(1)
+    title = re.sub(r"<[ie]m?>[ \n]*</[ie]m?>", "", title)
+    title = re.sub(r"<[ie]m?><[ie]m?>(.*?)</[ie]m?></[ie]m?>", r"''\1''", title)
     title = re.sub(r"<em.*?>(.*?)( )?</em>", r"''\1''\2", title)
     title = re.sub(r"<i( .*?)?>(.*?)( )?</i>", r"''\2''\3", title)
     title = re.sub(r"<span[^>]*?italic.*?>(.*?)( )?</span>", r"''\1''\2", title)
@@ -615,14 +655,14 @@ def check_policy(site: Site):
     return updates
 
 
-def check_consensus_track_duration(site: Site, offset):
-    category = Category(site, "Consensus track")
+def check_consensus_duration(site: Site, offset):
     result = {}
-
     now = datetime.now()
-    for page in category.articles():
-        created = page.oldest_revision['timestamp']
-        result[page.title()] = now - (created - timedelta(hours=offset))
+    for c in ["Consensus track", "Trash compactor nominations"]:
+        category = Category(site, c)
+        for page in category.articles():
+            created = page.oldest_revision['timestamp']
+            result[page.title()] = now - (created - timedelta(hours=offset))
 
     return result
 
@@ -674,7 +714,7 @@ def build_site_map(full: bool):
                         continue
                     elif "/databank/" in loc.text and re.search("/databank/[a-z0-9-]+-all", loc.text):
                         continue
-                    elif loc.text.endswith("-gallery"):
+                    elif loc.text.endswith("-gallery") or loc.text.endswith("news/contributor"):
                         continue
                     results.add(loc.text.split("starwars.com/", 1)[-1])
     return results

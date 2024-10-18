@@ -19,7 +19,7 @@ def list_all_infoboxes(site):
 
 def extract_release_date(title, text):
     date_strs = []
-    m = re.search("\|(publish date|publication date|first aired|airdate|start date|release date|released|published)=(?P<d1>.*?)(?P<r1><ref.*?)?\n(\*(?P<d2>.*?)(?P<r2><ref.*?)?\n)?(\*(?P<d3>.*?)(?P<r3><ref.*?)?\n)?", text)
+    m = re.search("\|(publish date|publication date|first aired|airdate|start date|first date|release date|released|published)=(?P<d1>.*?)(?P<r1><ref.*?)?\n(\*(?P<d2>.*?)(?P<r2><ref.*?)?\n)?(\*(?P<d3>.*?)(?P<r3><ref.*?)?\n)?", text)
     if m:
         for i in range(1, 4):
             if m.groupdict()[f"d{i}"]:
@@ -50,7 +50,7 @@ def extract_release_date(title, text):
 SOURCE_INFOBOXES = ["activity book", "magazine", "magazine article", "magazine department", "music", "toy line",
                     "reference book", "web article"]
 APP_INFOBOXES = ["comic book", "comic story", "video game", "graphic novel", "audiobook", "short story"]
-EXTRA_INFOBOXES = ["comic series", "comic story arc", "book series", "television series", "television season"]
+SERIES_INFOBOXES = ["comic series", "comic story arc", "book series", "television series", "television season"]
 APP_CATEGORIES = ["Future audiobooks", "Future films", "Future short stories", "Future novels",
                   "Future television episodes"]
 
@@ -69,8 +69,8 @@ def determine_app_or_source(text, category, infobox):
         return "Collections"
     elif infobox.lower() == "card game" or infobox == "miniatures game":
         return "CardSets"
-    elif infobox.lower() in EXTRA_INFOBOXES:
-        return "Extra"
+    elif infobox.lower() in SERIES_INFOBOXES:
+        return "Series"
     elif infobox.lower() in APP_INFOBOXES:
         return "Appearances"
     elif infobox.lower() in SOURCE_INFOBOXES:
@@ -336,6 +336,8 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
     types = build_template_types(site)
     extra_page = Page(site, "Wookieepedia:Appearances/Extra")
     extra = parse_page(extra_page, types)
+    series_page = Page(site, "Wookieepedia:Appearances/Series")
+    series = parse_page(series_page, types)
     l_app_page = Page(site, "Wookieepedia:Appearances/Legends")
     l_apps = parse_page(l_app_page, types)
     c_app_page = Page(site, "Wookieepedia:Appearances/Canon")
@@ -357,7 +359,7 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
 
     master_data = {"Legends Appearances": l_apps, "Canon Appearances": c_apps, "Audiobooks": audio,
                    "Collections": cols, "Legends-2010s Sources": l_srcs1, "Legends-2000s Sources": l_srcs2,
-                   "Legends-1900s Sources": l_srcs3, "Canon Sources": c_srcs, "Extra": extra, "CardSets": sets}
+                   "Legends-1900s Sources": l_srcs3, "Canon Sources": c_srcs, "Series": series, "Extra": extra, "CardSets": sets}
 
     new_items = {"Audiobooks": [], "Collections": collections}
     changed_dates = {}
@@ -408,6 +410,7 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
     build_new_page(l_src_page3, l_srcs3, "Sources|True|3", new_items, changed_dates, True, save)
 
     build_new_page(extra_page, extra, "Extra", new_items, changed_dates, True, save)
+    build_new_page(series_page, series, "Series", new_items, changed_dates, True, save)
     build_new_page(audio_page, audio, "Audiobooks", new_items, changed_dates, True, save)
     build_new_page(col_page, cols, "Collections", new_items, changed_dates, True, save)
     build_new_page(sets_page, sets, "CardSets", new_items, changed_dates, True, save)
@@ -514,7 +517,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
     post = re.search("==Post-([0-9]+)==", page.get())
     post = post.group(1) if post else None
     post_found = False
-    for f in sorted(final, key=lambda a: (" abridged" not in a[0], a[1], (a[2] or 200), a[3], a[0])):
+    for f in sorted(final, key=lambda a: ("German" not in a[0] if key == "Audiobooks" else False, " abridged" not in a[0], a[1], (a[2] or 200), a[3], a[0])):
         txt, d, i = f[0], f[1], f[2]
         if use_sections:
             if d.startswith("Cancel"):
@@ -528,6 +531,10 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
                 if not section:
                     section = "Abridged"
                     lines.append("\n==Abridged==")
+            elif key == "Audiobooks" and "German" in txt:
+                if not section:
+                    section = "German"
+                    lines.append("\n==German==")
             elif d.startswith("1") or d.startswith("2"):
                 if post_found:
                     pass
@@ -535,7 +542,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
                     start_date = None
                     section = d[:4]
                     lines.append(f"\n=={section}==")
-                elif start_date and (not section or section == "Abridged"):
+                elif start_date and (not section or section == "Abridged" or section == "German"):
                     section = f"Pre-{start_date}"
                     lines.append(f"=={section}==")
                 elif not start_date and d[:4] != section:

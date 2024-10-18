@@ -6,7 +6,8 @@ from typing import Dict
 import urllib3.exceptions
 import waybackpy
 from waybackpy.exceptions import WaybackError, TooManyRequestsError
-from pywikibot import Page, Category
+
+from pywikibot import Page, Category, showDiff, pagegenerators
 from datetime import datetime
 
 from c4de.data.nom_data import NOM_TYPES
@@ -55,20 +56,35 @@ def is_redirect(page):
         return False
 
 
-def build_redirects(page: Page):
+def build_redirects(page: Page, manual: str = None):
     results = {}
+    pages, pagenames = [], []
     for r in page.linkedPages():
+        pages.append(r)
+        pagenames.append(r.title())
+    if manual:
+        for _, x, _ in re.findall("\[\[(?!(Category:|File:))(.*?)(\|.*?)?]]", manual):
+            if x not in pagenames:
+                pages.append(Page(page.site, x))
+                pagenames.append(x)
+
+    for r in pages:
         if is_redirect(r):
             t = r.getRedirectTarget().title()
-            if not t.startswith("Category:"):
+            if not t.startswith("Category:") and "(disambiguation)" not in t:
                 results[r.title()] = f":{t}" if t.startswith("Category:") else t
     return results
 
 
-def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, remap, template=False):
+def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, remap, file=False, appearances: dict=None, sources: dict=None):
     for r, t in redirects.items():
-        if t in disambigs:
-            log(f"Skipping disambiguation redirect {t}")
+        if t in disambigs or "(disambiguation)" in t:
+            if "{{otheruses" in text.lower():
+                text = re.sub("(\{\{[Oo]theruses(.*?)\|)title=" + prepare_title(r) + "((\|.*?)?}})", f"\\1{t.replace(' (disambiguation', '')}\\3", text)
+                text = re.sub("(\{\{[Oo]theruses(.*?)\|)\[\[" + prepare_title(r) + "((\|.*?)?]].*?}})", f"\\1[[{t}\\3", text)
+                text = re.sub("(\{\{[Yy]oumay\|.*?)\[\[" + prepare_title(r) + "(\|.*?)?]](.*?}})", f"\\1[[{t}\\2]]\\3", text)
+            else:
+                log(f"Skipping disambiguation redirect {t}")
             continue
         elif t in remap:
             log(f"Skipping remap redirect {t}")
@@ -77,9 +93,19 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
             if section_name:
                 print(f"Fixing {section_name} redirect {r} to {t}")
             x = prepare_title(r)
-            text = re.sub("'?'?\[\[" + x + "\|('')?(" + prepare_title(t) + ")('')?]](s)?", f"\\1[[\\2]]\\1\\4", text)
-            text = re.sub("\[\[" + x + "(\|.*?)]](s)?", f"[[{t}\\1\\2]]", text)
-            text = re.sub("('')?\[\[(" + x + ")]]([A-Za-z']*)", f"[[{t}|\\1\\2\\3]]", text)
+            y = appearances.get(t) if appearances else (sources.get(t) if sources else None)
+            if r == "Star Wars Galaxies: An Empire Divided":
+                y = appearances.get(r) if appearances else (sources.get(r) if sources else y)
+
+            if file and y:
+                text = re.sub("'?'?\[\[" + x + "(\|.*?)?]]'?'?", y[0].original, text)
+            else:
+                text = re.sub("'?'?\[\[" + x + "\|('')?(" + prepare_title(t) + ")('')?]](s)?", f"\\1[[\\2]]\\1\\4", text)
+                text = re.sub("\[\[" + x + "(\|.*?)]](s)?", f"[[{t}\\1\\2]]", text)
+                if file:
+                    text = re.sub("\[\[(" + x + ")(s)?]]", f"[[{t}]]\\2", text)
+                else:
+                    text = re.sub("('')?\[\[(" + x + ")]]([A-Za-z']*)", f"[[{t}|\\1\\2\\3]]", text)
             if "/" not in r:
                 try:
                     text = re.sub("(\{\{(?!WP)[A-Za-z0-9]+\|)" + x + "}}", "\\1    " + t + "}}", text).replace("    ", "")
@@ -90,6 +116,28 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
             text = text.replace(f"story={r}|", f"story={t}|")
             text = text.replace(f"story={r}" + "}", f"story={t}|" + "}")
     return text
+
+
+def do_final_replacements(new_txt, replace):
+    while replace:
+        new_txt2 = re.sub("(\[\[(?!File:)[^\[\]|\r\n]+)&ndash;", "\\1–",
+                          re.sub("(\[\[(?!File:)[^\[\]|\n]+)&mdash;", "\\1—", new_txt))
+        new_txt2 = re.sub("(\[\[(?!File:)[^\[\]|\r\n]+–[^\[\]|\r\n]+\|[^\[\]|\r\n]+)&ndash;", "\\1–",
+                          re.sub("(\[\[(?!File:)[^\[\]|\n]+—[^\[\]|\r\n]+\|[^\[\]|\r\n]+)&mdash;", "\\1—", new_txt2))
+        new_txt2 = re.sub("\[\[(.*?)\|\\1(.*?)]]", "[[\\1]]\\2", new_txt2)
+        x = re.search("\[\[([A-Z])(.*?)\|(.\\2)(.*?)]]", new_txt2)
+        if x and x.group(3).lower().startswith(x.group(1).lower()):
+            new_txt2 = new_txt2.replace(x.group(0), f"[[{x.group(3)}]]{x.group(4)}")
+        if "'''s " in new_txt2:
+            new_txt2 = re.sub("( ''[^'\n]+'')'s ", "\\1{{'s}} ", new_txt2)
+        if "{{1st|" in new_txt2 or "{{1stm|" in new_txt2 or "{{1stID|" in new_txt2 or "{{1stp|" in new_txt2:
+            new_txt2 = re.sub("(\[\[(.*?)( \(.*?\))?(\|.*?)?]].*?{{1st[A-z]*?(\|.*?)?\|\[\[\\2 \((.*?audiobook)\)\|).*?]]}}", "\\1\\6]]}}", new_txt2)
+            new_txt2 = re.sub("(ook=(.*?)( \(.*?\))?(\|.*?)?}}.*?{{1st[A-z]*?(\|.*?)?\|\[\[\\2 \((.*?audiobook)\)\|).*?]]}}", "\\1\\6]]}}", new_txt2)
+        if "{{more" in new_txt2.lower():
+            new_txt2 = re.sub("(\{\{[Mm]ore[ _]sources}})\n+}}", "}}\n\\1", new_txt2)
+        replace = new_txt != new_txt2
+        new_txt = new_txt2
+    return new_txt
 
 
 def determine_title_format(page_title, text) -> str:
@@ -137,7 +185,7 @@ def determine_nominator(page: Page, nom_type: str, nom_page: Page) -> str:
 
 
 def extract_nominator(nom_page: Page, page_text: str = None):
-    match = re.search("Nominated by.*?(User:|U\|)(.*?)[\]\|\}/]", page_text or nom_page.get())
+    match = re.search("Nominated by.*?(User:|U\|)(.*?)[]|}/]", page_text or nom_page.get())
     if match:
         return match.group(2).replace("_", " ").strip()
     else:
@@ -187,7 +235,7 @@ def compare_category_and_page(site, nom_type):
             break
         elif start_found:
             if line.count("[[") > 1:
-                for r in re.findall("\[\[(.*?)[\|\]]", line):
+                for r in re.findall("\[\[(.*?)[|\]]", line):
                     if r.replace("\u200e", "") in page_articles:
                         dupes.append(r.replace("\u200e", ""))
                     else:
@@ -276,3 +324,16 @@ def archive_url(url, force_new=False, timeout=30):
         return False, err_msg or str(e)
 
     return False, err_msg or ""
+
+
+def dash_redirects():
+    gen_factory = pagegenerators.GeneratorFactory()
+    gen_factory.handle_arg("-ns:0")
+    gen_factory.handle_arg("-start:*")
+    gener = None
+    gener = gen_factory.getCombinedGenerator(gener)
+    gen = pagegenerators.PreloadingGenerator(gener, groupsize=50)
+    found = []
+    for page in gen:
+        if "-" in page.title() or "–" in page.title() or "—":
+            found.append(page.title())

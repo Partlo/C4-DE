@@ -6,10 +6,11 @@ import sys
 import traceback
 
 import discord.errors
+import requests
 
 import time
 from urllib import parse
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from datetime import datetime, timedelta
 from discord import Message, Game, Intents, HTTPException
 from discord.abc import GuildChannel
@@ -20,7 +21,7 @@ import ssl
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
-from pywikibot import Site, Page, Category, showDiff
+from pywikibot import Site, Page, Category
 from pywikibot.exceptions import NoPageError, LockedPageError, OtherPageSaveError
 from c4de.common import log, error_log, archive_url
 from c4de.data.filenames import *
@@ -30,18 +31,21 @@ from c4de.protocols.cleanup import archive_stagnant_senate_hall_threads, remove_
     check_preload_for_missing_fields, check_infobox_category, clean_up_archive_categories
 from c4de.protocols.edelweiss import run_edelweiss_protocol, calculate_isbns_for_all_pages
 from c4de.protocols.rss import check_rss_feed, check_latest_url, check_wookieepedia_feeds, check_sw_news_page, \
-    check_review_board_nominations, check_policy, check_consensus_track_duration, check_user_rights_nominations, \
+    check_review_board_nominations, check_policy, check_consensus_duration, check_user_rights_nominations, \
     check_blog_list, check_ea_news, check_unlimited, check_ubisoft_news, compare_site_map, handle_site_map, \
-    check_target_url, compile_tracked_urls
+    check_target_url, compile_tracked_urls, check_title_formatting, check_hunters_news
 
-from c4de.sources.analysis import analyze_target_page, get_analysis_from_page
+from c4de.sources.analysis import get_analysis_from_page
+from c4de.sources.build import analyze_target_page
 from c4de.sources.domain import FullListData
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, build_template_types
 from c4de.sources.index import create_index
-from c4de.sources.infoboxer import list_all_infoboxes
+from c4de.sources.infoboxer import list_all_infoboxes, InfoboxInfo, reload_infoboxes, load_infoboxes
 from c4de.sources.updates import get_future_products_list, handle_results, search_for_missing
 
 import logging
+
+# noinspection PyUnresolvedReferences
 logging.getLogger("discord").setLevel(logging.WARN)
 
 
@@ -187,7 +191,7 @@ class C4DE_Bot(commands.Bot):
         if not self.ready:
             self.check_membership_nominations.start()
             self.check_rights_nominations.start()
-            self.check_consensus_track_statuses.start()
+            self.check_consensus_statuses.start()
             self.check_policy.start()
             self.check_bot_requests.start()
             self.check_deleted_pages.start()
@@ -209,7 +213,6 @@ class C4DE_Bot(commands.Bot):
             # for message in await self.text_channel("star-wars-news").history(limit=25).flatten():
             #     if message.id == 1264945242130616444:
             #         await message.edit(content=message.content.replace("", "Battle of Jakku"))
-
 
     # noinspection PyTypeChecker
     def text_channel(self, name) -> TextChannel:
@@ -251,7 +254,9 @@ class C4DE_Bot(commands.Bot):
     commands = {
         "is_reload_command": "handle_reload_command",
         "is_single_preload_command": "handle_single_preload_command",
-        "is_preload_command": "handle_preload_command"
+        "is_preload_command": "handle_preload_command",
+        "is_check_target_command": "handle_target_url_check",
+        "is_record_url_command": "handle_record_source_command"
     }
 
     @staticmethod
@@ -455,6 +460,9 @@ class C4DE_Bot(commands.Bot):
             f"- **@C4-DE spoiler** - removes expired spoiler notices from articles (runs at 6 AM CST)",
             f"- **@C4-DE check preloads** - checks all infobox preloads for missing fields, and also reports fields"
             f" missing from InfoboxParamCheck",
+            f"- **@C4-DE record Template:<name> <url>** - records a given URL in the Masterlist. The Template: prefix"
+            f" is not required for recognized sites such as SW.com, and a custom date can be given with (YYYY-MM-DD) "
+            f"following the URL."
             f"- **@C4-DE check preload for Template:<template>** - checks a particular infobox and its preload",
             f"- **@C4-DE update preload for Template:<template>** - checks a particular infobox and its preload, and"
             f" updates the preload with the missing parameters. Does not change the parameters in InfoboxParamCheck.",
@@ -588,6 +596,10 @@ class C4DE_Bot(commands.Bot):
         if not data:
             raise Exception("Cannot load RSS data")
         self.project_data = data
+
+    def reload_infoboxes(self):
+        log("Loading infoboxes")
+        self.infoboxes = reload_infoboxes(self.site)
 
     async def handle_initial_redirect_request(self, message: Message, command: dict):
         redirect_name = command['redirect']
@@ -724,7 +736,7 @@ class C4DE_Bot(commands.Bot):
             for p in Category(self.site, "Category:Wookieepedia Sources Project").articles():
                 self.source_rev_ids[p.title()] = p.latest_revision_id
             self.templates = build_template_types(self.site)
-            self.infoboxes = list_all_infoboxes(self.site)
+            self.infoboxes = load_infoboxes(self.site)
             self.disambigs = [p.title() for p in Category(self.site, "Disambiguation pages").articles() if "(disambiguation)" not in p.title()]
             self.appearances = load_full_appearances(self.site, self.templates, False)
             self.sources = load_full_sources(self.site, self.templates, False)
@@ -799,15 +811,22 @@ class C4DE_Bot(commands.Bot):
         return None
 
     @staticmethod
-    def is_analyze_source_command(message: Message):
-        match = re.search("(analy[zs]e|build|check) sources? (for |on )?(?P<article>.*?)(?P<date> with dates?)?(?P<text> (by|and|with) text)?$", message.content)
+    def is_check_target_command(message: Message):
+        match = re.search("check target URL: <?(?P<url>.*?starwars\.com.*?)>?$", message.content)
         if match:
             return match.groupdict()
         return None
 
     @staticmethod
-    def is_target_url_check_command(message: Message):
-        match = re.search("check url: <?(?P<url>http.*?)>?$", message.content)
+    def is_record_url_command(message: Message):
+        match = re.search("record( URL)?( (with )?[Tt]emplate:(?P<template>.*?))?: <?(?P<url>(https?.*?//)?[^ \n]+?)>?( \((?P<date>[0-9X-]+)\))?$", message.content)
+        if match:
+            return match.groupdict()
+        return None
+
+    @staticmethod
+    def is_analyze_source_command(message: Message):
+        match = re.search("(analy[zs]e|build|check) sources? (for |on )?(?P<article>.*?)(?P<date> with dates?)?(?P<text> (by|and|with) text)?$", message.content)
         if match:
             return match.groupdict()
         return None
@@ -991,6 +1010,7 @@ class C4DE_Bot(commands.Bot):
             return
         log("Scheduled Operation: Calculating ISBNs")
         calculate_isbns_for_all_pages(self.site)
+        self.reload_infoboxes()
 
     @tasks.loop(hours=1)
     async def check_edelweiss(self):
@@ -1105,11 +1125,11 @@ class C4DE_Bot(commands.Bot):
             f.writelines(json.dumps(self.rights_cache, indent=4))
 
     @tasks.loop(minutes=30)
-    async def check_consensus_track_statuses(self):
-        log("Checking status of active Consensus Track votes")
-        cts = check_consensus_track_duration(self.site, self.timezone_offset)
+    async def check_consensus_statuses(self):
+        log("Checking status of active Consensus Track and Trash Compactor votes")
+        cts_and_tcs = check_consensus_duration(self.site, self.timezone_offset)
         overdue = []
-        for page, duration in cts.items():
+        for page, duration in cts_and_tcs.items():
             if page in self.overdue_cts or duration.days >= 14:
                 overdue.append(page)
 
@@ -1227,7 +1247,7 @@ class C4DE_Bot(commands.Bot):
             for f in files:
                 try:
                     if f.title() not in self.files_to_be_renamed:
-                        x = re.search("\{\{FTBR\|.*\|(.*?)\}\}", f.get())
+                        x = re.search("\{\{FTBR\|.*\|(.*?)}}", f.get())
                         new_name_text = f" to **{x.group(1)}**" if x else ""
                         m = f"⚠️ **{f.lastNonBotUser()}** requested [**{f.title()}**](<{f.full_url()}>) be renamed{new_name_text}\n"
                         msg = await self.text_channel(ADMIN_REQUESTS).send(m)
@@ -1264,7 +1284,6 @@ class C4DE_Bot(commands.Bot):
             f.writelines(json.dumps({k: v[-50:] for k, v in self.internal_rss_cache.items()}, indent=4))
 
     async def handle_target_url_check(self, message: Message, command: dict):
-
         if "starwars.com" not in command['url']:
             await message.add_reaction(EXCLAMATION)
             return
@@ -1272,7 +1291,6 @@ class C4DE_Bot(commands.Bot):
         messages_to_post = []
         templates = []
         new_db_entries = []
-        updated_db_entries = {}
 
         urls = compile_tracked_urls(self.site)
         exists, ep_urls, ep_db = check_target_url(command['url'], urls)
@@ -1310,6 +1328,85 @@ class C4DE_Bot(commands.Bot):
         await message.add_reaction(THUMBS_UP)
         return
 
+    async def handle_record_source_command(self, message: Message, command: dict):
+        await message.add_reaction(TIMER)
+        try:
+            template = command["template"]
+            target_site = None
+            for site, data in self.rss_data["sites"].items():
+                if template and data["template"] == template:
+                    target_site = site
+                elif data["baseUrl"].split("//", 1)[-1].split("www.", 1)[-1] in command["url"]:
+                    target_site = site
+                    template = template or data["template"]
+
+            if not template:
+                return None, "ERROR: Cannot determine template"
+            site_data = self.rss_data["sites"].get(target_site)
+            if not site_data:
+                u = command['url'].split('//', 1)[-1].split('/', 1)[0]
+                site_data = {"baseUrl": f"https://{u}", "template": template, "emoji": "HanShrug", "channels": [], "title": "(.*?)"}
+
+            r = requests.get(command["url"])
+            if r.status_code != 200:
+                await message.add_reaction(EXCLAMATION)
+                return
+            title = check_title_formatting(r.text, site_data.get("title", "(.*?)"), "")
+            m = {"site": target_site, "title": title, "url": r.url, "content": "", "date": command.get('date') or datetime.now().strftime('%Y-%m-%d')}
+
+            archive = self.parse_archive("Databank" if target_site == "Databank" else template)
+            msg, d, template = await self.prepare_new_rss_message(m, site_data["baseUrl"], site_data, False, archive)
+
+            if target_site == "Databank":
+                templates, new_db_entries = [], [template]
+            else:
+                templates, new_db_entries = [(d, template)], []
+
+            await self.report_rss_results(msg, templates, {}, new_db_entries)
+            await message.add_reaction(THUMBS_UP)
+        except Exception as e:
+            traceback.print_exc()
+            error_log(type(e), e.args)
+            await message.add_reaction(EXCLAMATION)
+        await message.remove_reaction(TIMER, self.user)
+
+    async def check_sites(self, site, site_data, messages_to_post, db_archive, templates, new_db_entries, custom_date=None):
+        db = None
+        if site == "StarWars.com":
+            messages = check_sw_news_page(site_data["url"], self.external_rss_cache["sites"], site_data["title"])
+            other, db = compare_site_map(self.site, ["The Acolyte"], messages,
+                                         self.external_rss_cache["sites"]["StarWars.com"])
+            messages += other
+        elif site_data["template"] == "Unlimitedweb":
+            messages = check_unlimited(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
+        elif site_data["template"] == "AMGweb":
+            messages = check_blog_list(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
+        elif site_data["template"] == "Ubisoft":
+            messages = check_ubisoft_news(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
+        elif site_data["template"] == "Hunters":
+            messages = check_hunters_news(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
+        elif site_data["template"] == "EA":
+            messages = check_ea_news(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
+        elif site_data.get("url"):
+            messages = check_latest_url(site_data["url"], self.external_rss_cache["sites"], site, site_data["title"])
+        else:
+            messages = check_rss_feed(site_data["rss"], self.external_rss_cache["sites"], site, site_data["title"],
+                                      site_data.get("nonSW", False))
+
+        archive = self.parse_archive(site_data["template"])
+        for m in reversed(messages):
+            try:
+                msg, d, template = await self.prepare_new_rss_message(
+                    m, site_data["baseUrl"], site_data, False, db_archive if m['site'] == "Databank" else archive)
+                messages_to_post += msg
+                if m["site"] == "Databank":
+                    new_db_entries.append(template)
+                else:
+                    templates.append((custom_date or d, template))
+            except Exception as e:
+                error_log(type(e), e.args)
+        return db
+
     @tasks.loop(minutes=10)
     async def check_external_rss(self):
         log("Checking external RSS feeds")
@@ -1322,41 +1419,11 @@ class C4DE_Bot(commands.Bot):
         updated_db_entries = {}
         for site, site_data in self.rss_data["sites"].items():
             try:
-                if site == "StarWars.com":
-                    messages = check_sw_news_page(site_data["url"], self.external_rss_cache["sites"], site_data["title"])
-                    other, updated_db_entries = compare_site_map(self.site, ["The Acolyte"], messages, self.external_rss_cache["sites"]["StarWars.com"])
-                    messages += other
-                elif site_data["template"] == "Unlimitedweb":
-                    messages = check_unlimited(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
-                elif site_data["template"] == "AMGweb":
-                    messages = check_blog_list(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
-                elif site_data["template"] == "Ubisoft":
-                    messages = check_ubisoft_news(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
-                elif site_data["template"] == "EA":
-                    messages = check_ea_news(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
-                elif site_data.get("url"):
-                    messages = check_latest_url(site_data["url"], self.external_rss_cache["sites"], site, site_data["title"])
-                else:
-                    messages = check_rss_feed(site_data["rss"], self.external_rss_cache["sites"], site, site_data["title"],
-                                              site_data.get("nonSW", False))
-
-                archive = self.parse_archive(site_data["template"])
-                for m in reversed(messages):
-                    try:
-                        msg, d, template = await self.prepare_new_rss_message(
-                            m, site_data["baseUrl"], site_data, False, db_archive if m['site'] == "Databank" else archive)
-                        messages_to_post += msg
-                        print(d, template)
-                        if m["site"] == "Databank":
-                            new_db_entries.append(template)
-                        else:
-                            templates.append((d, template))
-                    except Exception as e:
-                        error_log(type(e), e.args)
+                updated_db_entries = await self.check_sites(site, site_data, messages_to_post, db_archive, templates, new_db_entries)
+                if updated_db_entries:
+                    break
             except Exception as e:
                 error_log(f"Encountered {type(e)} while checking RSS for {site}", e)
-            if updated_db_entries:
-                break
 
         for site, site_data in self.rss_data["YouTube"].items():
             archive = self.parse_archive(site_data["template"])
@@ -1395,20 +1462,27 @@ class C4DE_Bot(commands.Bot):
 
     async def update_web_sources(self, templates: list):
         nd = datetime.now().strftime("%Y-%m-%d")
-        try:
-            page = Page(self.site, f"Wookieepedia:Sources/Web/{datetime.now().year}")
+        by_year = {}
+        for d, t in templates:
+            dy = (d or nd).split("-")[0]
+            if dy not in by_year:
+                by_year[dy] = []
+            by_year[dy].append((d, t))
+        for y, tx in by_year.items():
             try:
-                text = page.get()
-            except NoPageError:
-                text = "{{Wookieepedia:Sources/Web/Header}}"
-            for d, t in templates:
-                x = t.split("|archivedate=", 1)[0].rsplit("|", 1)[0]
-                if f"{x}|" not in text and f"{x}}}" not in text:
-                    text += f"\n*{d or nd}: {t}"
-            if text != page.get():
-                page.put(text, "Adding new sources", botflag=False)
-        except Exception as e:
-            await self.report_error(f"RSS: Saving sources", type(e), e)
+                page = Page(self.site, f"Wookieepedia:Sources/Web/{y}")
+                try:
+                    text = page.get()
+                except NoPageError:
+                    text = "{{Wookieepedia:Sources/Web/Header}}"
+                for d, t in tx:
+                    x = t.split("|archivedate=", 1)[0].rsplit("|", 1)[0]
+                    if f"{x}|" not in text and f"{x}}}" not in text:
+                        text += f"\n*{d or nd}: {t}"
+                if text != page.get():
+                    page.put(text, "Adding new sources", botflag=False)
+            except Exception as e:
+                await self.report_error(f"RSS: Saving sources", type(e), e)
 
     async def handle_updated_db_entries(self, updated_db_entries):
         new_archivedates = {}
@@ -1453,7 +1527,7 @@ class C4DE_Bot(commands.Bot):
             for e in all_entries:
                 t = re.search("{{Databank\|.*?\|(.*?)(\|.*?)?}}", e)
                 txt = t.group(1).lower().replace("'", "").replace('"', "")
-                items.append((txt, e))
+                items.append((f"{txt}", e))
 
             new_text = "\n".join(x for i, x in sorted(items))
             if new_text != page.get():
@@ -1484,6 +1558,8 @@ class C4DE_Bot(commands.Bot):
             t = f"New Video on the official {m['site']} YouTube channel"
         elif m["site"] == "Databank":
             t = f"New Entry on the Databank"
+        elif not m['site']:
+            t = f"New Article"
         else:
             s = (m['site'].split('.com:')[0] + '.com') if '.com:' in m['site'] else m['site']
             t = f"New Article on {s}"
@@ -1540,6 +1616,8 @@ class C4DE_Bot(commands.Bot):
             result = f"{x}|url={url}|text={t}"
         if archivedate:
             result += f"|archivedate={archivedate}"
+        if "arena-news" in result:
+            result = re.sub("Hunters\|url=.*?arena-news/", "ArenaNews|url=", result)
         return "{{" + result + "}}"
 
     def get_archive_for_site(self, template):
@@ -1551,12 +1629,17 @@ class C4DE_Bot(commands.Bot):
     def add_urls_to_archive(self, template, new_url, archivedate):
         if template == "ThisWeek" or template == "HighRepublicShow":
             template = "SWYouTube"
+        if template == "Hunters" and "arena-news" in new_url:
+            new_url = new_url.replace("arena-news/", "")
+            template = "ArenaNews"
         page = self.get_archive_for_site(template)
         text = page.get()
         if page.title().startswith("Template"):
             new_text = self.build_archive_template_text(text, new_url, archivedate)
         else:
             new_text = self.build_archive_module_text(text, new_url, archivedate)
+        if not new_text:
+            return
         new_text = "\n".join(new_text)
         if text == new_text:
             return
@@ -1572,7 +1655,7 @@ class C4DE_Bot(commands.Bot):
         if not page.exists():
             return None
         archive = {}
-        for u, d in re.findall("\[['\"](.*?)['\"]\] ?= ?['\"]?([0-9]+)/?['\"]?", page.get()):
+        for u, d in re.findall("\[['\"](.*?)['\"]] ?= ?['\"]?([0-9]+)/?['\"]?", page.get()):
             archive[u.replace("\\'", "'")] = d
         return archive
 

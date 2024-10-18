@@ -1,5 +1,8 @@
+import json
 from datetime import datetime
 from typing import Dict
+
+from c4de.common import error_log
 from pywikibot import Page, Category
 import re
 
@@ -10,6 +13,13 @@ class InfoboxInfo:
         self.optional = optional
         self.combo = combo
         self.groups = groups
+
+    def json(self):
+        return {"params": self.params, "optional": self.optional, "combo": self.combo, "groups": self.groups}
+
+    @staticmethod
+    def from_json(json):
+        return InfoboxInfo(json['params'], json['optional'], json['combo'], json['groups'])
 
 
 def parse_infobox_category(cat: Category, results):
@@ -24,6 +34,28 @@ def parse_infobox_category(cat: Category, results):
     for c in cat.subcategories():
         if c.title(with_ns=False) != "Preload templates":
             parse_infobox_category(c, results)
+
+
+def reload_infoboxes(site):
+    infoboxes = list_all_infoboxes(site)
+    with open("c4de/data/infoboxes.json", "w") as f:
+        as_json = {k: v.json() for k, v in infoboxes.items() if v}
+        f.writelines(json.dumps(as_json))
+    print(f"Loaded {len(infoboxes)} infoboxes from cache")
+    return infoboxes
+
+
+def load_infoboxes(site):
+    try:
+        with open("c4de/data/infoboxes.json", "r") as f:
+            infoboxes = json.loads("\n".join(f.readlines()))
+            results = {}
+            for k, v in infoboxes.items():
+                results[k] = InfoboxInfo.from_json(v)
+            return results
+    except Exception as e:
+        error_log(f"Encountered {type(e)} while loading infobox JSON", e)
+        return reload_infoboxes(site)
 
 
 def list_all_infoboxes(site) -> Dict[str, InfoboxInfo]:
