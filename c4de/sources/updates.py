@@ -187,6 +187,13 @@ def parse_line(line, i, p: Page, types, full, unique, target):
                 ab = x2.group(0)
                 item = item.replace(ab, '').strip()
 
+            parenthetical = ''
+            if "|p=" in item:
+                pr = re.search("\|p=(.*?)(\|.*?)?}}", item)
+                if pr:
+                    parenthetical = pr.group(1)
+                    item = item.replace(f"|p={parenthetical}", "").strip()
+
             x = extract_item(item, False, p.title(), types, master=True)
             if x:
                 if x.template == "SWCT" and not x.target:
@@ -196,6 +203,9 @@ def parse_line(line, i, p: Page, types, full, unique, target):
                 x.canon = "/Canon" in p.title()
                 x.date = date
                 x.extra = f"{ab} {c}".strip()
+                x.parenthetical = parenthetical
+                if (x.mode == "Cards" or x.mode == "Toys") and parenthetical:
+                    x.target = f"{x.target} ({parenthetical})"
                 full[x.full_id()] = x
                 unique[x.unique_id()] = x
                 if x.target:

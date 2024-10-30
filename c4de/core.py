@@ -115,6 +115,7 @@ class C4DE_Bot(commands.Bot):
         self.emoji_storage = {}
 
         self.ready = False
+        self.should_archive = False
 
         self.report_dm = None
 
@@ -819,7 +820,7 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def is_record_url_command(message: Message):
-        match = re.search("record( URL)?( (with )?[Tt]emplate:(?P<template>.*?))?: <?(?P<url>(https?.*?//)?[^ \n]+?)>?( \((?P<date>[0-9X-]+)\))?$", message.content)
+        match = re.search("record( URL)?( (with )?[Tt]emplate:(?P<template>.*?))?:? <?(?P<url>(https?.*?//)?[^ \n]+?)>?( \((?P<date>[0-9X-]+)\))?$", message.content)
         if match:
             return match.groupdict()
         return None
@@ -1133,13 +1134,28 @@ class C4DE_Bot(commands.Bot):
             if page in self.overdue_cts or duration.days >= 14:
                 overdue.append(page)
 
+        remove = []
+        skip = []
+        for m, x in self.admin_messages.items():
+            if x.startswith("Forum:CT:"):
+                if x in overdue:
+                    skip.append(x)
+                else:
+                    remove.append(m)
+
         for page in overdue:
-            if page in self.overdue_cts:
+            if page in self.overdue_cts or page in skip:
                 continue
             link = self.prepare_link(page)
             message = f"**{page}** has been open for 14 days and can now be archived\n<{SITE_URL}/{link}>"
-            await self.text_channel(ADMIN_REQUESTS).send(message)
+            msg = await self.text_channel(ADMIN_REQUESTS).send(message)
+            self.admin_messages[msg.id] = page
         self.overdue_cts = overdue
+        for i in remove:
+            self.admin_messages.pop(i)
+
+        with open(ADMIN_CACHE, "w") as f:
+            f.writelines(json.dumps(self.admin_messages, indent=4))
 
     CHANNEL_FILTERS = {
         "the-high-republic": ["high republic"],
@@ -1232,6 +1248,8 @@ class C4DE_Bot(commands.Bot):
 
             if update:
                 log(f"Could not find messages {update} in #{ADMIN_REQUESTS} to update")
+            with open(ADMIN_CACHE, "w") as f:
+                f.writelines(json.dumps(self.admin_messages, indent=4))
         except TimeoutError:
             pass
         except Exception as e:
@@ -1256,6 +1274,8 @@ class C4DE_Bot(commands.Bot):
                     await self.report_error(f"FTBR: {f.title()}", type(e), e)
 
             self.files_to_be_renamed = [f.title() for f in files]
+            with open(ADMIN_CACHE, "w") as f:
+                f.writelines(json.dumps(self.admin_messages, indent=4))
         except Exception as e:
             await self.report_error(f"FTBR: {e}", type(e), e)
 
@@ -1280,6 +1300,8 @@ class C4DE_Bot(commands.Bot):
             except Exception as e:
                 await self.report_error(f"RSS: Deletion: {title}", type(e), e)
 
+        with open(ADMIN_CACHE, "w") as f:
+            f.writelines(json.dumps(self.admin_messages, indent=4))
         with open(INTERNAL_RSS_CACHE, "w") as f:
             f.writelines(json.dumps({k: v[-50:] for k, v in self.internal_rss_cache.items()}, indent=4))
 
@@ -1489,7 +1511,7 @@ class C4DE_Bot(commands.Bot):
         z = ["The following Databank entries were listed on an Episode Guide page, and may have been updated:"]
         for d, t in updated_db_entries.items():
             try:
-                success, archivedate = archive_url(f"https://starwars.com/{d}", force_new=True)
+                success, archivedate = archive_url(f"https://starwars.com/{d}", force_new=True, enabled=self.should_archive)
                 if success:
                     new_archivedates[d.replace("databank/", "")] = archivedate
             except Exception as e:
@@ -1551,7 +1573,7 @@ class C4DE_Bot(commands.Bot):
             success, include_archivedate, archivedate = True, False, archive[target]
         else:
             log(f"Archiving URL: {m['url']}")
-            success, archivedate = archive_url(m["url"], timeout=60 if youtube else 30)
+            success, archivedate = archive_url(m["url"], timeout=60 if youtube else 30, enabled=self.should_archive)
             include_archivedate = success
 
         if youtube:

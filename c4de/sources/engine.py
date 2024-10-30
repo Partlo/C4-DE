@@ -139,11 +139,11 @@ def load_source_lists(site, log):
                 #         line = f"{line}{lines[o + 1]}"
                 #         skip = True
                 #         bad.append(o)
-                x = re.search("\*(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?) ?†?( {{C\|(original|alternate): (?P<a>.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
+                x = re.search("\*(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?) ?†?( {{C\|(original|alternate): (?P<a>.*?)}})?( {{C\|int: (?P<i>.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
                 if x:
                     i += 1
                     data.append({"index": i, "page": f"Web/{y}", "date": x.group("d"), "item": x.group("t"),
-                                 "alternate": x.group("a"), "ref": x.group("r")})
+                                 "alternate": x.group("a"), "int": x.group("i"), "ref": x.group("r")})
                 else:
                     print(f"Cannot parse line: {line}")
             if log:
@@ -186,7 +186,7 @@ def load_source_lists(site, log):
         x = re.search("[#*](?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?) ?†?( {{C\|(original|alternate): (?P<a>.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
         if x:
             i += 1
-            data.append({"index": i, "page": "Web/External", "date": x.groupdict()['d'], "item": x.groupdict()['t'], "alternate": x.groupdict()['a']})
+            data.append({"index": i, "page": "Web/External", "date": x.group('d'), "item": x.group('t'), "alternate": x.group('a')})
         else:
             print(f"Cannot parse line: {line}")
     if log:
@@ -199,11 +199,11 @@ def load_source_lists(site, log):
         for line in p.get().splitlines():
             if "/Header}}" in line:
                 continue
-            x = re.search("\*((?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? )?(?P<t>{{.*?)$", line)
+            x = re.search("\*((?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? )?(?P<t>{{.*?)( {{C\|(original|alternate): (?P<a>.*?)}})?$", line)
             if x:
                 i += 1
                 data.append({"index": 0, "page": f"Web/{template}", "date": date, "item": x.group("t"),
-                             "extraDate": x.group("d"), "ref": x.group("r")})
+                             "extraDate": x.group("d"), "ref": x.group("r"), "alternate": x.group('a')})
             else:
                 print(f"Cannot parse line: {line}")
         if log:
@@ -216,9 +216,9 @@ def load_remap(site) -> dict:
     p = Page(site, "Wookieepedia:Appearances/Remap")
     results = {}
     for line in p.get().splitlines():
-        x = re.search("\[\[(.*?)(\|.*?)?]].*?\[\[(.*?)(\|.*?)?]]", line)
+        x = re.search("\[\[(.*?)(\|.*?)?]].*?[\[{]+(.*?)(\|.*?)?[]}]+", line)
         if x:
-            results[x.group(1)] = x.group(3)
+            results[x.group(1)] = "Star Wars Galaxies" if x.group(3) == "GalaxiesNGE" else x.group(3)
     print(f"Loaded {len(results)} remap names")
     return results
 
@@ -264,6 +264,8 @@ def load_full_sources(site, types, log) -> FullListData:
                 x.parenthetical = parenthetical
                 if (x.mode == "Cards" or x.mode == "Toys") and parenthetical:
                     x.target = f"{x.target} ({parenthetical})"
+                if i.get("int"):
+                    x.target = i["int"]
                 x.unlicensed = unlicensed
                 x.non_canon = non_canon
                 x.reprint = reprint
@@ -313,6 +315,9 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
         try:
             non_canon = ("{{c|non-canon" in i['item'].lower() or "{{nc" in i['item'].lower())
             reprint = "{{c|republish" in i['item'].lower()
+            is_source = False
+            if "{{C|source}}" in i['item']:
+                i['item'] = i['item'].replace("{{C|source}}", "").strip()
             c = ''
             alternate = ''
             ab = ''
@@ -323,7 +328,7 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                     i['item'] = i['item'].replace(cr.group(1), '').strip()
                 a = re.search("( {{C\|(original|alternate): (?P<a>.*?)}})", i['item'])
                 if a:
-                    alternate = a.groupdict()['a']
+                    alternate = a.group('a')
                     i['item'] = i['item'].replace(a.group(1), '').strip()
             x2 = re.search("\{\{[Aa]b\|.*?}}", i['item'])
             if x2:
@@ -358,6 +363,8 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 x.extra = c
                 x.alternate_url = alternate
                 x.unlicensed = "Unlicensed" in i['page'] or "unlicensed" in c
+                if is_source:
+                    x.is_appearance = False
                 x.non_canon = non_canon
                 x.reprint = reprint
                 x.has_content = has_content
@@ -365,11 +372,12 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 x.crp = crp
                 x.abridged = "abridged audiobook" in x.original and "unabridged" not in x.original
                 x.audiobook = not ab and ("audiobook)" in x.original or x.target in AUDIOBOOK_MAPPING.values() or i['audiobook'])
+                x.german_ad = x.target and (x.target in GERMAN_MAPPING or "German audio drama" in x.target)
                 full_appearances[x.full_id()] = x
                 unique_appearances[x.unique_id()] = x
                 if x.target:
-                    canon_index_expected = x.canon and x.match_expected() and not i['audiobook'] and x.target not in AUDIOBOOK_MAPPING.values() and x.target not in c_unknown
-                    legends_index_expected = not x.canon and x.match_expected() and not i['audiobook'] and x.target not in AUDIOBOOK_MAPPING.values() and x.target not in l_unknown
+                    canon_index_expected = x.canon and x.match_expected() and not i['audiobook'] and x.target not in AUDIOBOOK_MAPPING.values() and not x.german_ad and x.target not in c_unknown
+                    legends_index_expected = not x.canon and x.match_expected() and not i['audiobook'] and x.target not in AUDIOBOOK_MAPPING.values() and not x.german_ad and x.target not in l_unknown
 
                     o = increment(x)
                     canon_index = match_audiobook(x.target, canon, canon_index_expected, log_match)
@@ -474,7 +482,9 @@ AUDIOBOOK_MAPPING = {
     "The Prequel Trilogy Stories": "Star Wars Storybook Collection",
     "The Original Trilogy Stories": "Star Wars Storybook Collection",
     "Star Wars: Episode II Attack of the Clones (junior novelization)": "Star Wars: Episode II Attack of the Clones (junior novelization audiobook)",
+}
 
+GERMAN_MAPPING = {
     "Ambush": "The Clone Wars Episode 1 - Ambush / Rising Malevolence",
     "Rising Malevolence": "The Clone Wars Episode 1 - Ambush / Rising Malevolence",
     "Shadow of Malevolence": "The Clone Wars Episode 2 - Shadow of Malevolence / Destroy Malevolence",
@@ -518,7 +528,23 @@ AUDIOBOOK_MAPPING = {
     "The Zillo Beast Strikes Back": "The Clone Wars Episode 21 - The Zillo Beast Strikes Back / Death Trap",
     "Death Trap": "The Clone Wars Episode 21 - The Zillo Beast Strikes Back / Death Trap",
     "R2 Come Home": "The Clone Wars Episode 22 - R2 Come Home / Lethal Trackdown",
-    "Lethal Trackdown": "The Clone Wars Episode 22 - R2 Come Home / Lethal Trackdown"
+    "Lethal Trackdown": "The Clone Wars Episode 22 - R2 Come Home / Lethal Trackdown",
+    "The Young Jedi": "Young Jedi Adventures Episode 1 - The Young Jedi / Yoda's Mission / Nash's Race Day / The Lost Jedi Ship",
+    "Yoda's Mission": "Young Jedi Adventures Episode 1 - The Young Jedi / Yoda's Mission / Nash's Race Day / The Lost Jedi Ship",
+    "Nash's Race Day": "Young Jedi Adventures Episode 1 - The Young Jedi / Yoda's Mission / Nash's Race Day / The Lost Jedi Ship",
+    "The Lost Jedi Ship": "Young Jedi Adventures Episode 1 - The Young Jedi / Yoda's Mission / Nash's Race Day / The Lost Jedi Ship",
+    "Get Well Nubs": "Young Jedi Adventures Episode 2 - Get Well Nubs / The Junk Giant / Lys and the Snowy Mountain Rescue / Attack of the Training Droids",
+    "The Junk Giant": "Young Jedi Adventures Episode 2 - Get Well Nubs / The Junk Giant / Lys and the Snowy Mountain Rescue / Attack of the Training Droids",
+    "Lys and the Snowy Mountain Rescue": "Young Jedi Adventures Episode 2 - Get Well Nubs / The Junk Giant / Lys and the Snowy Mountain Rescue / Attack of the Training Droids",
+    "Attack of the Training Droids": "Young Jedi Adventures Episode 2 - Get Well Nubs / The Junk Giant / Lys and the Snowy Mountain Rescue / Attack of the Training Droids",
+    "Chapter 1: The Mandalorian": "The Mandalorian Episode 1 - The Mandalorian / The Child",
+    "Chapter 2: The Child": "The Mandalorian Episode 1 - The Mandalorian / The Child",
+    "Chapter 3: The Sin": "The Mandalorian Episode 2 - The Sin / Sanctuary",
+    "Chapter 4: Sanctuary": "The Mandalorian Episode 2 - The Sin / Sanctuary",
+    "Chapter 5: The Gunslinger": "The Mandalorian Episode 3 - The Gunslinger / The Prisoner",
+    "Chapter 6: The Prisoner": "The Mandalorian Episode 3 - The Gunslinger / The Prisoner",
+    "Chapter 7: The Reckoning": "The Mandalorian Episode 4 - The Reckoning / Redemption",
+    "Chapter 8: Redemption": "The Mandalorian Episode 4 - The Reckoning / Redemption",
 }
 
 

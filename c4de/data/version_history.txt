@@ -169,3 +169,7 @@
 **Source Engine improvements as part of the mainspace sweep
 **RSS improvements
 **Other stuff I can't remember because I'm sleepy
+*'''3.11.1''': October 30, 2024
+**Further Source Engine tweaks
+**Switch SW Unlimited RSS to an API
+**Suppressed duplicate CT reporting

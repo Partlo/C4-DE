@@ -3,7 +3,7 @@ import sys
 import traceback
 from datetime import datetime
 
-from pywikibot import Site, Page, handle_args, pagegenerators, showDiff, input_choice
+from pywikibot import Site, Page, handle_args, pagegenerators, showDiff, input_choice, Timestamp
 
 from c4de.sources.build import build_new_text
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, build_template_types
@@ -16,12 +16,28 @@ STATUS = ["Category:Wookieepedia Featured articles", "Category:Wookieepedia Good
 def analyze(*args):
     gen_factory = pagegenerators.GeneratorFactory()
     log = False
-    start_on = None
+    start_on, skip_start, skip_end, redo = None, None, None, None
+    include_date = False
+    legends = False
     for arg in handle_args(*args):
         if arg.startswith("-page:"):
             log = True
-        gen_factory.handle_arg(arg)
+        gen_factory.handle_arg(arg.replace("::", ":"))
+        if arg.startswith("-st:"):
+            _, _, start_on = arg.replace('"', '').partition("-st:")
+        if arg.startswith("-s1:"):
+            _, _, skip_start = arg.replace('"', '').partition("-s1:")
+        if arg.startswith("-s2:"):
+            _, _, skip_end = arg.replace('"', '').partition("-s2:")
+        if arg.startswith("-redo:"):
+            _, _, redo = arg.replace('"', '').partition("-redo:")
+        if "date:true" in arg.lower():
+            include_date = True
+        if "legends" in arg.lower():
+            legends = True
     gen_factory.site.login(user="C4-DE Bot")
+    if start_on:
+        print(f"Starting on {start_on}")
 
     start = datetime.now()
     types = build_template_types(gen_factory.site)
@@ -32,51 +48,68 @@ def analyze(*args):
     duration = datetime.now() - start
     print(f"Loaded {len(appearances.unique)} appearances and {len(sources.unique)} sources in {duration.seconds} seconds")
 
-    include_date = any("date:true" in s.lower() for s in args[0])
     save = any("save:true" in s.lower() for s in args[0])
-    s = [s.split(":", 1)[1] for s in args[0] if "skipto:" in s.lower()]
-    start_skip = s[0] if s else None
-
-    s = [s.split(":", 1)[1] for s in args[0] if "stopat:" in s.lower()]
-    end_skip = s[0] if s else None
 
     gen = pagegenerators.PreloadingGenerator(gen_factory.getCombinedGenerator(), groupsize=50)
 
+    ci = 46540
+    li = 116015
     i = -1
-    x = True
+    if any("Legends articles" in a or "C4-DE traversal" in a for a in args):
+        i += ci
+    total = ci + li
     checked = []
     always = False
     always_comment = False
     found = False
     message = "Source Engine analysis of Appearances, Sources and references"
+    since = Timestamp(2024, 10, 19)
     for page in gen:
         i += 1
-        z = str(i / 114806 * 100).zfill(10)[:6]
+        z = str(i / total * 100).zfill(10)[:6]
         if i % 100 == 0:
             print(f"{i} -> {z} -> {page.title()}")
-        if start_skip and not found:
-            if page.title() >= start_skip.replace("_", " "):
-                print(page.title())
-                found = True
+        if i % 100 == 0 and i > 0 and not start_on:
+            appearances = load_full_appearances(gen_factory.site, types, False, log_match=False)
+            sources = load_full_sources(gen_factory.site, types, False)
+
+        if start_on:
+            if page.title().lower() >= start_on.lower() and not page.title().startswith("Wookieepedia:"):
+                print(f"Found: {page.title()}")
+                start_on = None
             else:
                 continue
-        elif end_skip:
-            if page.title() <= end_skip.replace("_", " "):
-                print(page.title())
-            else:
+
+        if skip_start and skip_end:
+            if skip_start.lower() <= page.title().lower() <= skip_end.lower():
+                continue
+        if legends:
+            if not any(c.title(with_ns=False) == "Legends articles" for c in page.categories()):
                 continue
         try:
             bf = True
             if any(c.title() in STATUS for c in page.categories()):
                 bf = False
 
-            old_text = page.get(force=True)
+            before = page.get(force=True)
+            old_text = f"{before}"
+            old_revision = None
+            if redo and redo >= page.title(): #and "audiobook" in old_text:
+                for r in page.revisions(total=10, content=True):
+                    old_revision = r['text']
+                    if r['timestamp'] < since or (r['user'] != 'C4-DE Bot' and r['user'] != 'RoboCade'):
+                        print(f"Reloaded revision {r['revid']} for {page.title()}")
+                        break
             text = build_new_text(page, infoboxes, types, [], appearances, sources, remap, include_date,
-                                  checked, log=log, handle_references=True, collapse_audiobooks=True)
+                                  checked, log=log, handle_references=True, collapse_audiobooks=True, manual=before if old_revision else None)
 
             if text == old_text:
                 print(f"{i} -> {z} -> No changes found for {page.title()}")
                 continue
+            elif len(text) - len(old_text) == 1 and text.replace("\n", "") == old_text.replace("\n", ""):
+                print(f"Skipping {page.title()}; infobox newline is only change")
+                continue
+
             z1 = re.sub("(\|[A-z _0-9]+=.*?(\n.+?)?)}}(\n((The |A )?'''|\{\{Quote))", "\\1\n}}\\3",
                         re.sub("(\|.*?=)}}\n", "\\1\n}}\n", re.sub("<!--.*?-->", "", text).replace("{{!}}", "|")))
             z1 = re.sub("\[\[([Cc])redit]](s)?", "[[Galactic Credit Standard|\\1redit\\2]]", z1)
@@ -85,8 +118,8 @@ def analyze(*args):
             z2 = re.sub("(\{\{1st.*?\|\[\[(.*?) \(.*?audiobook\)\|)''\\2'' (.*?audiobook)", "\\1\\3", z2)
             z2 = re.sub("\[\[([Cc])redit]](s)?", "[[Galactic Credit Standard|\\1redit\\2]]", z2)
 
-            match = z1.replace("–", "&ndash;").replace("—", "&mdash;").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]") == \
-                    z2.replace("–", "&ndash;").replace("—", "&mdash;").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]")
+            match = z1.replace("–", "&ndash;").replace("—", "&mdash;").replace("{{PageNumber}} ", "").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]") == \
+                    z2.replace("–", "&ndash;").replace("—", "&mdash;").replace("{{PageNumber}} ", "").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]")
 
             override = old_text.count("nterlang") > text.count("nterlang") or old_text.count("ategory:") > text.count("ategory:")
             if not override and (always or (match and always_comment)):

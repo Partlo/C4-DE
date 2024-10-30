@@ -2,21 +2,24 @@ import re
 import traceback
 from datetime import datetime, timedelta
 
-from pywikibot import Page
+from pywikibot import Page, showDiff
 from typing import List, Tuple, Union, Dict
 
 from c4de.sources.determine import extract_item, determine_id_for_item, convert_issue_to_template, swap_parameters
-from c4de.sources.engine import AUDIOBOOK_MAPPING
+from c4de.sources.engine import AUDIOBOOK_MAPPING, GERMAN_MAPPING
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, AnalysisResults, SectionComponents, \
     SectionItemIds, FinishedSection, NewComponents, UnknownItems
 from c4de.sources.infoboxer import handle_infobox_on_page
-from c4de.common import is_redirect, build_redirects, fix_redirects, do_final_replacements
+from c4de.common import is_redirect, build_redirects, fix_redirects, do_final_replacements, fix_disambigs, prepare_title
 
 KEEP_TEMPLATES = ["TCWA", "CalendarCite"]
 DO_NOT_MOVE = ["TCWA", "GEAttr", "DatapadCite"]
 LIST_AT_START = ["Star Wars: Galactic Defense", "Star Wars: Force Arena"]
-STORY_COLLECTIONS = ["[[5-Minute Star Wars", "Trilogy Stories", "[[The Clone Wars: Stories",
-                     "[[Life Day Treasury", "[[Tales from the "]
+STORY_COLLECTIONS = ["[[5-Minute Star Wars", "Trilogy Stories", "[[The Clone Wars: Stories", "[[Tales from the "]
+TOY_LINES = ["toy line", "Star Wars: Power of the Jedi", "30th Anniversary Collection", "Interactech",
+             "The Legacy Collection", "Movie Heroes", "The Original Trilogy Collection", "Star Wars Saga",
+             "Star Wars Unleashed", "Star Wars: The Vintage Collection", "Shadows of the Dark Side",
+             "The Saga Collection", "Saga Legends", "Retro Collection", "The Black Series"]
 INDEX_AND_CATS = ["{{imagecat", "{{mediacat", "{{indexpage", "{{wq", "{{incomplete", "{{quote", "<div style=",
                   "set in '''bold'''", "{{cleanup", "{{more", "{{coor title", "{{coor_title"]
 
@@ -52,7 +55,7 @@ COLLECTION = [("Star Wars Universe\|Star Wars Universe\|", "Star Wars Universe|"
     ("\{\{BustCollectionCite\|17\|(.*?Fighter Pilot)", "{{BustCollectionCite|10|\\1"),
     ("\{\{BustCollectionCite\|20\|(.*?Boush)", "{{BustCollectionCite|11|\\1"),
     ("\{\{BustCollectionCite\|34\|(.*?Greedo)", "{{BustCollectionCite|32|\\1"),
-    ("\{\{HelmetCollectionCite\|([0-9]+)\|Databank\|", "{{HelmetCollectionCite|\\1|Databank A-Z"),
+    ("\{\{HelmetCollectionCite\|([0-9]+)\|Databank\|", "{{HelmetCollectionCite|\\1|Databank A-Z|"),
     ("\{\{HelmetCollectionCite\|3\|(.*?Rescue)", "{{HelmetCollectionCite|5|\\1"),
     ("\{\{HelmetCollectionCite\|5\|(.*?Scout)", "{{HelmetCollectionCite|7|\\1"),
     ("\{\{HelmetCollectionCite\|5\|(.*?Bounty Hunters)", "{{HelmetCollectionCite|2|\\1"),
@@ -76,6 +79,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
 
     if all_infoboxes and not target.title().startswith("User:") and not target.title().startswith("File:"):
         before = handle_infobox_on_page(before, target, all_infoboxes)
+    before = re.sub("\n=([A-z ]+)==", "\n==\\1==", before)
     before = re.sub("(?<!\[)\[((?!Original)[^\[\]\n]+)]]", "[[\\1]]", before)
     before = re.sub("({{[Ss]croll[_ ]box\|)\*", "{{Scroll_box|\n*", before)
     before = re.sub("([A-z0-9.>])(\[\[File:.*?]]\n)", "\\1\n\\2", before)
@@ -100,14 +104,25 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     before = re.sub("\*'*?\[\[([^\n\]{]*?)(\|[^\n\]{]*?)]]'*? '*?\[\[(\\1 \([^\n\]{]*?)\|(.*?)]]'*", "*[[\\3|\\2 \\4]]", before)
     before = re.sub("(\n\*[^\n]*?[\[{]+[^\n]*?[]}]+[^\n]*?)(\*[^\n]*?[\[{]+[^\n]*?[]}]+[^\n]*?\n)", "\\1\n\\2", before)
     # old combo-listing on Legends article, remove after sweep
-    before = re.sub("\*('*\[\[(.*?)]]'*)[^\n\[\]]*(and|\|) '*\[\[(Star Wars: )?\\2( \(.*?\)| audio drama)(\|.*?)?]]", "*\\1\n*[[\\4\\2\\5]]", before)
     before = re.sub("(\{\{.*?\|url=[^|}\n]+)\|\|text=", "\\1|text=", before)
     before = re.sub("\*\{\{\{([A-Z])", "*{{\\1", before)
+    before = re.sub("(\|set=(.*?))\|sformatted=''\\2''", "\\1", before)
 
     before = re.sub("\|story=\[\[(.*?)(\|.*?)?]]", "|story=\\1", before)
     before = re.sub("\|special=\[\[.*? Annual ([0-9]+)(\|.*?)?]]", "|annual=\\1", before)
-    before = re.sub("(\*>) ?'*\[\[Star Wars Galaxies: An Empire Divided]]'*", "\\1{{GalaxiesAED}}", before)
+    before = re.sub("(\|set=.*?)(\|subset=.*?)(\|stext=.*?)(\|.*?)?}}", "\\1\\3\\2\\4}}", before)
 
+    # temp fixes
+    before = re.sub("\{\{Topps\|set=Star Wars: Card Trader\|(cardname=)?", "{{SWCT|", before)
+    before = re.sub("\*('*\[\[([^\n{\[]+?)]]'*)[^\n\[{\]]*(and|\|) '*\[\[(Star Wars: )?\\2( \(.*?\)| audio drama)(\|.*?)?]](?!}})", "*\\1\n*[[\\4\\2\\5]]", before)
+    before = re.sub("(\{\{Databank.*?}})( \{\{C\|alternate:.*?}})+", "\\1", before)
+
+    # Galaxies fixes
+    before = re.sub("([*>]) ?'*\[\[Star Wars Galaxies: An Empire Divided]]'*", "\\1{{GalaxiesAED}}", before)
+    before = re.sub("([*>]) ?'*\[\[Star Wars Galaxies\|'*Star Wars Galaxies: An Empire Divided'*]]'*?(: An Empire Divided'*)?", "\\1{{GalaxiesAED}}", before)
+    before = re.sub("([*>]) ?'*\[\[Star Wars Galaxies(\|.*?)?]]'*: An Empire Divided'*", "\\1{{GalaxiesAED}}", before)
+    before = re.sub("\{\{GalaxiesAED}}'*: An Empire Divided'*", "{{GalaxiesAED}}", before)
+    before = re.sub("([*>]) ?'*\[\[Star Wars Galaxies]]'*", "\\1{{GalaxiesNGE}}", before)
     before = before.replace("[[Star Wars Galaxies: The Complete Online Adventures|''Star Wars Galaxies: The Complete Online Adventures'' bonus DVD]]", "[[Star Wars Galaxies Bonus DVD|''Star Wars Galaxies'' Bonus DVD]]")
 
     while re.search("\[\[Category:[^\n|\]_]+_", before):
@@ -136,6 +151,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
 
 
 def regex_cleanup(before: str) -> str:
+    t = f"{before}"
     if "<nowiki>|" in before:
         while re.search("<nowiki>(\|.*?\|.*?)</nowiki>", before):
             before = re.sub("<nowiki>\|(.*?)\|(.*?)?</nowiki>", "<nowiki>|\\1&#124;\\2</nowiki>", before)
@@ -150,13 +166,16 @@ def regex_cleanup(before: str) -> str:
     if "*[[wikipedia:" in before.lower() or "source=[[wikipedia:" in before.lower():
         before = re.sub("(\n\*|\">|ref>|source=)\[\[[Ww]ikipedia:(.*?)\|(.*?)]]( on (\[\[Wikipedia.*?]]|Wikipedia))?","\\1{{WP|\\2|\\3}}", before)
 
+    before = re.sub("(\{\{[A-z0-9 _]+\|.*?\|(.*?) \(.*?\))\|\\2}}", "\\1}}", before)
+    if "{{ShipsandVehiclesCite" in before:
+        before = re.sub("\{\{ShipsandVehiclesCite\|([0-9]+)\|?}}", "[[Star Wars Starships & Vehicles \\1|''Star Wars Starships & Vehicles'' \\1]]", before)
     if "{{Blog|" in before:
-        before = re.sub("(\{\{Blog\|(official=true\|)?[^|\n}\]]+?\|[^|\n}\]]+?\|[^|\n}\]]+?)(\|(?!(archive|date|nolive|nobackup)).*?)(\|(?!(archive|date|nolive|nobackup)).*?)(\|.*?)?}}","\\1\\6}}", before)
-    if "{{SOTE" in before:
-        before = re.sub("\{\{SOTE(\|.*?)?}}","{{Topps|set=1996 Topps Star Wars: Shadows of the Empire|stext=1996 Topps ''Star Wars: Shadows of the Empire''\\1}}",before)
-        before = re.sub("\{\{SOTEEMCC","{{MetallicImpressions|set=Star Wars: Shadows of the Empire Embossed Metal Collector Cards|stext=''Star Wars: Shadows of the Empire'' Embossed Metal Collector Cards",before)
+        before = re.sub("(\{\{Blog\|(official=true\|)?[^|\n}\]]+?\|[^|\n}\]]+?\|[^|\n}\]]+?)(\|(?!(archive|date|nolive|nobackup))[^}\n]*?)(\|(?!(archive|date|nolive|nobackup))[^}\n]*?)(\|.*?)?}}","\\1\\6}}", before)
+        before = re.sub("(\{\{Blog\|listing=true\|[^|\n}\]]+?)(\|(?!(archive|date|nolive|nobackup))[^}\n]*?)(\|(?!(archive|date|nolive|nobackup))[^}\n]*?)(\|.*?)?}}","\\1\\6}}", before)
     if "|year=" in before:
         before = re.sub("(\{\{[A-z]+)\|([0-9]+)\|(year=[0-9]+)", "\\1|\\3|\\2", before)
+    if "SWGTCG" in before:
+        before = re.sub("(\{\{SWGTCG\|.*?)}} {{C\|(.*?scenario.*?)}}", "\\1|scenario=\\2}}", before)
     if "VisionsCite" in before:
         before = re.sub("(\{\{VisionsCite\|.*?focus)=(?!1).*?(\|.*?)?}}", "\\1=1\\2}}", before)
         before = re.sub("(\{\{VisionsCite.*?}}) \{\{[Aa]mbig}}", "\\1", before)
@@ -174,15 +193,21 @@ def regex_cleanup(before: str) -> str:
     if "Rebelscum.com" in before or "TheForce.net" in before:
         before = re.sub("\*'*?\[(http.*?) (.*?)]'*? (on|at|-).*?\[\[(Rebelscum\.com|TheForce\.net).*]].*?\n","{{WebCite|url=\\1|text=\\2|work=\\4}}", before)
     if "FFCite" in before:
-        before = re.sub("\n(.*?FFCite\|[0-9]+\|)([A-Z]+ ?[0-9]+.*?, ((?!dash).)*?); ([A-Z]+ ?[0-9]+.*?, .*?)}}\n", "\n\\1\\2}}\n\\1\\4}}", before)
-        before = re.sub("\n(.*?FFCite\|[0-9]+\|)([A-Z]+ ?[0-9]+.*?, ((?!dash).)*?); ([A-Z]+ ?[0-9]+.*?, .*?)}}\n", "\n\\1\\2}}\n\\1\\4}}", before)
+        before = re.sub("\{\{FFCite\|([0-9]+)\|(y=[0-9]+)", "{{FFCite|\\2|\\1", before)
+        before = re.sub("(\{\{FFCite\|(y=[0-9]+\|)?[0-9]+)}} \{\{C\|", "\\1|", before)
+        while re.search("\n(.*?FFCite\|[0-9]+\|)([A-Z]+ ?[0-9]+[^\n]*?, ((?!dash)[^\n])*?); ([A-Z]+ ?[0-9]+[^\n]*?, [^\n]*?)}}\n", before):
+            before = re.sub("\n(.*?FFCite\|[0-9]+\|)([A-Z]+ ?[0-9]+[^\n]*?, ((?!dash)[^\n])*?); ([A-Z]+ ?[0-9]+[^\n]*?, [^\n]*?)}}\n", "\n\\1\\2}}\n\\1\\4}}\n", before)
     return before
 
 
 def build_page_components(target: Page, types: dict, disambigs: list, appearances: FullListData, sources: FullListData, remap: dict,
-                          all_infoboxes, handle_references=False, log=True) -> Tuple[PageComponents, list, dict]:
+                          all_infoboxes, handle_references=False, log=True, manual: str = None) -> Tuple[PageComponents, list, dict]:
     before = initial_cleanup(target, all_infoboxes)
-    redirects = build_redirects(target)
+    redirects = build_redirects(target, manual=manual)
+    if "{{otheruses" in before.lower() or "{{youmay" in before.lower():
+        for r, t in redirects.items():
+            if t in disambigs or "(disambiguation)" in t:
+                before = fix_disambigs(r, t, before)
 
     canon = False
     real = False
@@ -195,7 +220,7 @@ def build_page_components(target: Page, types: dict, disambigs: list, appearance
             canon = True
         elif "Non-canon Legends articles" in c.title() or "Non-canon articles" in c.title():
             non_canon = True
-        elif c.title(with_ns=False).startswith("Real-world "):
+        elif c.title(with_ns=False).startswith("Real-world ") and c.title(with_ns=False) not in ["Real-world restaurants", "Real-world stores"]:
             real = True
             if re.search("\{\{Top\|(.*?\|)?(dotj|tor|thr|fotj|rote|aor|tnr|rofo|cnjo|can|ncc)(\|.*?)?}}", target.get()):
                 canon = True
@@ -357,7 +382,9 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
         if s.strip().startswith("<!-") or s.strip().startswith("*<!-"):
             s = re.sub("<!--.*?-->", "", s)
         if any(x in s.lower() for x in INDEX_AND_CATS):
-            other1.append(s)
+            z = s[1:] if s.startswith("*{{") else s
+            if z not in other1:
+                other1.append(z)
             continue
 
         if s.strip().startswith("*"):
@@ -367,7 +394,6 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
                 z = Item(s.strip(), "Basic", False)
                 if is_official_link(z):
                     z.mode = "Official"
-                print(z.mode, z.original)
                 data.append(z)
 
         elif "{{scroll_box" in s.lower() or "{{scroll box" in s.lower():
@@ -405,6 +431,7 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
     if s.endswith("}}}}") and s.count("{{") < s.count("}}"):
         s = s[:-2]
     z = s.replace("&ndash;", '–').replace('&mdash;', '—').strip()
+    z = re.sub("<sup>(.*?)</sup>", "{{C|\\1}}", z)
     while z.startswith("*"):
         z = z[1:].strip()
     z = re.sub("(\{\{InsiderCite\|[0-9]{2}\|)Ask Lobot.*?}}", "\\1Star Wars Q&A}}", z)
@@ -440,7 +467,7 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
         if y:
             z = z.replace(y.group(1), "")
             extra = f"{y.group(1)} {extra}".strip()
-    bold = "'''" in z and re.search("(?<!s)'''(?!s)", z)
+    bold = "'''" in z and re.search("(?<!s)'''(?!s)", z) and not re.search(" '''([A-z0-9 -:]+[^'])'' ",  z)
 
     zs = [z]
     if "/" in z and ("{{YJA|" in z or "{{All-Stars|" in z):
@@ -450,9 +477,9 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
                 print(f"Splitting multi-entry line: {s}")
             zs = [f"{x.group(1)}{x.group(3)}{x.group(5)}", f"{x.group(1)}{x.group(4)}{x.group(5)}"]
 
-    y = re.search("(?P<p>[\"']*?\[\[.*?(\|.*?)?]][\"']*?) ?n?o?v?e?l? ?(and|\|) ?(?P<t>['\"]*\[\[.*?(\|.*?)?]]['\"]*?)", z)
+    y = re.search("(?<!\|)(?P<p>[\"']*?\[\[.*?(\|.*?)?]][\"']*?) ?n?o?v?e?l? ?(and|\|) ?(?P<t>['\"]*\[\[.*?(\|.*?)?]]['\"]*?)", z)
     if not y and name.startswith("File:"):
-        y = re.search("(?P<p>[\"']*?\[\[.*?(\|.*?)?]][\"']*?) via ?(?P<t>['\"]*\[\[(Star Wars Legends|Star WArs Omnibus).*?(\|.*?)?]]['\"]*?)", z)
+        y = re.search("(?P<p>[\"']*?\[\[.*?(\|.*?)?]][\"']*?) via ?(?P<t>['\"]*\[\[(Star Wars Legends|Star Wars Omnibus).*?(\|.*?)?]]['\"]*?)", z)
     if y and "{{TFU|" not in z:
         if log:
             print(f"Splitting multi-entry line: {s}")
@@ -472,10 +499,12 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
             t.extra = extra.strip()
             t.ab = ab
             t.bold = bold
-            ex = re.search("<!-- ?(Exception|Override):? ?([0-9X-]+)? ?-->", s)
-            if ex:
+            ex = re.search("<!-- ?(Exception|Override)?:? ?([0-9X-]+)?\?? ?-->", s)
+            if ex and ex.group(1):
                 t.override = ex.group(1)
                 t.override_date = ex.group(2)
+            elif ex:
+                t.original_date = ex.group(2)
             unique_ids[t.unique_id()] = t
     if not found:
         if not data and s.count("[") == 0 and s.count("]") == 0:
@@ -503,11 +532,13 @@ REF_REPLACEMENTS = [("film]] film", "film]]"), ("|reprint=yes", ""), ("|reprint=
 def handle_reference(full_ref, ref, page: Page, new_text, types, appearances: FullListData, sources: FullListData,
                      remap: dict, disambigs: dict, redirects, canon, log: bool):
     try:
-        new_ref = re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", ref)
-        x = re.search(",? (page|pg\.?|p\.|chapters?|ch\.) ([0-9-]+)", new_ref)
+        new_ref = re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", ref).replace("{{PageNumber}} ", "")
+        new_ref = re.sub("\|set=(.*?) \(.*?\)\|(sformatt?e?d?|stext)=.*?\|", "|set=\\1|", new_ref)
+        x = re.search(",? (page|pg\.?|p?p\.|chapters?|ch\.) ([0-9-]+|one|two|three|four|five)(?!]),?", new_ref)
         if x:
-            print(f"Removed page/chapter numbers from reference: \"{x.group(0)}\" -> \"{new_ref}\"")
-            new_ref = new_ref.replace(x.group(0), "")
+            print(f"Found page/chapter numbers in reference: \"{x.group(0)}\" -> \"{new_ref}\"")
+            # new_ref = new_ref.replace(x.group(0), "")
+            new_ref = "{{PageNumber}} " + new_ref
         new_ref = convert_issue_to_template(new_ref)
         links = re.findall("(['\"]*\[\[(?![Ww]:c:).*?(\|.*?)?]]['\"]*)", new_ref)
         templates = re.findall("(\{\{[^{}\n]+}})", new_ref)
@@ -522,7 +553,7 @@ def handle_reference(full_ref, ref, page: Page, new_text, types, appearances: Fu
                 o = determine_id_for_item(x, page.site, appearances.unique, appearances.target, sources.unique, sources.target, remap, canon, log)
                 if o and not o.use_original_text and o.replace_references:
                     found.append(o)
-                    if o.master.template and not x.template and x.target and not re.search("^['\"]*\[\[" + x.target + "(\|.*?)?]]['\"]*$", new_ref):
+                    if o.master.template and not x.template and x.target and not re.search("^['\"]*\[\[" + prepare_title(x.target) + "(\|.*?)?]]['\"]*$", new_ref):
                         if o.master.template != "Film":
                             print(f"Skipping {link[0]} due to extraneous text")
                     elif link[0].startswith('"') and link[0].startswith('"') and (len(ref) - len(link[0])) > 5:
@@ -557,7 +588,7 @@ def handle_reference(full_ref, ref, page: Page, new_text, types, appearances: Fu
 
         new_templates = []
         for t in templates:
-            if t == "{{'s}}" or "{{TORcite" in t or "{{SWG" in t or t.startswith("{{C|") or t.startswith("{{Blogspot") or t.startswith("{{Cite"):
+            if t == "{{'s}}" or "{{TORcite" in t or "{{SWG" in t or t.startswith("{{C|") or t.startswith("{{Blogspot") or t.startswith("{{Cite") or t.startswith("{{PageNumber"):
                 continue
             x = extract_item(t, False, "reference", types)
             if x:
@@ -565,7 +596,9 @@ def handle_reference(full_ref, ref, page: Page, new_text, types, appearances: Fu
                     continue
                 o = determine_id_for_item(x, page.site, appearances.unique, appearances.target, sources.unique,
                                           sources.target, {}, canon, log)
-                if o and not o.use_original_text and t != o.master.original:
+                if o and o.current.mode == "Cards":
+                    new_templates.append((t, o, []))
+                elif o and not o.use_original_text and t != o.master.original:
                     found.append(o)
                     ex = []
                     if "|author=" in t:
@@ -581,10 +614,14 @@ def handle_reference(full_ref, ref, page: Page, new_text, types, appearances: Fu
                     found.append(o)
 
         for ot, ni, extra in new_templates:
-            z = re.sub("\|reprint=.*?(\|.*?)?}}", "\\1}}", swap_parameters(ni.master.original)).replace("|parent=1", "")
-            if ni.current.subset:
-                z = re.sub("({{[^|}]*?\|(set=)?[^|}]*?\|(stext=.*?\|)?)", f"\\1subset={ni.current.subset}|", z)
+            if ni.master.mode == "Cards":
+                nt = build_card_text(ni, ni)
+            else:
+                nt = swap_parameters(ni.master.original)
+            z = re.sub("\|reprint=.*?(\|.*?)?}}", "\\1}}", nt).replace("|parent=1", "")
             if extra:
+                for i in extra:
+                    z = z.replace(i, "")
                 z = z[:-2] + "".join(extra) + "}}"
             if "|d=y" in ni.current.original:
                 z = z[:-2] + "|d=y}}"
@@ -594,7 +631,8 @@ def handle_reference(full_ref, ref, page: Page, new_text, types, appearances: Fu
         final_ref = re.sub("\{\{[Aa]b\|.*?}}", "", full_ref.replace(ref, new_ref))
         if "<ref>" in final_ref:
             if len(found) == 1 and found[0].master.target:
-                final_ref = final_ref.replace("<ref>", f"<ref name=\"{found[0].master.target}\">")
+                z = found[0].master.target.replace('"', '').replace('(', '').replace(')', '')
+                final_ref = final_ref.replace("<ref>", f"<ref name=\"{z}\">")
             elif len(found) == 1:
                 print(f"Cannot fix nameless reference to {found[0].master.target}")
             else:
@@ -627,24 +665,77 @@ def match_audiobook_name(a, b):
     return b == f"{a.split('(')[0].strip()} (audiobook)" or b == f"{a.split('(')[0].strip()} (unabridged audiobook)"
 
 
+def remove_audiobook_from_1st(param, match):
+    if param.strip() == "in book":
+        return "" if match else None
+    elif "audiobook" not in param:
+        return None
+    elif re.search("^'*\[\[[^\n}|\]\[]+ \((unabridged )?audiobook\)(\|[^\n}|\]\[]+)?]]'*$", param):
+        return ""
+
+    y = re.search("^(.*?)(,|and)? ?'*\[\[[A-z0-9: -]+ \((unabridged )?audiobook\).*?]]'*(,| and)? ?(.*?)$", param)
+    if not y:
+        if param.count("[[") == 0 and param.endswith("audiobook"):
+            return ""
+        print(param)
+        return None
+    y1, y2 = (y.group(2) or '').replace('in book', '').strip(), (y.group(4) or '').replace('in book', '').strip()
+    if y2 and y2.strip() == "and":
+        y2 = ""
+    if y1 and y2:
+        if " and" in y2 and match:
+            t = f"{y1}, {y2}"
+        elif " and" in y2:
+            t = f"in book, {y1}, {y2}"
+        elif match:
+            t = f"{y1} and {y2}"
+        else:
+            t = f"in book, {y1} and {y2}"
+    elif y1 and y1 == "in book" and match:
+        t = ""
+    elif y1:
+        t = f"{y1}" if match else f"in book and {y1}"
+    elif y2 and y2 == "in book" and match:
+        t = ""
+    elif y2:
+        t = f"{y2}" if match else f"in book and {y2}"
+    elif match:
+        t = ""
+    else:
+        t = "in book"
+
+    z = re.sub(" and *$", "", re.sub("(in book )+", "in book ", re.sub("( and)+", "\\1", t)))
+    return "" if (z == "and" or (z == "in book" and match)) else z
+
+
 def handle_ab_first(a: ItemId, audiobook_date):
     if re.search("\{\{1stID\|[^\[{|]+\|.*?}}", a.current.extra):
-        if audiobook_date != a.master.date:
-            a.current.extra = re.sub("(\{\{1stID\|[^\[{|]+)\|.*?audiobook.*?}}", "\\1|in book}}", a.current.extra)
-        else:
-            a.current.extra = re.sub("(\{\{1stID\|[^\[{|]+)\|[^}]*?audiobook.*?}}", "\\1}}", a.current.extra)
+        z = re.search("\{\{1stID\|[^\[{|]+(\|(simult=)?(.*?))}}", a.current.extra)
+        t = remove_audiobook_from_1st(z.group(3), audiobook_date == a.master.date)
+        if t:
+            a.current.extra = a.current.extra.replace(z.group(3), t)
+        elif t is not None:
+            a.current.extra = a.current.extra.replace(z.group(1), "")
+
     elif re.search("\{\{1stID\|simult=.*?}}", a.current.extra):
-        if audiobook_date != a.master.date:
-            a.current.extra = re.sub("\{\{1stID\|simult=.*?audiobook.*?}}", "{{1stID|in book}}", a.current.extra)
-        else:
-            a.current.extra = re.sub("\{\{1stID\|simult=*?audiobook.*?}}", "{{1stID}}", a.current.extra)
-    elif "{{1st|" in a.current.extra or "{{1stm|" in a.current.extra or "{{1stp|" in a.current.extra:
-        if audiobook_date != a.master.date:
-            a.current.extra = re.sub("(\{\{1st[mp]?)\|((?!in book).*?)}}", "\\1|in book and \\2}}", a.current.extra)
-        else:
-            a.current.extra = re.sub("(\{\{1st[mp]*?)\|[^}]*?audiobook.*?}}", "\\1}}", a.current.extra)
+        z = re.search("\{\{1stID(\|simult=(.*?))}}", a.current.extra)
+        t = remove_audiobook_from_1st(z.group(2), audiobook_date == a.master.date)
+        if t:
+            a.current.extra = a.current.extra.replace(z.group(2), t)
+        elif t is not None:
+            a.current.extra = a.current.extra.replace(z.group(1), "")
+    elif "{{1stID}}" in a.current.extra and audiobook_date != a.master.date:
+        a.current.extra = a.current.extra.replace("{{1stID}}", "{{1stID|simult=in book}}")
+
+    if any(f"{{{{1st{x}|" in a.current.extra for x in ("", "m", "p", "c", "cm")):
+        z = re.search("\{\{1stc?[mp]*\|(.*?)}}", a.current.extra)
+        t = remove_audiobook_from_1st(z.group(1), audiobook_date == a.master.date)
+        if t:
+            a.current.extra = a.current.extra.replace(z.group(1), t)
+        elif t is not None:
+            a.current.extra = a.current.extra.replace("|" + z.group(1), "")
     elif "{{1st" in a.current.extra and audiobook_date != a.master.date:
-        a.current.extra = re.sub("(\{\{1st[mp]*?)}}", "\\1|in book}}", a.current.extra)
+        a.current.extra = re.sub("(\{\{1stc?[mp]*?)}}", "\\1|in book}}", a.current.extra)
 
 
 def is_number(d):
@@ -657,10 +748,35 @@ def is_external_wiki(t):
 
 def is_official_link(o: Item):
     if o:
-        return o.template == "OfficialSite" or (
+        return o.template == "OfficialSite" or o.mode == "Official" or (
                 o.mode in ["Basic", "External"] and o.original and "official" in o.original.lower() and
                 re.search("official .*?(site|home ?page)", o.original.lower()))
     return False
+
+
+def prepare_official_link(o: Item):
+    print(o.mode, o.template, o.full_url)
+    if o.full_url:
+        ad = f"|archivedate={o.archivedate}" if o.archivedate else ""
+        if "web.archive" in o.extra:
+            x = re.search("web/([0-9]+)/", o.extra)
+            if x:
+                ad = f"|archivedate={x.group(1)}"
+                o.extra = re.sub("\{\{C\|\[http.*?web\.archive\.org/.*?}}", "", o.extra)
+        return "Official", f"{{{{OfficialSite|url={o.full_url}{ad}}}}}"
+    else:
+        return "Official", o.original.replace("WebCite", "OfficialSite")
+
+
+def prepare_basic_url(o: Item):
+    if o.original and re.search("official .*?(site|homepage|page)", o.original.lower()):
+        return prepare_official_link(o)
+    elif o.full_url:
+        ad = f"|archivedate={o.archivedate}" if o.archivedate else ""
+        u = o.full_url if o.full_url.startswith("http") else f"https://{o.full_url}"
+        return "Basic", f"{{{{WebCite|url={u}|text={o.text}{ad}}}}} {o.extra}".strip()
+    else:
+        return "Basic", o.original
 
 
 def is_product_page(u: str):
@@ -711,10 +827,15 @@ def is_external_link(d: ItemId, o: Item, unknown):
     if not d and o.mode == "Basic":
         unknown.append(o)
         return True
+    elif d and d.master.template and "ToyCite" in d.master.template:
+        return False
     elif not d and o.original.replace("*", "").startswith("[http"):
         return True
-    elif not d and o.url and any(o.url.startswith(f"{s}/") for s in ["people", "person", "leadership", "our-team", "bio", "news/contributor", "book-author"]):
+    elif not d and o.url and any(o.url.startswith(f"{s}/") for s in ["people", "person", "leadership", "our-team", "bio", "news/contributor"]):
         o.mode = "Bio"
+        return True
+    elif (o.mode == "Commercial" or o.mode == "Web") and any(x in o.original.lower() for x in ["authors/", "author/", "comics/creators", "book-author"]):
+        o.mode = "Profile" if o.template in ["SW", "SWArchive"] else "Commercial"
         return True
     elif o.template == "YouTube" and re.search("YouTube\|channel(name)?=[^|}\n]+\|channel(name)?=[^|}\n]+}}", o.original) and "video=" not in o.original:
         o.mode = "Profile"
@@ -722,7 +843,7 @@ def is_external_link(d: ItemId, o: Item, unknown):
     elif d and d.master.external:
         o.mode = "Found-External"
         return True
-    elif o.url and ("images-cdn" in o.url or (("subdomain=dmedmedia" in o.original or "subdomain=press" in o.original) and "news/" not in o.original)):
+    elif "Folio" not in o.original and o.url and ("images-cdn" in o.url or (("subdomain=dmedmedia" in o.original or "subdomain=press" in o.original) and "news/" not in o.original)):
         o.mode = "CDN"
         return True
     elif is_commercial(d, o):
@@ -735,6 +856,8 @@ def is_external_link(d: ItemId, o: Item, unknown):
         if "||" in o.original or "| |" in o.original or o.template == "LinkedIn" or "isprofile=" in o.original:
             o.mode = "Profile"
         elif o.template == "ArtStation" and "artwork/" not in o.original:
+            o.mode = "Profile"
+        elif o.template == "Twitch" and "video=" not in o.original:
             o.mode = "Profile"
         return True
     elif o.mode == "External" or o.mode == "Interwiki" or o.mode == "Commercial" or o.mode == "Profile":
@@ -809,7 +932,10 @@ def analyze_section_results(target: Page, results: PageComponents, disambigs: li
     abridged = []
     new_indexes = []
     for i, a in enumerate(new_apps.found):
+        if "abridged" in a.current.extra:
+            a.current.extra = re.sub("(\{\{Ab\|.*?(abridged audiobook)\|)audiobook}}", "\\1abridged audiobook}}", a.current.extra)
         if "{{po}}" in (a.current.extra or '').lower():
+            handle_ab_first(a, a.master.date)
             continue
         elif a.current.target and "audiobook)" in a.current.target:
             continue
@@ -817,10 +943,10 @@ def analyze_section_results(target: Page, results: PageComponents, disambigs: li
         audiobooks += find_matching_parent_audiobook(a, app_targets, appearances)
         for b in audiobooks:
             if b.abridged:
-                print(f"Skipping abridged audiobook: {b.target}")
+                # print(f"Skipping abridged audiobook: {b.target}")
                 if b.target not in app_targets:
                     abridged.append(b.target)
-            elif not collapse_audiobooks and (b.parent if b.parent else b.target) not in app_targets:
+            elif "(audio)" in b.target or (not collapse_audiobooks and (b.parent if b.parent else b.target) not in app_targets):
                 print(f"Adding missing audiobook: {b.target} at {i}, {a.current.index}, {a.current.canon_index}, {a.current.legends_index}")
                 z = ItemId(b, b, False, False, False)
                 extra = a.current.extra or ''
@@ -903,7 +1029,7 @@ def build_item_ids_for_section(page: Page, real, name, original: List[Item], dat
 
         if d and (o.mode == "Cards" or o.template == "ForceCollection"):
             handle_card_item(d, o, cards, found, wrong, extra, name, log)
-        elif is_external_link(d, o, unknown):
+        elif o.mode != "Toys" and is_external_link(d, o, unknown):
             if d:
                 o.master_text = d.master.original
             links.append(o)
@@ -911,6 +1037,8 @@ def build_item_ids_for_section(page: Page, real, name, original: List[Item], dat
             found.append(d)
         elif d and name == "Appearances" and d.master.master_page == "Appearances/Collections" and d.master.has_content:
             wrong.append(d)
+        elif d and d.master.unlicensed:
+            found.append(d)
         elif d and d.from_other_data and "databank" not in (o.extra or '').lower() \
                 and d.current.template not in DO_NOT_MOVE \
                 and d.current.target != 'Star Wars: Datapad (Galactic Starcruiser)'\
@@ -926,6 +1054,8 @@ def build_item_ids_for_section(page: Page, real, name, original: List[Item], dat
                 found.append(d)
             else:
                 found.append(ItemId(o, o, True, False))
+        elif d and not real and d.master.german_ad:
+            found.append(d)
         elif d and not real and d.master.audiobook and not d.master.abridged and collapse_audiobooks:
             # print(f"Skipping individually-listed audiobook: {d.master.target}")
             continue
@@ -984,7 +1114,10 @@ def build_item_ids_for_section(page: Page, real, name, original: List[Item], dat
             elif c[0].current.template == "Topps":
                 found += c
             else:
-                print(f"ERROR: Cannot find item for parent/target set: [{s}]: {c[0].current.full_id()}")
+                print(f"ERROR:  Cannot find item for parent/target set: [{s}]: {c[0].current.full_id()}")
+                for i in c:
+                    i.current.unknown = True
+                found += c
     found += list(extra.values())
 
     return SectionItemIds(name, found, wrong, non_canon, cards, set_ids, links)
@@ -1020,7 +1153,9 @@ def handle_card_item(d: ItemId, o: Item, cards: Dict[str, List[ItemId]], found: 
         x = re.search("(\|stext=.*?)[|}]", d.master.original)
         if x:
             d.current.original = d.current.original.replace(f"|set={parent_set}", f"|set={parent_set}{x.group(1)}")
-            d.current.original = re.sub("\|stext=('*(.*?)'*)\|'*\\2'*\|", "|stext=\\1|", d.current.original)
+            d.current.original = re.sub("\|stext=('*(.*?)'*)\|(stext|sformatt?e?d?)?'*\\3'*\|", "|stext=\\2|", d.current.original)
+    elif parent_set and "|stext=" not in d.master.original:
+        d.current.original = re.sub("\|s(formatt?e?d?|text)=('*(.*?)'*)\|", "|", d.current.original)
 
     if o.card:
         cards[parent_set].append(d)
@@ -1061,7 +1196,9 @@ def build_new_external_links(page: Page, original: List[Item], data: FullListDat
             found.append((t, o, zx if zx.startswith("*") else f"*{zx}"))
             continue
         elif is_official_link(o):
-            o.mode = "Official"
+            o.mode, o.original = prepare_official_link(o)
+            if o.template == "WebCite":
+                o.original = o.original.replace("WebCite", "OfficialSite")
 
         o.index = i
         d = determine_id_for_item(o, page.site, data.unique, data.target, other.unique, other.target, remap, canon, log)
@@ -1074,11 +1211,11 @@ def build_new_external_links(page: Page, original: List[Item], data: FullListDat
                     print(f"Followed redirect {o.parent} to {p.getRedirectTarget().title()}")
                 o.parent = p.getRedirectTarget().title().split('#', 1)[0]
                 d = determine_id_for_item(o, page.site, data.unique, data.target, other.unique, other.target, remap, canon, log)
+        is_external_link(d, o, [])
 
-        # if d and o.mode == "Web" and not (o.template in PRODUCTS and o.url and ("/product/" in o.url or "/Previews/" in o.url)):
-        #     wrong.append(d)
-        #     continue
-        if d and d.master.mode == "Web" and not d.master.external:
+        if d and d.master.is_internal_mode() and not d.master.external:
+            wrong.append(d)
+        elif d and d.master.mode == "General" and "Web" not in d.master.master_page:
             wrong.append(d)
         elif d:
             zn = d.current.original if d.use_original_text else d.master.original
@@ -1131,7 +1268,8 @@ def build_new_section(name, section: SectionItemIds, mode: str, dates: list, can
     nl = "|n=1"
     for o in found:
         if mode == BY_DATE and o.current.index is None:
-            print(f"No index? {o.current.original}, {o.master.original}")
+            if not (o.current.target and "(audio)" not in o.current.target):
+                print(f"No index? {o.current.original}, {o.master.original}")
         elif mode == BY_DATE and not o.current.is_appearance and o.master.has_date() and ("-XX" in o.master.date or o.master.date.startswith("Unknown")):
             n1 = by_original_index.get(o.current.index - 1)
             n2 = by_original_index.get(o.current.index + 1)
@@ -1145,7 +1283,7 @@ def build_new_section(name, section: SectionItemIds, mode: str, dates: list, can
                         print(f"Partial date {o.master.date} found between {d1} and {d2}: {o.current.original} ({t1} & {t2})")
                     dates.append((False, o, d1, d2))
         elif mode == BY_DATE and not o.master.has_date():
-            print(f"No date: {o.current.original}, {o.master.original}")
+            print(f"No date: {o.current.original}, {o.master.original} : {o.current.target}")
             o.unknown = True
             unknown_final.append(o)
 
@@ -1165,15 +1303,8 @@ def build_new_section(name, section: SectionItemIds, mode: str, dates: list, can
                 new_text.append(f"{d}{{{{CardGameSet|set={o.current.original}|cards=")
                 ct = 2
             for c in sorted(set_cards, key=lambda a: (a.current.card if a.current.card else a.current.original).replace("''", "")):
-                ot = c.current.original
-                if c.current.subset and "subset=" not in ot:
-                    ot = re.sub("({{[^|}]*?\|(set=)?[^|}]*?\|(stext=.*?\|)?)", f"\\1subset={o.current.subset}|", ot)
-                while ot.count("|subset=") > 1:
-                    ot = re.sub("(\|subset=.*?)\1", "\1", ot)
+                ot = build_card_text(o, c)
                 zt = "*" + d + re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", f"{ot} {c.current.extra.strip()}").strip()
-                zt = re.sub("\{\{SWU\|(.*?)( \(.*?\))?\|'*\\1'*\|", "{{SWU|set=\\1|", zt)
-                zt = re.sub("\{\{SWU\|(?!(cardname=|set=))", "{{SWU\|set=", zt)
-                zt = zt.replace("|parent=1", "")
                 ct += zt.count("{")
                 ct -= zt.count("}")
                 final_items.append(c)
@@ -1181,7 +1312,7 @@ def build_new_section(name, section: SectionItemIds, mode: str, dates: list, can
             if ct:
                 new_text.append("".join("}" for _ in range(ct)))
         else:
-            build_item_text(o, d, nl, sl, final_without_extra, final_items, new_text, rows, section.name, collapse_audiobooks, log)
+            rows += build_item_text(o, d, nl, sl, final_without_extra, final_items, new_text, section.name, collapse_audiobooks, log)
 
         if not real and o.master.canon is not None and o.master.canon != canon and o.master.target not in both_continuities:
             mismatch.append(o)
@@ -1189,11 +1320,27 @@ def build_new_section(name, section: SectionItemIds, mode: str, dates: list, can
     return FinishedSection(name, rows, "\n".join(new_text)), final_items
 
 
+def build_card_text(o: ItemId, c: ItemId):
+    ot = c.current.original
+    if c.current.subset and "subset=" not in ot:
+        ot = re.sub("({{[^|}]*?\|(set=)?[^|}]*?\|(s?text=.*?\|)?)", f"\\1subset={o.current.subset}|", ot)
+    while ot.count("|subset=") > 1:
+        ot = re.sub("(\|subset=.*?)\1", "\1", ot)
+    if o.master.template:
+        ot = re.sub("\{\{([A-z0-9]+)\|.*?\|(url=|subset=|scenario=|pack=|cardname=|(swg)?(alt)?link=)", re.sub("\|p=.*?(\|.*?)?}}", "\\1", o.master.original.replace("}}", "")) + "|\\2", ot)
+    ot = re.sub("(\{\{.*?\|set=(.*?))\|s?text=\\2\|", "\\1|", ot)
+    ot = re.sub("(\|set='*?(.*?)\|stext=.*?)\|'*?\\2'*?\|", "\\1", ot)
+    ot = re.sub("\{\{SWU\|(.*?)( \(.*?\))?\|'*\\1'*\|", "{{SWU|set=\\1|", ot)
+    ot = re.sub("\{\{SWU\|(?!(cardname=|set=))", "{{SWU|set=", ot)
+    ot = re.sub("\|stext=(.*?)\|\\1\|", "|stext=\\1|", ot)
+    return ot.replace("|parent=1", "")
+
+
 def build_item_text(o: ItemId, d: str, nl: str, sl: str, final_without_extra: list, final_items: List[ItemId],
-                    new_text: list, rows: int, section_name, collapse_audiobooks: bool, log: bool, is_file=False):
+                    new_text: list, section_name, collapse_audiobooks: bool, log: bool, is_file=False):
     zt = o.current.original if o.use_original_text else o.master.original
     if not zt.strip():
-        return
+        return 0
     if o.current.subset:
         zt = re.sub("({{[^|}]*?\|(set=)?[^|}]*?\|(stext=.*?\|)?)", f"\\1subset={o.current.subset}|", zt)
     while zt.count("|subset=") > 1:
@@ -1206,18 +1353,24 @@ def build_item_text(o: ItemId, d: str, nl: str, sl: str, final_without_extra: li
     if o.master.from_extra and "{{co}}" not in (o.current.extra or '').lower() \
             and "cover only" not in (o.current.extra or '').lower() and o.current.template != "HomeVideoCite":
         if "audiobook" in o.master.original:
-            return
+            return 0
         elif o.master.future or is_file or o.master.has_content:
             pass
-        elif "Complete Season" in o.master.original or "Complete Saga" in o.master.original or \
+        elif o.current.extra and "{{c|cut}}" in o.current.extra.lower():
+            pass
+        elif ("Complete" in o.master.original and "Season" in o.master.original) or "Complete Saga" in o.master.original or \
                 "Star Wars: The Skywalker Saga" in o.master.original:
             d += f"{{{{SeriesListing{nl if o.master.non_canon else sl}|DVD}}}} "
+        elif any(s in o.master.original for s in TOY_LINES):
+            d += f"{{{{SeriesListing{nl if o.master.non_canon else sl}|toy}}}} "
         elif any(s in o.master.original for s in STORY_COLLECTIONS):
             d += f"{{{{SeriesListing{nl if o.master.non_canon else sl}|short}}}} "
         else:
             d += f"{{{{SeriesListing{nl if o.master.non_canon else sl}}}}} "
     elif o.current.unknown or o.master.unknown:
-        if not (is_file and o.current.template == "Databank" and o.current.url and "gallery" in o.current.url):
+        if o.current.template == "SWCT":
+            d += f"{{{{UnknownListing{sl}|SWCT}}}} "
+        elif not (is_file and o.current.template == "Databank" and o.current.url and "gallery" in o.current.url):
             d += f"{{{{UnknownListing{sl}}}}} "
 
     if d == "<!-- Unknown -->" and "{{Hyperspace" in zt and "/member/fiction" in zt:
@@ -1232,6 +1385,7 @@ def build_item_text(o: ItemId, d: str, nl: str, sl: str, final_without_extra: li
     if zn in final_without_extra:
         if log:
             print(f"Skipping duplicate {zn}")
+        return 0
     else:
         e = re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", o.current.extra).strip()
         if not collapse_audiobooks:
@@ -1252,7 +1406,7 @@ def build_item_text(o: ItemId, d: str, nl: str, sl: str, final_without_extra: li
         final_items.append(o)
         final_without_extra.append(zn)
         new_text.append(z)
-        rows += 1
+        return 1
 
 
 def build_date_text(o: ItemId, include_date):
@@ -1260,6 +1414,8 @@ def build_date_text(o: ItemId, include_date):
         return f"<!-- {o.current.override}: {o.current.override_date} -->"
     elif o.current.override_date:
         return f"<!-- {o.current.override_date} -->"
+    elif not o.master.has_date() and o.current.original_date:
+        return f'<!-- {o.current.original_date}? -->'
     elif not o.master.has_date():
         return '<!-- Unknown -->'
     elif include_date:
@@ -1268,21 +1424,6 @@ def build_date_text(o: ItemId, include_date):
         return ''
     else:
         return '<!-- Unknown -->'
-
-
-def prepare_basic_url(o: Item):
-    if o.text and re.search("official .*?(site|homepage|page)", o.text.lower()):
-        if o.full_url:
-            ad = f"|archivedate={o.archivedate}" if o.archivedate else ""
-            return "Official", f"{{{{OfficialSite|url={o.full_url}{ad}}}}}"
-        else:
-            return "Official", o.original
-    elif o.full_url:
-        ad = f"|archivedate={o.archivedate}" if o.archivedate else ""
-        u = o.full_url if o.full_url.startswith("http") else f"https://{o.full_url}"
-        return "Basic", f"{{{{WebCite|url={u}|text={o.text}{ad}}}}} {o.extra}".strip()
-    else:
-        return "Basic", o.original
 
 
 def determine_link_order(mode, o: Item, x):
@@ -1351,7 +1492,7 @@ def compile_found(section: SectionItemIds, mode, canon):
         elif o.current.override and not o.current.override_date:
             group.append(o)
         elif o.master.has_date():
-            if o.current.index is None and "audiobook" not in o.master.original:
+            if o.current.index is None and "audiobook" not in o.master.original and "(audio)" not in o.master.original:
                 print(f"No index? {o.current.original}, {o.master.original}")
             new_found.append(o)
             if group:
@@ -1435,7 +1576,7 @@ def find_matching_audiobook(a: ItemId, existing: list, appearances: FullListData
         return []
     elif f"{a.master.target} (novelization)" in existing or f"{a.master.target} (novel)" in existing:
         return []
-    elif a.master.target.endswith("(short story)"):
+    elif any(a.master.target.endswith(f"({z})") for z in ["audio", "short story", "comic"]):
         return []
 
     z = None
@@ -1443,7 +1584,7 @@ def find_matching_audiobook(a: ItemId, existing: list, appearances: FullListData
         z = a.master.target
     elif a.master.target.endswith(")") and not a.master.target.endswith("webcomic)"):
         z = a.master.target.rsplit("(", 1)[0].strip()
-    elif a.master.parent in AUDIOBOOK_MAPPING:
+    elif a.master.parent in AUDIOBOOK_MAPPING or a.master.parent in GERMAN_MAPPING:
         z = a.master.parent
 
     if not z:
@@ -1452,6 +1593,8 @@ def find_matching_audiobook(a: ItemId, existing: list, appearances: FullListData
     results = []
     if z in AUDIOBOOK_MAPPING:
         to_check = [AUDIOBOOK_MAPPING[z]]
+    elif z in GERMAN_MAPPING:
+        to_check = [GERMAN_MAPPING[z]]
     else:
         to_check = [f"{z} (audiobook)", f"{z} (unabridged audiobook)", f"{z} (abridged audiobook)", f"{z} (script)",
                     f"{z} (audio)", f" (audio drama)", f" (German audio drama)"]
@@ -1477,14 +1620,14 @@ def find_matching_parent_audiobook(a: ItemId, existing: list, appearances: FullL
         z = a.master.parent
     elif a.master.parent.endswith(")"):
         z = a.master.parent.rsplit("(", 1)[0].strip()
-    elif a.master.parent in AUDIOBOOK_MAPPING:
+    elif a.master.parent in AUDIOBOOK_MAPPING or a.master.parent in GERMAN_MAPPING:
         z = a.master.parent
 
     if not z:
         return []
 
     results = []
-    audiobook_name = AUDIOBOOK_MAPPING.get(z, f"{z} (audiobook)")
+    audiobook_name = AUDIOBOOK_MAPPING.get(z, f"{z} (audiobook)") or GERMAN_MAPPING.get(z, f"{z}")
     if z and a.master.target in appearances.target:
         for t in appearances.target[a.master.target]:
             if t.parent == audiobook_name and f"{a.master.target}|{audiobook_name}" not in existing:

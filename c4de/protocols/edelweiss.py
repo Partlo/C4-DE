@@ -577,13 +577,14 @@ def save_reprint(site, title, entries: List[dict]):
         else:
             return f"- Cannot add {len(entries)} new reprints to {page.title()} due to lack of Editions and/or Media subsection"
     except Exception as e:
-        log(f"Encountered {type(e)} while adding reprint to {title}")
+        log(f"Encountered {type(e)} while adding reprint to {title}: {e}")
 
 
 def build_editions(lines: list, entries: list):
     for e in entries:
         template = "{{" + f"Edelweiss|url=#sku={e['sku']}|text={e['title']}|nobackup=1" + "}}"
-        lines.append(f"\n*{{{{ISBN|{e['isbn']}}}}}; {e['publicationDate']}; {e['publisher']}; {e['format']}<ref name=\"Edelweiss-{e['sku']}\">{template}</ref>")
+        x = "; ".join(e for e in [f"{{{{ISBN|{e['isbn']}}}}}", e.get("publicationDate"), e.get("publisher"), e.get("format")] if e and e.strip())
+        lines.append(f"\n*{x}<ref name=\"Edelweiss-{e['sku']}\">{template}</ref>")
     lines.append("")
 
 

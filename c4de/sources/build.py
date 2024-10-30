@@ -11,7 +11,7 @@ from c4de.common import error_log, fix_redirects, do_final_replacements
 
 def build_section_from_pieces(section: SectionComponents, items: FinishedSection, log, media_cat):
     if log and items.text:
-        print(f"Creating {items.name} section with {len(items.text.splitlines())} items")
+        print(f"Creating {items.name} section with {items.rows} / {len(items.text.splitlines())} items")
 
     pieces = [items.name] if items.text else []
     if section.before:
@@ -177,8 +177,8 @@ def build_final_text(page: Page, results: PageComponents, disambigs: list, remap
 
 def build_new_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appearances: FullListData,
                    sources: FullListData, remap: dict, include_date: bool, checked: list, log=True, use_index=True,
-                   handle_references=False, collapse_audiobooks=True):
-    results, unknown, redirects = build_page_components(target, types, disambigs, appearances, sources, remap, infoboxes, handle_references, log)
+                   handle_references=False, collapse_audiobooks=True, manual: str = None):
+    results, unknown, redirects = build_page_components(target, types, disambigs, appearances, sources, remap, infoboxes, handle_references, log, manual)
     if results.real and collapse_audiobooks:
         collapse_audiobooks = False
 
@@ -264,9 +264,9 @@ def analyze_target_page(target: Page, infoboxes: dict, types: dict, disambigs: l
 
         if unknown_items.links:
             results.append("Could not identify unknown External Links:")
-            for o in unknown_items.links:
-                results.append(f"- `{o.original if isinstance(o, Item) else o}`")
-            f.writelines("\n" + "\n".join([o.original if isinstance(o, Item) else o for o in unknown_items.links]))
+            z = [o.original if isinstance(o, Item) else o for o in unknown_items.links]
+            results.append("\n".join(f"- `{i}`" for i in z))
+            f.writelines("\n" + "\n".join(z))
 
         if unknown_items.apps:
             results.append("Could not identify unknown appearances:")

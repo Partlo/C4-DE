@@ -282,7 +282,7 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes):
             data[f] = v
 
     if data.get("published in") and "release date" in data and not data["release date"] and found.lower().replace("_", " ") != "iu media":
-        p = re.search("\[\[(.*?)(\|.*?)?\]\]", data["published in"])
+        p = re.search("\[\[(.*?)(\|.*?)?]]", data["published in"])
         if p:
             parent = Page(page.site, p.group(1))
             if parent.exists() and parent.isRedirectPage():

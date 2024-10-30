@@ -64,6 +64,7 @@ class Item:
         self.unlicensed = False
         self.abridged = False
         self.audiobook = False
+        self.german_ad = False
         self.reprint = False
         self.has_content = False
 
@@ -75,6 +76,7 @@ class Item:
         self.date = date
         self.override = None
         self.override_date = None
+        self.original_date = None
         self.future = False
         self.archivedate = archivedate
 
@@ -100,6 +102,9 @@ class Item:
     def sort_index(self, canon):
         return ((self.canon_index if canon else self.legends_index) or self.index) or 100000
 
+    def is_internal_mode(self):
+        return self.mode == "Web" or self.mode == "YT" or self.mode == "Toys" or self.mode == "Cards"
+
     def __str__(self):
         return f"Item[{self.full_id()}]"
 
@@ -123,7 +128,7 @@ class Item:
 
     def unique_id(self):
         s = ((self.card or '') + (self.special or '')) if (self.card or self.special) else None
-        t = (self.format_text or self.text) if self.target == "Database" or self.target == "Puzzle" else self.text
+        t = (self.format_text or self.text) if (self.target == "Database" or self.target == "Puzzle") else self.text
         x = f"i-{self.issue}" if "issue1" in self.original else self.issue
         i = f"{self.mode}|{self.template}|{self.target}|{self.url}|{self.parent}|{x}|{s}|{t or ''}"
         return f"{i}|True" if self.old_version else i

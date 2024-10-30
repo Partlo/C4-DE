@@ -1,4 +1,6 @@
 import re
+from json import JSONDecodeError
+
 import requests
 import traceback
 from typing import Dict
@@ -50,16 +52,22 @@ def prepare_title(t):
 
 def is_redirect(page):
     try:
-        return page.exists() and page.isRedirectPage()
+        return page.exists() and page.full_url() and page.isRedirectPage()
+    except JSONDecodeError:
+        print(f"JSONDecodeError, likely an interwiki link")
+        return False
     except Exception as e:
-        print(page.title(), e)
+        try:
+            print(page.title(), e)
+        except Exception:
+            print("Unable to parse link")
         return False
 
 
 def build_redirects(page: Page, manual: str = None):
     results = {}
     pages, pagenames = [], []
-    for r in page.linkedPages():
+    for r in page.linkedPages(follow_redirects=False):
         pages.append(r)
         pagenames.append(r.title())
     if manual:
@@ -71,20 +79,31 @@ def build_redirects(page: Page, manual: str = None):
     for r in pages:
         if is_redirect(r):
             t = r.getRedirectTarget().title()
-            if not t.startswith("Category:") and "(disambiguation)" not in t:
+            if not t.startswith("Category:"):
                 results[r.title()] = f":{t}" if t.startswith("Category:") else t
     return results
+
+
+def fix_disambigs(r, t, text):
+    if "{{otheruses" in text.lower() or "{{youmay" in text.lower():
+        lowercase = re.search("\|title=[a-z]", text)
+        tx = t.replace(' (disambiguation)', '')
+        if lowercase:
+            tx = tx[0].lower() + tx[1:]
+        text = re.sub("(\{\{[Oo]theruses(.*?)\|)title=" + prepare_title(r) + "((\|.*?)?}})",
+                      f"\\1 {tx}\\3", text)
+        text = re.sub("(\{\{[Oo]theruses(.*?)\|) ", "\\1", text)
+        text = re.sub("(\{\{[Oo]theruses(.*?)\|)\[\[" + prepare_title(r) + "((\|.*?)?]].*?}})", f"\\1[[{t}\\3", text)
+        text = re.sub("(\{\{[Yy]oumay\|.*?)\[\[" + prepare_title(r) + "(\|.*?)?]](.*?}})", f"\\1[[{t}\\2]]\\3", text)
+    elif r in text:
+        log(f"Skipping disambiguation redirect {t}")
+    return text
 
 
 def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, remap, file=False, appearances: dict=None, sources: dict=None):
     for r, t in redirects.items():
         if t in disambigs or "(disambiguation)" in t:
-            if "{{otheruses" in text.lower():
-                text = re.sub("(\{\{[Oo]theruses(.*?)\|)title=" + prepare_title(r) + "((\|.*?)?}})", f"\\1{t.replace(' (disambiguation', '')}\\3", text)
-                text = re.sub("(\{\{[Oo]theruses(.*?)\|)\[\[" + prepare_title(r) + "((\|.*?)?]].*?}})", f"\\1[[{t}\\3", text)
-                text = re.sub("(\{\{[Yy]oumay\|.*?)\[\[" + prepare_title(r) + "(\|.*?)?]](.*?}})", f"\\1[[{t}\\2]]\\3", text)
-            else:
-                log(f"Skipping disambiguation redirect {t}")
+            fix_disambigs(r, t, text)
             continue
         elif t in remap:
             log(f"Skipping remap redirect {t}")
@@ -92,6 +111,8 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
         if f"[[{r.lower()}" in text.lower() or f"={r.lower()}" in text.lower():
             if section_name:
                 print(f"Fixing {section_name} redirect {r} to {t}")
+            if section_name == "Appearances" and "Star Wars Galaxies" in r:
+                continue
             x = prepare_title(r)
             y = appearances.get(t) if appearances else (sources.get(t) if sources else None)
             if r == "Star Wars Galaxies: An Empire Divided":
@@ -100,7 +121,7 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
             if file and y:
                 text = re.sub("'?'?\[\[" + x + "(\|.*?)?]]'?'?", y[0].original, text)
             else:
-                text = re.sub("'?'?\[\[" + x + "\|('')?(" + prepare_title(t) + ")('')?]](s)?", f"\\1[[\\2]]\\1\\4", text)
+                text = re.sub("('')?\[\[" + x + "\|('')?(" + prepare_title(t) + ")('')?]](s)?('')?", f"\\1\\2[[\\3]]\\5\\1\\2", text)
                 text = re.sub("\[\[" + x + "(\|.*?)]](s)?", f"[[{t}\\1\\2]]", text)
                 if file:
                     text = re.sub("\[\[(" + x + ")(s)?]]", f"[[{t}]]\\2", text)
@@ -124,15 +145,23 @@ def do_final_replacements(new_txt, replace):
                           re.sub("(\[\[(?!File:)[^\[\]|\n]+)&mdash;", "\\1—", new_txt))
         new_txt2 = re.sub("(\[\[(?!File:)[^\[\]|\r\n]+–[^\[\]|\r\n]+\|[^\[\]|\r\n]+)&ndash;", "\\1–",
                           re.sub("(\[\[(?!File:)[^\[\]|\n]+—[^\[\]|\r\n]+\|[^\[\]|\r\n]+)&mdash;", "\\1—", new_txt2))
-        new_txt2 = re.sub("\[\[(.*?)\|\\1(.*?)]]", "[[\\1]]\\2", new_txt2)
+        new_txt2 = re.sub("\[\[(.*?)\|\\1((?!( of Bestoon).)*?)]]", "[[\\1]]\\2", new_txt2)
+        new_txt2 = re.sub("(\|set=(.*?) \(.*?\))\|(s?text|sformatt?e?d?)=\\2([|}])", "\\1\\3", new_txt2)
+        new_txt2 = new_txt2.replace("{{'}}\n", "{{'}}")
+        new_txt2 = re.sub("(\[\[((.*?) \((.*?)\)).*?]].*?)(\{\{Ab\|.*?)\[\[\\2\|''\\3'' \\4]]", "\\1\\5[[\\2|\\4]]", new_txt2)
         x = re.search("\[\[([A-Z])(.*?)\|(.\\2)(.*?)]]", new_txt2)
-        if x and x.group(3).lower().startswith(x.group(1).lower()):
+        if x and x.group(3).lower().startswith(x.group(1).lower()) and x.group(3).lower() != "ochi of bestoon":
             new_txt2 = new_txt2.replace(x.group(0), f"[[{x.group(3)}]]{x.group(4)}")
+
+        # new_txt2 = re.sub("}} \{\{C\|Reissued in (\[\[.*?)}}", "reissued=\\1}}", new_txt2)
+        # new_txt2 = re.sub("(reissused?=.*?\[\[.*?\|)''(.*?)'']]", "\\1\\2]]", new_txt2)
+        new_txt2 = re.sub("(\{\{TOMCite\|100\|Database)\|.*?}}", "\\1}}", new_txt2)
+        new_txt2 = re.sub("2012 edition}} \{\{C\|\[*2012]* edition}}", "2012 edition}}", new_txt2)
+        new_txt2 = new_txt2.replace(" (SWGTCG)|scenario=", "|scenario=")
+        new_txt2 = new_txt2.replace("[[Ochi]] of Bestoon", "[[Ochi|Ochi of Bestoon]]")
+        new_txt2 = new_txt2.replace("[[Battle station/Legends|battlestation", "[[Battle station/Legends|battle station")
         if "'''s " in new_txt2:
             new_txt2 = re.sub("( ''[^'\n]+'')'s ", "\\1{{'s}} ", new_txt2)
-        if "{{1st|" in new_txt2 or "{{1stm|" in new_txt2 or "{{1stID|" in new_txt2 or "{{1stp|" in new_txt2:
-            new_txt2 = re.sub("(\[\[(.*?)( \(.*?\))?(\|.*?)?]].*?{{1st[A-z]*?(\|.*?)?\|\[\[\\2 \((.*?audiobook)\)\|).*?]]}}", "\\1\\6]]}}", new_txt2)
-            new_txt2 = re.sub("(ook=(.*?)( \(.*?\))?(\|.*?)?}}.*?{{1st[A-z]*?(\|.*?)?\|\[\[\\2 \((.*?audiobook)\)\|).*?]]}}", "\\1\\6]]}}", new_txt2)
         if "{{more" in new_txt2.lower():
             new_txt2 = re.sub("(\{\{[Mm]ore[ _]sources}})\n+}}", "}}\n\\1", new_txt2)
         replace = new_txt != new_txt2
@@ -282,7 +311,10 @@ def build_analysis_response(site, nom_type):
     return lines
 
 
-def archive_url(url, force_new=False, timeout=30):
+def archive_url(url, force_new=False, timeout=30, enabled=True):
+    if not enabled:
+        return False, "Wayback Machine is currently read-only"
+
     if not force_new:
         try:
             r = requests.get(f"https://web.archive.org/web/{url}", timeout=30)

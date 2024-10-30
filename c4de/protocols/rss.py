@@ -347,33 +347,36 @@ def check_blog_list(site, url, feed_url, cache: Dict[str, List[str]]):
 def check_unlimited(site, url, feed_url, cache: Dict[str, List[str]]):
     x = None
     try:
-        x = requests.get(feed_url, timeout=15).text
+        x = requests.get(feed_url, timeout=15).json()
     except Exception as e:
         error_log(e)
-    if not x:
+    if not (x and x.get('data')):
+        print(f"No response from Unlimited: {feed_url} --> {x}")
         return []
 
-    soup = BeautifulSoup(x, "html.parser")
     results = []
     if site not in cache:
         cache[site] = []
 
-    script = soup.find("script", id="__NEXT_DATA__")
-    if script and any(s and "dehydratedState" in s for s in script.contents):
-        target = next(s for s in script.contents if s and "dehydratedState" in s)
-        data = json.loads(str(target))
-        articles = data["props"]["pageProps"]["dehydratedState"]["queries"][0]["state"]["data"]["data"]
-        for a in articles:
-            u = f"{url}/articles/{a['attributes']['slug']}"
-            if cache[site] and u in cache[site]:
-                continue
-            d = None
-            if a["attributes"]["publishedAt"]:
-                d = a["attributes"]["publishedAt"].split("T")[0]
-            t = re.sub("'*Star Wars'*", "''Star Wars''", a["attributes"]["title"])
+    articles = x['data']
+    # soup = BeautifulSoup(x, "html.parser")
+    # script = soup.find("script", id="__NEXT_DATA__")
+    # if script and any(s and "dehydratedState" in s for s in script.contents):
+    #     target = next(s for s in script.contents if s and "dehydratedState" in s)
+    #     data = json.loads(str(target))
+    #     articles += data["props"]["pageProps"]["dehydratedState"]["queries"][0]["state"]["data"]["data"]
 
-            results.append({"site": site, "title": t, "url": u, "content": "", "date": d})
-            cache[site].append(u)
+    for a in articles:
+        u = f"{url}/articles/{a['attributes']['slug']}"
+        if cache[site] and u in cache[site]:
+            continue
+        d = None
+        if a["attributes"]["publishedAt"]:
+            d = a["attributes"]["publishedAt"].split("T")[0]
+        t = re.sub("'*Star Wars'*", "''Star Wars''", a["attributes"]["title"])
+
+        results.append({"site": site, "title": t, "url": u, "content": "", "date": d})
+        cache[site].append(u)
 
     return results
 
@@ -563,14 +566,15 @@ def check_title_formatting(text, title_regex, title):
     m = re.search(title_regex, text)
     if m:
         title = m.group(1)
-    title = re.sub(r"<[ie]m?>[ \n]*</[ie]m?>", "", title)
-    title = re.sub(r"<[ie]m?><[ie]m?>(.*?)</[ie]m?></[ie]m?>", r"''\1''", title)
-    title = re.sub(r"<em.*?>(.*?)( )?</em>", r"''\1''\2", title)
-    title = re.sub(r"<i( .*?)?>(.*?)( )?</i>", r"''\2''\3", title)
+    title = re.sub(" ", " ", title)
+    title = re.sub(r"<[ie]m?>( )?[ \n]*</[ie]m?>", r"\1", title)
+    title = re.sub(r"<[ie]m?><[ie]m?>( )?(.*?)( )?</[ie]m?>( )?</[ie]m?>", r"\1''\2''\3\4", title)
+    title = re.sub(r"<em.*?>( )?(.*?)( )?</em>", r"\1''\2''\3", title)
+    title = re.sub(r"<i( .*?)?>( )?(.*?)( )?</i>", r"\2''\3''\4", title)
     title = re.sub(r"<span[^>]*?italic.*?>(.*?)( )?</span>", r"''\1''\2", title)
     title = re.sub(r"<span[^>]*?>(.*?)( )?</span>", r"\1\2", title)
     title = title.replace("“", '"').replace("”", '"').replace("’", "'").replace("‘", "'")
-    title = title.replace("|", "&#124;")
+    title = title.replace("|", "&#124;").replace("–", "&ndash;").replace("—", "&mdash;")
     # title = re.sub(" &#124; ?D[Ii][Ss][Nn][Ee][Yy] ?(\+|Plus)[ ]*(& Disney Junior)?[ ]*$", "", title)
     # title = re.sub(" (&#124; )?@?StarWarsKids *?x *?@?disneyjunior", "", title)
     if title.strip().endswith("&#124;"):
