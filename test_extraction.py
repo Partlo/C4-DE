@@ -19,12 +19,17 @@ def analyze(*args):
     start_on, skip_start, skip_end, redo = None, None, None, None
     include_date = False
     legends = False
+    always = False
+    end_on = None
+    bot = True
     for arg in handle_args(*args):
         if arg.startswith("-page:"):
             log = True
         gen_factory.handle_arg(arg.replace("::", ":"))
         if arg.startswith("-st:"):
             _, _, start_on = arg.replace('"', '').partition("-st:")
+        if arg.startswith("-et:"):
+            _, _, end_on = arg.replace('"', '').partition("-et:")
         if arg.startswith("-s1:"):
             _, _, skip_start = arg.replace('"', '').partition("-s1:")
         if arg.startswith("-s2:"):
@@ -35,6 +40,10 @@ def analyze(*args):
             include_date = True
         if "legends" in arg.lower():
             legends = True
+        if "always" in arg.lower():
+            always = True
+        if "-bot:" in arg.lower():
+            bot = False
     gen_factory.site.login(user="C4-DE Bot")
     if start_on:
         print(f"Starting on {start_on}")
@@ -59,7 +68,6 @@ def analyze(*args):
         i += ci
     total = ci + li
     checked = []
-    always = False
     always_comment = False
     found = False
     message = "Source Engine analysis of Appearances, Sources and references"
@@ -69,7 +77,7 @@ def analyze(*args):
         z = str(i / total * 100).zfill(10)[:6]
         if i % 100 == 0:
             print(f"{i} -> {z} -> {page.title()}")
-        if i % 100 == 0 and i > 0 and not start_on:
+        if i % 250 == 0 and i > 0 and not start_on:
             appearances = load_full_appearances(gen_factory.site, types, False, log_match=False)
             sources = load_full_sources(gen_factory.site, types, False)
 
@@ -79,6 +87,8 @@ def analyze(*args):
                 start_on = None
             else:
                 continue
+        if end_on and page.title() > end_on.lower():
+            quit()
 
         if skip_start and skip_end:
             if skip_start.lower() <= page.title().lower() <= skip_end.lower():
@@ -87,23 +97,26 @@ def analyze(*args):
             if not any(c.title(with_ns=False) == "Legends articles" for c in page.categories()):
                 continue
         try:
-            bf = True
+            bf = bot
             if any(c.title() in STATUS for c in page.categories()):
                 bf = False
+                # continue
 
             before = page.get(force=True)
             old_text = f"{before}"
             old_revision = None
-            if redo and redo >= page.title(): #and "audiobook" in old_text:
+            if redo and redo >= page.title(with_ns=False): #and "audiobook" in old_text:
                 for r in page.revisions(total=10, content=True):
                     old_revision = r['text']
                     if r['timestamp'] < since or (r['user'] != 'C4-DE Bot' and r['user'] != 'RoboCade'):
                         print(f"Reloaded revision {r['revid']} for {page.title()}")
                         break
             text = build_new_text(page, infoboxes, types, [], appearances, sources, remap, include_date,
-                                  checked, log=log, handle_references=True, collapse_audiobooks=True, manual=before if old_revision else None)
+                                  checked, log=log, handle_references=True, collapse_audiobooks=True, manual=old_revision)
+            if text is None:
+                continue
 
-            if text == old_text:
+            if text.replace("E -->", " -->") == old_text.replace("E -->", " -->"):
                 print(f"{i} -> {z} -> No changes found for {page.title()}")
                 continue
             elif len(text) - len(old_text) == 1 and text.replace("\n", "") == old_text.replace("\n", ""):
@@ -111,23 +124,26 @@ def analyze(*args):
                 continue
 
             z1 = re.sub("(\|[A-z _0-9]+=.*?(\n.+?)?)}}(\n((The |A )?'''|\{\{Quote))", "\\1\n}}\\3",
-                        re.sub("(\|.*?=)}}\n", "\\1\n}}\n", re.sub("<!--.*?-->", "", text).replace("{{!}}", "|")))
+                        re.sub("(\|.*?=)}}\n", "\\1\n}}\n", text.replace("{{!}}", "|")))
             z1 = re.sub("\[\[([Cc])redit]](s)?", "[[Galactic Credit Standard|\\1redit\\2]]", z1)
             z2 = re.sub("(\|[A-z _0-9]+=.*?(\n.+?)?)}}(\n((The |A )?'''|\{\{Quote))", "\\1\n}}\\3",
-                        re.sub("(\|.*?=)}}\n", "\\1\n}}\n", re.sub("(\|book=.*?)(\|story=.*?)(\|.*?)?}}", "\\2\\1\\3}}", re.sub("<!--.*?-->", "", old_text).replace("text=SWCC 2022", "text=SWCA 2022").replace("{{!}}", "|"))))
+                        re.sub("(\|.*?=)}}\n", "\\1\n}}\n", re.sub("(\|book=[^\n}]*?)(\|story=[^\n}]*?)(\|.*?)?}}", "\\2\\1\\3}}", old_text.replace("text=SWCC 2022", "text=SWCA 2022").replace("{{!}}", "|"))))
             z2 = re.sub("(\{\{1st.*?\|\[\[(.*?) \(.*?audiobook\)\|)''\\2'' (.*?audiobook)", "\\1\\3", z2)
             z2 = re.sub("\[\[([Cc])redit]](s)?", "[[Galactic Credit Standard|\\1redit\\2]]", z2)
 
-            match = z1.replace("–", "&ndash;").replace("—", "&mdash;").replace("{{PageNumber}} ", "").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]") == \
-                    z2.replace("–", "&ndash;").replace("—", "&mdash;").replace("{{PageNumber}} ", "").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]")
+            match = re.sub("<!--.*?-->", "", z1.replace("–", "&ndash;").replace("—", "&mdash;").replace("{{PageNumber}} ", "").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]")) == \
+                    re.sub("<!--.*?-->", "", z2.replace("–", "&ndash;").replace("—", "&mdash;").replace("{{PageNumber}} ", "").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]"))
 
             override = old_text.count("nterlang") > text.count("nterlang") or old_text.count("ategory:") > text.count("ategory:")
-            if not override and (always or (match and always_comment)):
+            if not override and match and always_comment:
                 page.put(text, message, botflag=match or bf)
                 continue
 
             # showDiff(old_text, text, context=1)
-            showDiff(z2, z1, context=1)
+            showDiff(re.sub("<!--.*?-->", "", z2), re.sub("<!--.*?-->", "", z1), context=1)
+            if not override and always:
+                page.put(text, message, botflag=match or bf)
+                continue
 
             c = '(comment-only) ' if match else ''
             choice = input_choice(

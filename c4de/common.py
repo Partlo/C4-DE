@@ -50,7 +50,7 @@ def prepare_title(t):
     return "[" + t[0].capitalize() + t[0].lower() + "]" + t[1:]
 
 
-def is_redirect(page):
+def is_redirect(page, title=None):
     try:
         return page.exists() and page.full_url() and page.isRedirectPage()
     except JSONDecodeError:
@@ -60,7 +60,7 @@ def is_redirect(page):
         try:
             print(page.title(), e)
         except Exception:
-            print("Unable to parse link")
+            print(f"Unable to parse link: {title}")
         return False
 
 
@@ -75,9 +75,17 @@ def build_redirects(page: Page, manual: str = None):
             if x not in pagenames:
                 pages.append(Page(page.site, x))
                 pagenames.append(x)
+        # for _, x, _ in re.findall("\|(title=|set=)(.*?)(\|.*?)?}}", manual):
+        #     if x not in pagenames:
+        #         pages.append(Page(page.site, x))
+        #         pagenames.append(x)
+        # for _, x, _ in re.findall("\{\{(?!(Quote))[A-z0-9]+\|([^=|\n]+?)(\|.*?)?}}", manual):
+        #     if x not in pagenames:
+        #         pages.append(Page(page.site, x))
+        #         pagenames.append(x)
 
-    for r in pages:
-        if is_redirect(r):
+    for i, r in enumerate(pages):
+        if is_redirect(r, pagenames[i]):
             t = r.getRedirectTarget().title()
             if not t.startswith("Category:"):
                 results[r.title()] = f":{t}" if t.startswith("Category:") else t
@@ -95,12 +103,12 @@ def fix_disambigs(r, t, text):
         text = re.sub("(\{\{[Oo]theruses(.*?)\|) ", "\\1", text)
         text = re.sub("(\{\{[Oo]theruses(.*?)\|)\[\[" + prepare_title(r) + "((\|.*?)?]].*?}})", f"\\1[[{t}\\3", text)
         text = re.sub("(\{\{[Yy]oumay\|.*?)\[\[" + prepare_title(r) + "(\|.*?)?]](.*?}})", f"\\1[[{t}\\2]]\\3", text)
-    elif r in text:
+    elif f"[[{r}" in text or f"|{r}|" in text or f"|{r}}}}}" in text:
         log(f"Skipping disambiguation redirect {t}")
     return text
 
 
-def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, remap, file=False, appearances: dict=None, sources: dict=None):
+def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, remap, file=False, appearances: dict=None, sources: dict=None) -> str:
     for r, t in redirects.items():
         if t in disambigs or "(disambiguation)" in t:
             fix_disambigs(r, t, text)
@@ -123,7 +131,7 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
             else:
                 text = re.sub("('')?\[\[" + x + "\|('')?(" + prepare_title(t) + ")('')?]](s)?('')?", f"\\1\\2[[\\3]]\\5\\1\\2", text)
                 text = re.sub("\[\[" + x + "(\|.*?)]](s)?", f"[[{t}\\1\\2]]", text)
-                if file:
+                if file or r.replace("Star Wars: Republic: ", "Star Wars: ") == t:
                     text = re.sub("\[\[(" + x + ")(s)?]]", f"[[{t}]]\\2", text)
                 else:
                     text = re.sub("('')?\[\[(" + x + ")]]([A-Za-z']*)", f"[[{t}|\\1\\2\\3]]", text)
@@ -146,7 +154,7 @@ def do_final_replacements(new_txt, replace):
         new_txt2 = re.sub("(\[\[(?!File:)[^\[\]|\r\n]+–[^\[\]|\r\n]+\|[^\[\]|\r\n]+)&ndash;", "\\1–",
                           re.sub("(\[\[(?!File:)[^\[\]|\n]+—[^\[\]|\r\n]+\|[^\[\]|\r\n]+)&mdash;", "\\1—", new_txt2))
         new_txt2 = re.sub("\[\[(.*?)\|\\1((?!( of Bestoon).)*?)]]", "[[\\1]]\\2", new_txt2)
-        new_txt2 = re.sub("(\|set=(.*?) \(.*?\))\|(s?text|sformatt?e?d?)=\\2([|}])", "\\1\\3", new_txt2)
+        new_txt2 = re.sub("(\|set=(.*?) \(.*?\))\|(s?text|sformatt?e?d?)=\\2([|}])", "\\1\\4", new_txt2)
         new_txt2 = new_txt2.replace("{{'}}\n", "{{'}}")
         new_txt2 = re.sub("(\[\[((.*?) \((.*?)\)).*?]].*?)(\{\{Ab\|.*?)\[\[\\2\|''\\3'' \\4]]", "\\1\\5[[\\2|\\4]]", new_txt2)
         x = re.search("\[\[([A-Z])(.*?)\|(.\\2)(.*?)]]", new_txt2)
@@ -160,6 +168,8 @@ def do_final_replacements(new_txt, replace):
         new_txt2 = new_txt2.replace(" (SWGTCG)|scenario=", "|scenario=")
         new_txt2 = new_txt2.replace("[[Ochi]] of Bestoon", "[[Ochi|Ochi of Bestoon]]")
         new_txt2 = new_txt2.replace("[[Battle station/Legends|battlestation", "[[Battle station/Legends|battle station")
+        new_txt2 = re.sub("\*.*?\{\{FactFile\|1\|Gala.*? [Mm]ap.*?}}", "*<!-- 2001-12-27 -->{{FactFile|1|[[:File:Galaxymap3.jpg|Galaxy Map poster]]}}", new_txt2)
+        new_txt2 = re.sub("(\{\{FFCite\|.*?}})<.*?>", "\\1", new_txt2)
         if "'''s " in new_txt2:
             new_txt2 = re.sub("( ''[^'\n]+'')'s ", "\\1{{'s}} ", new_txt2)
         if "{{more" in new_txt2.lower():

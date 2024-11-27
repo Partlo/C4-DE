@@ -67,7 +67,6 @@ def remove_spoiler_tags_from_page(site, page, tv_dates, tv_default, limit=30, of
     if "Star Wars Outlaws" in fields and "time" not in named:
         named['time'] = "2024-09-30"
 
-    print(named, fields)
     if named.get("time") == "skip":
         return "skip"
     elif line.group(1) == "TV":

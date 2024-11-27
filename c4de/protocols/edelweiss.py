@@ -1,3 +1,5 @@
+import traceback
+
 import time
 import json
 import re
@@ -199,7 +201,7 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
                     if not date:
                         log(f"Cannot find shipping date for {title}")
                         continue
-                    publication_date = date[0].get_attribute("innerHTML").replace("On Sale Date:", "").strip()
+                    publication_date = date[0].get_attribute("innerHTML").replace("On Sale Date:", "").replace("Ship Date:","").replace("<br>", "").strip()
 
                     fmt = item.find_elements(By.CLASS_NAME, "pve_format")
                     sub_names = item.find_elements(By.CLASS_NAME, "pve_subName")
@@ -495,6 +497,7 @@ def run_edelweiss_protocol(site, cache, scheduled=False):
         if not analysis_results.get(key):
             continue
         m = [[header]]
+        has_items = False
         for sku, item in analysis_results[key]:
             if key == "newItems" and sku in cache:
                 d = datetime.strptime(cache[sku], "%Y-%m-%d")
@@ -507,7 +510,9 @@ def run_edelweiss_protocol(site, cache, scheduled=False):
                 m.append([])
             m[-1].append(f"- {item}")
             log(f"{header} {item}")
-        messages += ["\n".join(x) for x in m]
+            has_items = True
+        if has_items:
+            messages += ["\n".join(x) for x in m]
 
     if messages:
         messages.insert(0, ":book: Edelweiss Catalog Report:")
@@ -553,7 +558,7 @@ def save_reprint(site, title, entries: List[dict]):
             page.put(new_text, f"Adding {len(entries)} new reprints to Editions", botflag=False)
 
         elif re.search("=+[A-z]* ?[Gg]allery=+", text):
-            before, split, after = re.split("(=+[A-z]* ?[Gg]allery=+\n)", text)
+            before, split, after = re.split("(=+[A-z]* ?[Gg]allery=+\n)", text, 1)
             lines = []
             if "==Media==" in before:
                 pass
@@ -564,7 +569,7 @@ def save_reprint(site, title, entries: List[dict]):
             page.put(new_text, f"Creating Editions section and adding {len(entries)} new reprints", botflag=False)
 
         elif re.search("=+Appearances=+", text):
-            before, split, after = re.split("=+Appearances=+", text)
+            before, split, after = re.split("(=+Appearances=+)", text, 1)
             lines = []
             if "==Media==" in before:
                 pass
@@ -577,6 +582,7 @@ def save_reprint(site, title, entries: List[dict]):
         else:
             return f"- Cannot add {len(entries)} new reprints to {page.title()} due to lack of Editions and/or Media subsection"
     except Exception as e:
+        traceback.print_exc()
         log(f"Encountered {type(e)} while adding reprint to {title}: {e}")
 
 

@@ -5,7 +5,7 @@ import re
 from datetime import datetime
 from typing import List, Tuple, Dict
 
-from c4de.sources.engine import extract_item, FullListData, build_template_types
+from c4de.sources.engine import extract_item, FullListData, build_template_types, GERMAN_MAPPING
 
 
 def list_all_infoboxes(site):
@@ -420,7 +420,7 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
     build_new_page(l_src_page3, l_srcs3, "Sources|True|3", new_items, changed_dates, True, save)
 
     build_new_page(extra_page, extra, "Extra", new_items, changed_dates, True, save)
-    build_new_page(series_page, series, "Series", new_items, changed_dates, True, save)
+    build_new_page(series_page, series, "Series", new_items, changed_dates, False, save)
     build_new_page(audio_page, audio, "Audiobooks", new_items, changed_dates, True, save)
     build_new_page(col_page, cols, "Collections", new_items, changed_dates, True, save)
     build_new_page(sets_page, sets, "CardSets", new_items, changed_dates, True, save)
@@ -499,7 +499,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
     audiobooks = [a.page.title() for a in all_new["Audiobooks"] if key != "Audiobooks"]
 
     final = build_final_new_items(new_items, audiobooks)
-    if page.title().endswith("/Extra"):
+    if page.title().endswith("/Extra") or page.title().endswith("/Series"):
         text = page.get() + "\n"
         for txt, d, i, _ in final:
             text += f"\n#{d}: {txt}"
@@ -518,7 +518,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
                 if a.startswith(f"{x} ("):
                     z = f"{z} {{{{Ab|{a}}}}}"
                     break
-        final.append([z, prep_date(d), i.index, fix_numbers(z)])
+        final.append([z, prep_date(d), i.index, fix_numbers(z), ("German" in z or i.target in GERMAN_MAPPING) if key == "Audiobooks" else False])
 
     start_date = DATES.get(page.title())
     section = None
@@ -527,7 +527,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
     post = re.search("==Post-([0-9]+)==", page.get())
     post = post.group(1) if post else None
     post_found = False
-    for f in sorted(final, key=lambda a: ("German" not in a[0] if key == "Audiobooks" else False, " abridged" not in a[0], a[1], (a[2] or 200), a[3], a[0])):
+    for f in sorted(final, key=lambda a: (a[4], " abridged" not in a[0], a[1], (a[2] or 200), a[3], a[0])):
         txt, d, i = f[0], f[1], f[2]
         if use_sections:
             if d.startswith("Cancel"):

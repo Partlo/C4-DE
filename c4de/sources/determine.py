@@ -28,9 +28,9 @@ COLLAPSE = {
 
 COLLAPSED_MAGAZINES = {
     "FalconCite": ("Star Wars: Millennium Falcon", ""),
-    "FFCite": ("The Official Star Wars Fact File", ""),
-    "FFCite\|y=2013": ("The Official Star Wars Fact File Part", "2013"),
-    "FFCite\|y=2014": ("The Official Star Wars Fact File Part", "2014"),
+    "FactFile": ("The Official Star Wars Fact File", ""),
+    "FactFile\|y=2013": ("The Official Star Wars Fact File Part", "2013"),
+    "FactFile\|y=2014": ("The Official Star Wars Fact File Part", "2014"),
     "FigurineCite": ("Star Wars: The Official Figurine Collection", ""),
     "StarshipsVehiclesCite": ("Star Wars: The Official Starships & Vehicles Collection", "")
 }
@@ -115,9 +115,9 @@ TEMPLATE_MAPPING = {
 }
 
 PREFIXES = {
-    "Jedi Temple Challenge": "Star Wars: Jedi Temple Challenge - Episode",
-    "CW": "Clone Wars Chapter",
-    "VaderImmortal": "Vader Immortal – Episode"
+    "Jedi Temple Challenge": "Star Wars: Jedi Temple Challenge - Episode <x>",
+    "CW": "Chapter <x> (Clone Wars)",
+    "VaderImmortal": "Vader Immortal – Episode <x>"
 }
 
 
@@ -149,30 +149,45 @@ def swap_parameters(s: str):
     return re.sub("(\|book=.*?)(\|story=.*?)(\|.*?)?}}", "\\2\\1\\3}}", s)
 
 
-def extract_fact_file(z: str, s: str, a: bool):
-    x = re.search("\{\{FFCite\|([0-9]+)\|?}}", s)
-    if x:
-        return Item(z, "General", a, target=f"The Official Star Wars Fact File {x.group(1)}")
+def decide_ff_issue(y, i):
+    if y and i in ["1", "2", "3", "4", "5"]:
+        return f"Part {i} ({y})"
+    elif y == "2014":
+        return f"Part {i}"
+    else:
+        return i
 
-    x = re.search("FFCite\|([0-9]+)\|(German Edition - )?(([A-Z]+) ?([0-9]+) ?(-|–|—|&mdash;|&ndash;)? ?\\4?([0-9]*)?)([|,])? ?(.*?)$", s)
+
+def extract_fact_file(z: str, s: str, a: bool):
+    x = re.search("\{\{(FactFile(\|y=(201[34]))?)\|([0-9]+)\|?}}", s)
     if x:
-        issue = x.group(1)
-        page = x.group(3)
-        abbr = x.group(4)
-        num1 = x.group(5)
-        num2 = x.group(7)
-        text = x.group(9)
-        item = Item(z, "General", a, target=f"The Official Star Wars Fact File {issue}", template="FFCite",
-                    issue=issue, text=f"{abbr} {num1} {text}")
-        item.ff_data = {"page": page, "abbr": abbr, "num1": num1, "num2": num2, "text": text, "legacy": x.group(8) == ","}
+        issue = decide_ff_issue(x.group(3), x.group(4))
+        return Item(z, "General", a, template=x.group(1), target=f"The Official Star Wars Fact File {issue}")
+
+    x = re.search("(FactFile(\|y=(201[34]))?)\|(?P<i>[0-9]+)\|(German Edition - )?(?P<p>(?P<a>[0-9]* ?[A-Z]+)[ -]?(?P<n>[0-9]+) ?(-|–|—|&mdash;|&ndash;)? ?\\7?(?P<m>[0-9]*)?)(?P<s>[|,])? ?(?P<t>.*?)$", s)
+    if x:
+        issue = decide_ff_issue(x.group(3), x.group('i'))
+        page = x.group('p')
+        abbr = x.group('a').upper()
+        num1 = x.group('n')
+        num2 = x.group('m')
+        text = x.group('t') or ''
+        num3, num4 = None, None
+        y = re.search("<[A-Z]+ ([0-9]+)-([0-9]+)>", text or "")
+        if y:
+            num3, num4 = y.group(1), y.group(2)
+            text = text.replace(y.group(0), "")
+        item = Item(z, "General", a, target=f"The Official Star Wars Fact File {issue}", template=x.group(1),
+                    issue=issue, text=f"{abbr} {num1} {text.split('}')[0]}")
+        item.ff_data = {"page": page, "abbr": abbr, "num1": num1, "num2": num2, "num3": num3, "num4": num4, "text": text, "legacy": x.group('s') == ","}
         return item
 
-    x = re.search("FFCite\|([0-9]+)\|'*(.*?)'*}}", s)
+    x = re.search("(FactFile(\|y=(201[34]))?)\|([0-9]+)\|'*(.*?)'*}}", s)
     if x:
-        issue = x.group(1)
-        item = Item(z, "General", a, target=f"The Official Star Wars Fact File {issue}", template="FFCite",
-                    issue=issue, text=x.group(2))
-        item.ff_data = {"page": None, "abbr": None, "num1": None, "num2": None, "text": x.group(2), "legacy": True}
+        issue = decide_ff_issue(x.group(3), x.group(4))
+        item = Item(z, "General", a, target=f"The Official Star Wars Fact File {issue}", template=x.group(1),
+                    issue=issue, text=x.group(5))
+        item.ff_data = {"page": None, "abbr": None, "num1": None, "num2": None, "num3": None, "num4": None, "text": x.group(5), "legacy": True}
         return item
     return None
 
@@ -209,12 +224,12 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     s = re.sub("''(\[[^\[].*?[^]]])''", "\\1", s)
     # Plaintext links not wrapped in WebCite or OfficialSite
     if s.count("[") == 1 and s.count("]") == 1 and "WebCite" not in s:
-        x = re.search("\[(https?://)(.*?web\.archive.org/web/([0-9]+)/)?(.*?\.[a-z]+/(.*?)) (.*?)]", s)
+        x = re.search("\[(https?://)(w?w?w?\.?web\.archive.org/web/([0-9]+)/)?(.*?\.[a-z]+/(.*?)) (.*?)]", s)
         if x:
-            return Item(z, "Basic", a, url=x.group(1) + x.group(5), full_url=x.group(1) + x.group(5), text=x.group(6), archivedate=x.group(3))
-        x = re.search("\[(https?://)(.*?web\.archive.org/web/([0-9]+)/)?(.*?) (.*?)]", s)
+            return Item(z, "Basic", a, url=x.group(5), full_url=x.group(1) + x.group(4), text=x.group(6), archivedate=x.group(3))
+        x = re.search("\[(https?://)(w?w?w?\.?web\.archive.org/web/([0-9]+)/)?(.*?) (.*?)]", s)
         if x:
-            return Item(z, "Basic", a, url=x.group(1) + x.group(4), full_url=x.group(1) + x.group(4), text=x.group(5), archivedate=x.group(3))
+            return Item(z, "Basic", a, url=x.group(4), full_url=x.group(1) + x.group(4), text=x.group(5), archivedate=x.group(3))
 
     if s.count("{{") > s.count("}}"):
         print(f"Cannot parse invalid line on {page}: {s}")
@@ -250,7 +265,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
             r = re.sub("^.*\[\[(.*?)(\|.*?)?]+.*$", '\\1', s)
         return Item(o if master else s, "External" if r.startswith(":File") else "General", a, target=r)
 
-    if "FFCite" in s and "y=" not in s:
+    if "FactFile" in s:
         x = extract_fact_file(s, z, a)
         if x:
             return x
@@ -427,7 +442,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         return Item(z, mode, a, target=m.group('set'), template=template, text=m.group('scenario'))
 
     # Magazine articles with issue as second parameter
-    m = re.search("{{[^|\[}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(issue[0-9]?=)?(?P<issue>(Special Edition |Souvenir Special|Premiere Issue)?H?S? ?[0-9.]*)(\|issue[0-9]=.*?)?\|(story=|article=)?\[*(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?]*(\|.*?)?}}", s.replace("&#61;", "="))
+    m = re.search("{{[^|\[}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(issue[0-9]?=)?(?P<issue>(Special Edition |Interview Special|Souvenir Special|Premiere Issue)?H?S? ?[0-9.]*)(\|issue[0-9]=.*?)?\|(story=|article=)?\[*(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?]*(\|.*?)?}}", s.replace("&#61;", "="))
     if not m:
         m = re.search("{{[^|\[}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(story=|article=)?\[*(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?]*\|(issue[0-9]?=)?(?P<issue>(Special Edition |Souvenir Special|Premiere Issue)?H?S? ?[0-9.]*)(\|issue[0-9]=.*?)?(\|.*?)?}}", s.replace("&#61;", "="))
     if m and template != "StoryCite" and template != "SimpleCite":
@@ -457,7 +472,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     if m:
         i = m.group(2).strip()
         if template and template in PREFIXES:
-            return Item(z, mode, a, target=f"{PREFIXES[template]} {i}", template=template)
+            return Item(z, mode, a, target=PREFIXES[template].replace("<x>", i), template=template)
         elif template and template in TEMPLATE_MAPPING and i in TEMPLATE_MAPPING[template]:
             return Item(z, mode, a, target=TEMPLATE_MAPPING[template][i], template=template)
         elif template and i:
@@ -526,6 +541,8 @@ def determine_parent_magazine(m: Match, template, types: dict):
     if m.group('issue'):
         if template == "InsiderCite" and m.group('issue').isnumeric() and int(m.group('issue')) <= 23:
             p = "The Lucasfilm Fan Club Magazine"
+        elif template == "InQuestCite" and m.group('issue').isnumeric() and int(m.group('issue')) <= 46:
+            p = "InQuest"
         elif template == "CalendarCite":
             p = f"Star Wars Day-at-a-Time Calendar 20{m.group('issue')}"
     if not p:
@@ -673,7 +690,7 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
                 return m
         return None
 
-    if o.template == "FFCite" and "|y=" not in o.original:
+    if o.template and o.template.startswith("FactFile"):
         x = match_fact_file(o, by_target, other_targets)
         if x:
             return x
@@ -724,21 +741,6 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
 
     if (o.mode == "Cards" or o.mode == "Toys") and (o.card or o.special):
         set_name = o.parent or o.target
-        m = match_by_set_name(o, o.mode, o.template, set_name, data, other_data)
-        if m:
-            return m
-
-        if set_name == "Star Wars: The Power of the Force (1995 toy line)":
-            v = 'HasbroCite' if o.template == 'KennerCite' else 'KennerCite'
-            m = match_by_set_name(o, o.mode, v, set_name, data, other_data)
-            if m:
-                return m
-
-        if o.template == "SWMiniCite":
-            m = match_by_set_name(o, "General", "None", set_name, data, other_data)
-            if m:
-                return m
-
         if o.url:
             m = match_by_url(o, o.url, data, False)
             if m:
@@ -755,11 +757,29 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
                         elif not set_match:
                             set_match = x
         if set_match:
+            if o.mode == "Toys" and o.template != "SWMiniCite":
+                print(f"Unknown {o.template} set: {o.card}/{o.special}")
+                o.unknown = True
             return ItemId(o, set_match, True, False)
-    elif o.mode == "Cards" or o.mode == "Toys":
-        m = match_by_set_name(o, o.mode, o.template, o.parent if o.parent else o.target, data, other_data)
+
+    if o.mode == "Cards" or o.mode == "Toys":
+        set_name = o.parent or o.target
+        if o.card or o.special:
+            if o.mode == "Toys" and o.template != "SWMiniCite":
+                print(f"{o.mode} {o.template} with {o.card}/{o.special} card/special fell through specific logic")
+                o.unknown = True
+        m = match_by_set_name(o, o.mode, o.template, set_name, data, other_data)
         if m:
             return m
+
+        m = match_by_set_name(o, o.mode, None, set_name, data, other_data)
+        if m:
+            return m
+
+        if o.template == "SWMiniCite":
+            m = match_by_set_name(o, "General", "None", set_name, data, other_data)
+            if m:
+                return m
 
     # Find a match by URL
     if o.url and 'starwars/article/dodcampaign' not in o.url:
@@ -866,37 +886,51 @@ def match_fact_file(o: Item, by_target: Dict[str, List[Item]], other_targets: Di
             if x:
                 return x
         if str(i) != o.issue and f"FFData|{i}" in other_targets:
-            x = match_fact_file_issue(o, other_targets[f"FFData|{i}"], False, False)
+            x = match_fact_file_issue(o, other_targets[f"FFData|{i}"], True, False)
             if x:
                 return x
     o.unknown = True
     return ItemId(o, o, True, False)
 
 
+def flatten(s):
+    return s.replace("&", "and").replace("-", "").replace("–", "").replace("—", "").replace("&mdash;", "").replace("&ndash;", "").replace("'", "").replace("German Edition - ", "").replace("(German Edition)", "").replace("  ", " ").lower().strip()
+
+
 def match_fact_file_issue(o: Item, entries: list[Item], other: bool, log_missing=True):
-    abbr = [x for x in entries if o.ff_data["abbr"] and x.ff_data["abbr"] == o.ff_data["abbr"]]
+    if not o.ff_data:
+        return None
+    a = (o.ff_data.get("abbr") or "").replace(" ", "")
+    a = "0ABY" if a == "0BBY" else a
+    if o.issue == "Part 8" and a == "22BBY":
+        a = "21BBY"
+    if a == "ANA" and o.issue and o.issue.startswith("Part") and o.issue != "Part 55":
+        a = "SKY"
+    abbr = [x for x in entries if a and x.ff_data.get("abbr") and x.ff_data["abbr"].replace(" ", "") == a]
     if len(abbr) == 1:
-        if o.ff_data['legacy']:
-            print(f"Match: {o.ff_data}, {abbr[0].ff_data}")
+        # if o.ff_data['legacy']:
+        #     print(f"Match: {o.ff_data}, {abbr[0].ff_data}")
         return ItemId(o, abbr[0], False, other)
     elif len(abbr) > 1:
-        if o.ff_data["num1"]:
-            x1, x2 = to_int(o.ff_data["num1"]), to_int(o.ff_data["num2"])
-            for i in abbr:
-                n1, n2 = to_int(i.ff_data["num1"]), to_int(i.ff_data["num2"])
-                if x1 and x2 and n1 <= x1 and x2 <= n2:
-                    return ItemId(o, i, False, other)
-                elif x1 and x2 is None and n1 <= x1 <= n2:
-                    return ItemId(o, i, False, other)
+        for i in [1, 2]:
+            if o.ff_data[f"num{i}"]:
+                x1, x2 = to_int(o.ff_data[f"num{i}"]), to_int(o.ff_data[f"num{i + 1}"])
+                for x in abbr:
+                    n1, n2 = to_int(x.ff_data[f"num{i}"]), to_int(x.ff_data[f"num{i + 1}"])
+                    if x1 and x2 and n1 <= x1 and x2 <= n2:
+                        return ItemId(o, x, False, other)
+                    elif x1 and x2 is None and n1 <= x1 <= n2:
+                        return ItemId(o, x, False, other)
         print(f"Unable to exact-match {o.ff_data['page']}, using {abbr[0].ff_data}: {o.original}")
         return ItemId(o, abbr[0], False, other)
 
-    if not o.ff_data["abbr"] and o.ff_data["text"]:
+    if o.ff_data["text"]:
+        t1, _, _ = flatten(o.ff_data["text"]).lower().partition("}}")
         for i in entries:
             if i.issue != o.issue:
                 continue
-            t, _, _ = i.ff_data["text"].replace("'", "").partition("}}")
-            if i.ff_data["text"] and (t == o.ff_data["text"] or t in o.ff_data["text"] or t[:-1] in o.ff_data["text"]):
+            t2, _, _ = flatten(i.ff_data["text"]).lower().partition("}}")
+            if i.ff_data["text"] and (t1 == t2 or t2 in t1 or t2[:-1] in t1 or t1 in t2):
                 return ItemId(o, i, False, other)
     if log_missing:
         print(f"Unable to find {o.ff_data['page']} for issue {o.issue}: {o.ff_data}")
@@ -916,7 +950,7 @@ def get_possible_targets(o: Item, by_target):
     return targets
 
 
-def match_by_set_name(o: Item, mode: str, template: str, set_name: str, data, other_data):
+def match_by_set_name(o: Item, mode: str, template: Optional[str], set_name: str, data, other_data):
     m = find_matching_set(mode, template, set_name, data)
     if m:
         return ItemId(o, m, True, False)
@@ -935,7 +969,7 @@ def find_matching_set(mode, template, set_name, data: dict):
 
     partial = []
     for x, y in data.items():
-        if y.template == template and y.target:
+        if (y.template == template or not template) and y.target:
             if y.target == set_name:
                 return y
             elif y.target.startswith(set_name):
@@ -1199,8 +1233,8 @@ def match_url(o: Item, u: str, data: dict, other_data: dict):
     #     m = match_by_url(o, u.split("/#/")[0], data, False)
     if not m and o.template == "WebCite":
         m = match_by_urls(o, u.replace("http:", "https:").split("//", 1)[-1].replace("www.", ""), data, other_data, True)
-        if not m:
-            m = match_by_urls(o, u.replace("http:", "https:").split("//", 1)[-1].split("/", 1)[-1], data, other_data, True)
+    if not m and o.template == "WebCite":
+        m = match_by_urls(o, u.replace("http:", "https:").split("//", 1)[-1].split("/", 1)[-1], data, other_data, True)
     if not m and o.template == "Databank" and o.url.startswith("databank/"):
         m = match_by_urls(o, u.replace("databank/", ""), data, other_data, True)
     if not m and o.template == "Databank" and not o.url.startswith("databank/"):
@@ -1280,6 +1314,5 @@ def match_by_url(o: Item, url: str, data: Dict[str, Item], replace_page: bool):
     if old_versions:
         return ItemId(o, old_versions[-1], ad is not None, False)
     if partial_matches:
-        print(len(partial_matches), [x.template for x in partial_matches])
         return ItemId(o, partial_matches[0], False, False)
     return None

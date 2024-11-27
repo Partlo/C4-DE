@@ -173,3 +173,9 @@
 **Further Source Engine tweaks
 **Switch SW Unlimited RSS to an API
 **Suppressed duplicate CT reporting
+*'''4.0.0''': November 27, 2024
+**Legends Appearances sorting by timeline placement
+**Series/arc expansion logic using WhatLinksHere
+**Support for Template:Reprint
+**Archive-URL and record-source commands
+**Various bug fixes

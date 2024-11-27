@@ -115,7 +115,7 @@ class C4DE_Bot(commands.Bot):
         self.emoji_storage = {}
 
         self.ready = False
-        self.should_archive = False
+        self.should_archive = True
 
         self.report_dm = None
 
@@ -257,6 +257,7 @@ class C4DE_Bot(commands.Bot):
         "is_single_preload_command": "handle_single_preload_command",
         "is_preload_command": "handle_preload_command",
         "is_check_target_command": "handle_target_url_check",
+        "is_archive_url_command": "handle_archive_url_command",
         "is_record_url_command": "handle_record_source_command"
     }
 
@@ -392,7 +393,7 @@ class C4DE_Bot(commands.Bot):
             await self.ghost_touch(message)
             return
 
-        if "rebuild sources" in message.content.lower():
+        if "rebuild sources" in message.content.lower() or "reload sources" in message.content.lower():
             await self.build_sources()
             await message.add_reaction(THUMBS_UP)
             return
@@ -758,22 +759,28 @@ class C4DE_Bot(commands.Bot):
 
         page = Page(self.site, "User:C4-DE Bot/Canon Missing")
         text = "" if not page.exists() else page.get()
-        pages = [i for i in self.appearances.no_canon_index if i.target not in skip]
-        new_text = "\n".join(f"#{x.date}: {x.original}" for x in pages)
+        pages1, pages2 = [], []
+        for i in self.appearances.no_canon_index:
+            (pages2 if i.target in skip else pages1).append(i)
+
+        new_text = "\n".join(f"#{x.date}: {x.original}" for x in pages1)
+        if pages2:
+            new_text += "\n\n==Other==\n"
+            new_text += "\n".join(f"#{x.date}: {x.original}" for x in pages2)
+
         if new_text != text:
             page.put(new_text, "Recording items missing from the canon media timeline", botflag=False)
 
         page = Page(self.site, "User:C4-DE Bot/Legends Missing")
         text = "" if not page.exists() else page.get()
-        pages = [i for i in self.appearances.no_legends_index if i.target not in skip]
+        pages1, pages2 = [], []
+        for i in self.appearances.no_legends_index:
+            (pages2 if i.target in skip else pages1).append(i)
 
         ex_rpg = [c.title() for c in Category(self.site, "Category:West End Games adventure supplements").articles()]
-        ex_fiction = [p.title() for p in Category(self.site, "Category:Legends short stories").articles(recurse=True)]
         main, fiction, rpg = [], [], []
-        for x in pages:
-            if x.target in ex_fiction:
-                fiction.append(f"#{x.date}: {x.original}")
-            elif x.target in ex_rpg:
+        for x in pages1:
+            if x.target in ex_rpg:
                 rpg.append(f"#{x.date}: {x.original}")
             elif x.template in ["WEGCite", "DarkStryder", "Journal", "GamerCite", "LivingForce", "WizCite", "WizardsCite", "FFG", "FFGXW", "DoD"]:
                 rpg.append(f"#{x.date}: {x.original}")
@@ -783,11 +790,11 @@ class C4DE_Bot(commands.Bot):
                 # main.append(f"#{x.date}: {x.timeline or 'N/A'}: {x.original}")
 
         nt = ["\n".join(main)]
-        if fiction:
-            nt.append("==Short stories==\n" + "\n".join(fiction))
         if rpg:
             nt.append("==RPG==\n" + "\n".join(rpg))
-        new_text = "\n\n".join(nt)
+        if pages2:
+            nt.append("==Other==\n" + "\n".join(f"#{x.date}: {x.original}" for x in pages2))
+        new_text = re.sub("\|reprint=[A-z0-9]+", "", "\n\n".join(nt))
         if new_text != text:
             page.put(new_text, "Recording items missing from the Legends media timeline", botflag=False)
 
@@ -814,6 +821,13 @@ class C4DE_Bot(commands.Bot):
     @staticmethod
     def is_check_target_command(message: Message):
         match = re.search("check target URL: <?(?P<url>.*?starwars\.com.*?)>?$", message.content)
+        if match:
+            return match.groupdict()
+        return None
+
+    @staticmethod
+    def is_archive_url_command(message: Message):
+        match = re.search("archive( URL)?:? <?(?P<url>(https?.*?//)?[^ \n]+?)>?( \((?P<date>[0-9X-]+)\))?$", message.content)
         if match:
             return match.groupdict()
         return None
@@ -1349,6 +1363,59 @@ class C4DE_Bot(commands.Bot):
 
         await message.add_reaction(THUMBS_UP)
         return
+
+    async def handle_archive_url_command(self, message: Message, command: dict):
+        await message.add_reaction(TIMER)
+        try:
+            template = command["template"]
+            target_site = None
+            for site, data in self.rss_data["sites"].items():
+                if template and data["template"] == template:
+                    target_site = site
+                elif data["baseUrl"].split("//", 1)[-1].split("www.", 1)[-1] in command["url"]:
+                    target_site = site
+                    template = template or data["template"]
+
+            site_data = self.rss_data["sites"].get(target_site)
+            if not site_data:
+                u = command['url'].split('//', 1)[-1].split('/', 1)[0]
+                site_data = {"baseUrl": f"https://{u}", "template": template, "emoji": "HanShrug", "channels": [], "title": "(.*?)"}
+
+            r = requests.get(command["url"])
+            if r.status_code != 200:
+                await message.add_reaction(EXCLAMATION)
+                return
+            title = check_title_formatting(r.text, site_data.get("title", "(.*?)"), "")
+            m = {"site": target_site, "title": title, "url": r.url, "content": "", "date": command.get('date') or datetime.now().strftime('%Y-%m-%d')}
+
+            if template:
+                archive = self.parse_archive("Databank" if target_site == "Databank" else template)
+                youtube = "videoId=" in command["url"]
+                if youtube:
+                    target = command["url"].split("videoId=", 1)[-1].split("&")[0]
+                else:
+                    target = m["url"].replace(site_data["baseUrl"] + "/", "")
+
+                if target.endswith("/"):
+                    target = target[:-1]
+                if m['site'] == "Databank":
+                    target = target.replace("databank/", "")
+                already_archived = archive and archive.get(target)
+                if already_archived:
+                    log(f"URL already archived and recorded: {m['url']}")
+                    success, include_archivedate, archivedate = True, False, archive[target]
+                else:
+                    log(f"Archiving URL: {m['url']}")
+                    success, archivedate = archive_url(m["url"], timeout=60 if youtube else 30, enabled=self.should_archive)
+
+                if success and not already_archived:
+                    self.add_urls_to_archive(template, target, archivedate)
+            await message.add_reaction(THUMBS_UP)
+        except Exception as e:
+            traceback.print_exc()
+            error_log(type(e), e.args)
+            await message.add_reaction(EXCLAMATION)
+        await message.remove_reaction(TIMER, self.user)
 
     async def handle_record_source_command(self, message: Message, command: dict):
         await message.add_reaction(TIMER)

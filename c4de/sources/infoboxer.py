@@ -208,7 +208,7 @@ def extract_date(text):
 
 REMAP = {
     "issue": "issues",
-    "designer": "publisher",
+    # "designer": "publisher",
     "artist": "penciller",
     "release date": "start date",
     "developer": "publisher",

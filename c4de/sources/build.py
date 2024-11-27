@@ -184,6 +184,8 @@ def build_new_text(target: Page, infoboxes: dict, types: dict, disambigs: list, 
 
     new_components, dates, unknown_items, analysis = analyze_section_results(
         target, results, disambigs, appearances, sources, remap, use_index, include_date, collapse_audiobooks, checked, log)
+    if not new_components:
+        return None
 
     if unknown or unknown_items.found():
         with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/sources/unknown.txt", mode="a",
@@ -207,10 +209,18 @@ def build_new_text(target: Page, infoboxes: dict, types: dict, disambigs: list, 
 
 
 def record_unknown(unknown, results, f, target):
+    r = ""
     for o in unknown:
-        results.append(f"- `{o.original if isinstance(o, Item) else o}`")
+        x = f"- `{o.original if isinstance(o, Item) else o}`"
+        if len(r) + len(x) > 500:
+            results.append(r)
+            r = f"{x}"
+        else:
+            r = f"{r}\n{x}"
         if (o.original if isinstance(o, Item) else o).startswith("*"):
             print(target.title(), o.original)
+    if r:
+        results.append(r)
     f.writelines("\n" + "\n".join([(o.original if isinstance(o, Item) else o) for o in unknown]))
 
 

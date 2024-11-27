@@ -1,5 +1,6 @@
 from typing import List, Dict, Tuple
 import re
+import copy
 
 SELF_CITE = ["torweb", "twitter", "sonycite", "hunters", "ilm", "ilmxlab", "ffgweb", "facebookcite", "ea", "disney",
              "darkhorse", "d23", "dpb", "cite web", "blog", "blogspot", "amgweb", "asmodee", "marvel", "lucasfilm",
@@ -20,6 +21,7 @@ SORT_MODES = {
 class Item:
     """
     :type date: str
+    :type target: str
     """
     def __init__(self, original: str, mode: str, is_app: bool, *, invalid=False, target: str = None, text: str = None,
                  parent: str = None, template: str = None, url: str = None, issue: str = None, subset: str=None,
@@ -67,6 +69,9 @@ class Item:
         self.german_ad = False
         self.reprint = False
         self.has_content = False
+        self.collection_type = None
+        self.expanded = False
+        self.original_printing = None
 
         self.index = None
         self.canon_index = None
@@ -91,10 +96,14 @@ class Item:
         self.date_ref = None
         self.extra_date = None
         self.ab = ''
+        self.repr = ''
         self.crp = False
         self.extra = ''
         self.bold = False
         self.master_text = ''
+
+    def copy(self):
+        return copy.copy(self)
 
     def timeline_index(self, canon):
         return self.canon_index if canon else self.legends_index
@@ -171,7 +180,11 @@ class ItemId:
         self.replace_references = master.original and "]]'' ([[" not in master.original
 
     def sort_date(self):
-        return self.current.override_date if self.current.override_date else self.master.date
+        if self.current.override_date:
+            return self.current.override_date
+        elif self.current.unknown and self.current.original_date:
+            return self.current.original_date
+        return self.master.date
 
     def sort_text(self):
         if self.ref_magazine or self.current.template in REF_MAGAZINE_ORDERING:
@@ -189,23 +202,25 @@ class AnalysisConfig:
 
 class FullListData:
     def __init__(self, unique: Dict[str, Item], full: Dict[str, Item], target: Dict[str, List[Item]],
-                 parantheticals: set, both_continuities: set, no_canon_index: List[Item]=None, no_legends_index: List[Item]=None):
+                 parantheticals: set, both_continuities: set, no_canon_index: List[Item]=None, no_legends_index: List[Item]=None, reprints: dict=None):
         self.unique = unique
         self.full = full
         self.target = target
         self.parantheticals = parantheticals
+        self.reprints = reprints
         self.both_continuities = both_continuities
         self.no_canon_index = no_canon_index
         self.no_legends_index = no_legends_index
 
 
 class PageComponents:
-    def __init__(self, before, canon, non_canon, real, mode):
+    def __init__(self, before, canon, non_canon, unlicensed, real, mode):
         self.before = before
         self.final = ""
         self.original = before
         self.canon = canon
         self.non_canon = non_canon
+        self.unlicensed = unlicensed
         self.real = real
         self.app_mode = mode
 
@@ -217,7 +232,7 @@ class PageComponents:
 
 
 class AnalysisResults:
-    def __init__(self, apps: List[ItemId], nca: List[ItemId], src: List[ItemId], ncs: List[ItemId], canon: bool, abridged: list, mismatch: List[ItemId], disambig_links: list):
+    def __init__(self, apps: List[ItemId], nca: List[ItemId], src: List[ItemId], ncs: List[ItemId], canon: bool, abridged: list, mismatch: List[ItemId], disambig_links: list, reprints: dict):
         self.apps = apps
         self.nca = nca
         self.src = src
@@ -226,11 +241,12 @@ class AnalysisResults:
         self.abridged = abridged
         self.mismatch = mismatch
         self.disambig_links = disambig_links
+        self.reprints = reprints
 
 
 class SectionItemIds:
     def __init__(self, name, found: List[ItemId], wrong: List[ItemId], non_canon: List[ItemId],
-                 cards: Dict[str, List[ItemId]], sets: Dict[str, str], links: List[Item]):
+                 cards: Dict[str, List[ItemId]], sets: Dict[str, str], links: List[Item], expanded):
         self.name = name
         self.found = found
         self.wrong = wrong
@@ -238,6 +254,30 @@ class SectionItemIds:
         self.cards = cards
         self.sets = sets
         self.links = links
+        self.is_appearances = name and "appearances" in name.lower()
+        self.expanded = expanded
+        self.mark_as_non_canon = ""
+
+    def merge(self, other):
+        """:type other: SectionItemIds """
+        self.found += other.found
+        other.found = []
+        self.wrong += other.wrong
+        other.wrong = []
+        self.found += other.non_canon
+        other.non_canon = []
+        for k, v in other.cards.items():
+            if k in self.cards:
+                self.cards[k] += v
+            else:
+                self.cards[k] = v
+        other.cards = {}
+        for k, v in other.sets.items():
+            if k not in self.sets:
+                self.sets[k] = v
+        other.sets = {}
+        self.links += other.links
+        other.links = []
 
 
 class SectionComponents:
