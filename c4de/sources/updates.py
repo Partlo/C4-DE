@@ -166,7 +166,7 @@ def parse_page(p: Page, types):
     for i, line in enumerate(text.splitlines()):
         parse_line(line, i, p, types, full, unique, target)
 
-    return FullListData(unique, full, target, set(), set())
+    return FullListData(unique, full, target, {}, set(), set())
 
 
 def parse_line(line, i, p: Page, types, full, unique, target):
@@ -255,6 +255,8 @@ def search_for_missing(site, appearances, sources):
         for p in c.articles(namespaces=0):
             pages_checked.add(p.title())
         for sc in c.subcategories(recurse=True):
+            if sc.title(with_ns=False) in ["Real-world albums"]:
+                continue
             cats_checked.add(sc.title())
             for p in sc.articles(namespaces=0):
                 pages_checked.add(p.title())
@@ -331,7 +333,7 @@ def check_category(c: Category, cats_checked, pages_checked, tracked, infoboxes,
 
 
 def merge_full_lists(l1, l2, l3):
-    return FullListData(l1.unique + l2.unique + l3.unique, l1.full + l2.full + l3.full, l1.target + l2.target + l3.target, set(), set())
+    return FullListData(l1.unique + l2.unique + l3.unique, l1.full + l2.full + l3.full, l1.target + l2.target + l3.target, {}, set(), set())
 
 
 def build_item_type(item_type, i: FutureProduct):
@@ -485,7 +487,7 @@ def build_final_new_items(new_items: List[FutureProduct], audiobooks: List[str])
                     break
 
         d = build_date(i.dates)
-        final.append([t, prep_date(d), 100, fix_numbers(t)])
+        final.append([t, prep_date(d), 100, fix_numbers(t), "German" in i.page.title() or i.page.title() in GERMAN_MAPPING])
     return final
 
 
@@ -501,7 +503,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
     final = build_final_new_items(new_items, audiobooks)
     if page.title().endswith("/Extra") or page.title().endswith("/Series"):
         text = page.get() + "\n"
-        for txt, d, i, _ in final:
+        for txt, d, _, _, _ in final:
             text += f"\n#{d}: {txt}"
         page.put(text, "Updating Source Engine Masterlist with new future products", botflag=False)
         return

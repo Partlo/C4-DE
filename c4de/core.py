@@ -21,7 +21,7 @@ import ssl
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
-from pywikibot import Site, Page, Category
+from pywikibot import Site, Page, Category, User
 from pywikibot.exceptions import NoPageError, LockedPageError, OtherPageSaveError
 from c4de.common import log, error_log, archive_url
 from c4de.data.filenames import *
@@ -64,6 +64,7 @@ UPDATES = "star-wars-news"
 SITE_URL = "https://starwars.fandom.com/wiki"
 
 THUMBS_UP = "👍"
+THUMBS_DOWN = "👎"
 TIMER = "⏲️"
 EXCLAMATION = "❗"
 BOARD_EMOTES = {"EduCorps": "EC", "AgriCorps": "AC", "Inquisitorius": "Inq"}
@@ -201,7 +202,7 @@ class C4DE_Bot(commands.Bot):
             self.check_internal_rss.start()
             self.check_external_rss.start()
             self.check_senate_hall_threads.start()
-            self.check_spoiler_templates.start()
+            self.check_spoiler_templates_and_cleanup.start()
             self.check_future_products.start()
             self.run_canon_legends_switch.start()
             self.check_for_sources_rebuild.start()
@@ -258,7 +259,8 @@ class C4DE_Bot(commands.Bot):
         "is_preload_command": "handle_preload_command",
         "is_check_target_command": "handle_target_url_check",
         "is_archive_url_command": "handle_archive_url_command",
-        "is_record_url_command": "handle_record_source_command"
+        "is_record_url_command": "handle_record_source_command",
+        "is_user_eligibility_command": "handle_user_eligibility_command",
     }
 
     @staticmethod
@@ -423,6 +425,14 @@ class C4DE_Bot(commands.Bot):
         match = self.is_create_index_command(message)
         if match:
             await self.handle_create_index_command(message, match)
+            return
+
+        if "double redirect" in message.content.lower():
+            await message.add_reaction(TIMER)
+            self.update_unused_files()
+            self.fix_double_redirects()
+            await message.remove_reaction(TIMER, self.user)
+            await message.add_reaction(THUMBS_UP)
             return
 
         if "spoiler" in message.content.lower():
@@ -668,6 +678,39 @@ class C4DE_Bot(commands.Bot):
                         await channel.send(f"Beginning replacement for {redirect} --> {target}")
                         self.redirect_messages.pop(message.id)
 
+    @staticmethod
+    def is_user_eligibility_command(message: Message):
+        match = re.search("check (user )?(vote ?count|eligi?bi?li?ty) (for )?User:(?P<user>.*?)$", message.content)
+        if match:
+            return match.groupdict()
+        return None
+
+    async def handle_user_eligibility_command(self, message: Message, command: dict):
+        u = command['user']
+        if not u.startswith("User:"):
+            u = "User:" + u
+        count = 0
+        now = datetime.utcnow()
+        await message.add_reaction(TIMER)
+        for p, i, t, _ in User(self.site, u).contributions(namespaces=0):
+            if count >= 50:
+                break
+            elif (now - t).days > 180:
+                break
+            elif not p.exists() or p.isRedirectPage():
+                continue
+            for r in p.revisions(reverse=True):
+                if i == r['revid']:
+                    if 'mw-reverted' not in r['tags']:
+                        count += 1
+                    break
+
+        if count >= 50:
+            await message.add_reaction(THUMBS_UP)
+        else:
+            await message.add_reaction(THUMBS_DOWN)
+            await message.channel.send(f"User {u} has only {count} edits")
+
     @tasks.loop(minutes=60)
     async def run_canon_legends_switch(self):
         now = datetime.now()
@@ -827,7 +870,7 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def is_archive_url_command(message: Message):
-        match = re.search("archive( URL)?:? <?(?P<url>(https?.*?//)?[^ \n]+?)>?( \((?P<date>[0-9X-]+)\))?$", message.content)
+        match = re.search("archive( URL)?( (with )?[Tt]emplate:(?P<template>.*?))?:? <?(?P<url>(https?.*?//)?[^ \n]+?)>?( \((?P<date>[0-9X-]+)\))?$", message.content)
         if match:
             return match.groupdict()
         return None
@@ -985,14 +1028,51 @@ class C4DE_Bot(commands.Bot):
             traceback.print_exc()
             await self.report_error("Future products", type(e), e)
 
+    def update_unused_files(self):
+        page = Page(self.site, "Wookieepedia:WookieeProject Images/Unused images")
+        text = page.get()
+        unused = []
+        for x in self.site.unusedfiles(total=250):
+            unused.append(x.title())
+
+        if unused:
+            files, new_lines = [], []
+            for l in text.splitlines():
+                if l.startswith("File:"):
+                    files.append(l)
+                elif l != "</gallery>":
+                    new_lines.append(l)
+
+            d = datetime.now().strftime("%Y-%m-%d")
+            for i in unused:
+                if not any(f.startswith(i) for f in files):
+                    files.append(f"{i}|{d}")
+            text = "\n".join([*new_lines, *sorted(files, key=lambda a: a.split("|")[-1] if "|" in a else a), "</gallery>"])
+            page.put(text, botflag=False, summary="Recording newly unused files")
+
+    def fix_double_redirects(self):
+        for x in self.site.double_redirects(total=250):
+            try:
+                if x.namespace().id == 0:
+                    y = x.getRedirectTarget().getRedirectTarget()
+                    if y.isRedirectPage():
+                        y = y.getRedirectTarget()
+                    x.put(f"#REDIRECT [[{y.title()}]]", "Fixing double redirects")
+            except Exception:
+                pass
+
     @tasks.loop(hours=4)
     async def check_senate_hall_threads(self):
         archive_stagnant_senate_hall_threads(self.site, self.timezone_offset)
 
     @tasks.loop(hours=1)
-    async def check_spoiler_templates(self):
+    async def check_spoiler_templates_and_cleanup(self):
         if datetime.now().hour != 6:
             return
+        log("Scheduled Operation: Updating unused files and double redirects")
+        self.update_unused_files()
+        self.fix_double_redirects()
+
         log("Scheduled Operation: Checking {{Spoiler}} templates")
         for page in Category(self.site, "Articles with expired spoiler notices").articles(namespaces=0):
             try:
@@ -1323,6 +1403,7 @@ class C4DE_Bot(commands.Bot):
         if "starwars.com" not in command['url']:
             await message.add_reaction(EXCLAMATION)
             return
+        await message.add_reaction(TIMER)
 
         messages_to_post = []
         templates = []
@@ -1361,6 +1442,7 @@ class C4DE_Bot(commands.Bot):
 
         await self.report_rss_results(messages_to_post, templates, updated_db_entries, new_db_entries)
 
+        await message.remove_reaction(TIMER, self.user)
         await message.add_reaction(THUMBS_UP)
         return
 
@@ -1463,7 +1545,7 @@ class C4DE_Bot(commands.Bot):
         db = None
         if site == "StarWars.com":
             messages = check_sw_news_page(site_data["url"], self.external_rss_cache["sites"], site_data["title"])
-            other, db = compare_site_map(self.site, ["The Acolyte"], messages,
+            other, db = compare_site_map(self.site, ["Star Wars: Skeleton Crew"], messages,
                                          self.external_rss_cache["sites"]["StarWars.com"])
             messages += other
         elif site_data["template"] == "Unlimitedweb":

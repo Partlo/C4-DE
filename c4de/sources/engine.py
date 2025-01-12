@@ -877,7 +877,7 @@ def load_full_sources(site, types, log) -> FullListData:
                 for i in v:
                     i.original_printing = x
     print(f"{count} out of {len(sources)} unmatched: {count / len(sources) * 100}")
-    return FullListData(unique_sources, full_sources, target_sources, set(), both_continuities, reprints=reprints)
+    return FullListData(unique_sources, full_sources, target_sources, set(), both_continuities, reprints)
 
 
 def load_full_appearances(site, types, log, canon_only=False, legends_only=False, log_match=True) -> FullListData:
@@ -1016,7 +1016,7 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
     print(f"{len(no_canon_index)} canon items found without index")
     print(f"{len(no_legends_index)} Legends items found without index")
     return FullListData(unique_appearances, full_appearances, target_appearances, parentheticals, both_continuities,
-                        no_canon_index, no_legends_index, reprints=reprints)
+                        reprints, no_canon_index, no_legends_index)
 
 
 def determine_index(x: Item, target, i: dict, canon, legends, c_unknown, l_unknown, log_match):
@@ -1164,8 +1164,8 @@ def match_audiobook(target, data, log, page):
         return data[SPECIAL_INDEX_MAPPING[target]]
     elif target in SERIES_INDEX and SERIES_INDEX[target] in data:
         return data[SERIES_INDEX[target]]
-    elif target.startswith("Star Wars: Jedi Temple Challenge") and "Star Wars: Jedi Temple Challenge" in data:
-        return data["Star Wars: Jedi Temple Challenge"] + int(target.replace("Star Wars: Jedi Temple Challenge - Episode ", "")) / 100
+    elif "Star Wars: Jedi Temple Challenge" in target and "Star Wars: Jedi Temple Challenge" in data:
+        return data["Star Wars: Jedi Temple Challenge"] + int(target.replace("Episode ", "").split("(")[0]) / 100
     elif target in TEMPLATE_MAPPING["KOTORbackups"].values():
         issue = next(f"Knights of the Old Republic {k}" for k, v in TEMPLATE_MAPPING["KOTORbackups"].items() if v == target)
         if issue in data:

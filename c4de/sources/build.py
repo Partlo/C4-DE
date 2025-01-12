@@ -1,5 +1,6 @@
 import codecs
 import re
+from datetime import datetime
 
 from pywikibot import Page, Category, showDiff
 
@@ -96,7 +97,7 @@ def sort_categories(text):
     if related_cats:
         final.append("")
         final += related_cats
-    x = "\n".join(final)
+    x = "\n".join(final).replace("|\n[[Category:", "|[[Category:q")
     x = re.sub("(\[\[Category:.*?)(\|.*?]])\n\\1]]", "\\1\\2", x)
     x = re.sub("(\[\[Category:.*?)]]\n\\1(\|.*?]])", "\\1\\2", x)
     return x
@@ -104,6 +105,7 @@ def sort_categories(text):
 
 def build_final_text(page: Page, results: PageComponents, disambigs: list, remap: dict, redirects: dict,
                      components: NewComponents, log: bool):
+    # now = datetime.now()
     pieces = [results.before.strip(), ""]
 
     if "{{mediacat" in results.final.lower() or "{{imagecat" in results.final.lower():
@@ -155,30 +157,85 @@ def build_final_text(page: Page, results: PageComponents, disambigs: list, remap
                 pieces.append(f"{snip.group(1)}\n\n")
         pieces.append(t)
 
+    for i in components.navs:
+        pieces.append(i)
+
     if results.final:
-        if "==\n" in results.final and media_cat:
-            z = results.final.split("==\n", 1)
-            pieces.append(f"{z[0]}==\n{media_cat}\n{z[1]}")
-        elif media_cat:
-            pieces.append(media_cat + "\n" + results.final)
-        else:
-            pieces.append(results.final)
+        pieces.append(build_final(results.final, media_cat, results.real))
 
     new_txt = sort_categories("\n".join(pieces))
+    if results.canon and "/Legends" in new_txt:
+        new_txt = handle_legends_links(new_txt, page.title())
+
     new_txt = re.sub("(\{\{DEFAULTSORT:.*?}})\n\n+\[\[[Cc]ategory", "\\1\n[[Category", new_txt)
     new_txt = re.sub("(?<![\n=}])\n==", "\n\n==", re.sub("\n\n+", "\n\n", new_txt)).strip()
+    new_txt = re.sub("(stub|Endgame)}}\n==", "\\1}}\n\n==", new_txt)
     new_txt = new_txt.replace("\n\n}}", "\n}}").replace("{{Shortstory|", "{{StoryCite|").replace("\n\n{{More", "\n{{More")
 
+    # print(f"rebuild: {(datetime.now() - now).microseconds / 1000} microseconds")
     replace = True
-    if re.sub("<!--.*?-->", "", page.get(force=True)) != re.sub("<!--.*?-->", "", new_txt):
-        new_txt = fix_redirects(redirects, new_txt, "Body", remap, disambigs)
-    return do_final_replacements(new_txt, replace)
+    # if re.sub("<!--.*?-->", "", page.get(force=True)) != re.sub("<!--.*?-->", "", new_txt):
+    new_txt = fix_redirects(redirects, new_txt, "Body", remap, disambigs)
+    if "{{WP}}" in new_txt:
+        new_txt = new_txt.replace("{{WP}}", f"{{{{WP|{page.title()}}}}}")
+
+    # now = datetime.now()
+    t = do_final_replacements(new_txt, replace)
+    # print(f"replace: {(datetime.now() - now).microseconds / 1000} microseconds")
+    return t.replace("\n\n{{RelatedCategories", "\n{{RelatedCategories")
+
+
+def handle_legends_links(text, title):
+    body, header, bts = text.partition("==Behind the scenes==")
+    if "/Legends" in body:
+        new_lines = []
+        for line in body.splitlines():
+            if "/Legends" in line:
+                if not ("{{otheruses" in line.lower() or "{{top" in line.lower() or "{{youmay" in line.lower()):
+                    x = re.findall("\[\[(.*?)/Legends\|", line)
+                    for i in x:
+                        if i != title:
+                            line = line.replace(f"[[{i}/Legends", f"[[{i}")
+            new_lines.append(line)
+        body = "\n".join(new_lines)
+    return f"{body}{header}{bts}"
+
+
+def build_final(final, media_cat, real):
+    if not real and "RelatedCategories" not in final and re.search("\n\[\[[Cc]ategory:.*?\| ]]", final):
+        cats = []
+        lines = []
+        regular = 0
+        for l in final.splitlines():
+            x = re.search("^(\[\[[Cc]ategory:.*?)\| ]]", l)
+            if x:
+                cats.append("|" + x.group(1) + "]]")
+            else:
+                if "category:" in l.lower():
+                    regular += 1
+                lines.append(l)
+
+        if cats and regular == 0:
+            print("Unable to move categories to RelatedCategories, as no categories would be left")
+        elif cats:
+            related = "\n".join(["{{RelatedCategories", *cats, "}}"])
+            final = "\n".join(lines).strip() + "\n" + related
+
+    final = re.sub("\|\n+\[\[Category:", "|[[Category:", final)
+
+    if "==\n" in final and media_cat:
+        z = final.split("==\n", 1)
+        return f"{z[0]}==\n{media_cat}\n{z[1]}"
+    elif media_cat:
+        return media_cat + "\n" + final
+    else:
+        return final
 
 
 def build_new_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appearances: FullListData,
                    sources: FullListData, remap: dict, include_date: bool, checked: list, log=True, use_index=True,
-                   handle_references=False, collapse_audiobooks=True, manual: str = None):
-    results, unknown, redirects = build_page_components(target, types, disambigs, appearances, sources, remap, infoboxes, handle_references, log, manual)
+                   handle_references=False, collapse_audiobooks=True, manual: str = None, extra=None):
+    results, unknown, redirects = build_page_components(target, types, disambigs, appearances, sources, remap, infoboxes, handle_references, log, manual, extra)
     if results.real and collapse_audiobooks:
         collapse_audiobooks = False
 
@@ -272,11 +329,11 @@ def analyze_target_page(target: Page, infoboxes: dict, types: dict, disambigs: l
             results.append(f"The following {len(analysis.mismatch)} entries are marked as {d} in the Masterlist, but are listed on this {c} article: (experimental feature)")
             results.append("\n".join(f"- `{a.master.original}`" for a in analysis.mismatch))
 
-        if unknown_items.links:
-            results.append("Could not identify unknown External Links:")
-            z = [o.original if isinstance(o, Item) else o for o in unknown_items.links]
-            results.append("\n".join(f"- `{i}`" for i in z))
-            f.writelines("\n" + "\n".join(z))
+        # if unknown_items.links:
+        #     results.append("Could not identify unknown External Links:")
+        #     z = [o.original if isinstance(o, Item) else o for o in unknown_items.links]
+        #     results.append("\n".join(f"- `{i}`" for i in z))
+        #     f.writelines("\n" + "\n".join(z))
 
         if unknown_items.apps:
             results.append("Could not identify unknown appearances:")

@@ -129,7 +129,7 @@ class Item:
 
     def match_expected(self):
         return (not self.non_canon and not self.unlicensed and not self.from_extra and not self.reprint
-                and self.has_date() and not self.future and "Jedi Temple Challenge" not in self.original)
+                and self.has_date() and not self.future and "Jedi Temple Challenge" not in self.original and "{{JTC|" not in self.original)
 
     def full_id(self):
         x = self.unique_id()
@@ -202,7 +202,7 @@ class AnalysisConfig:
 
 class FullListData:
     def __init__(self, unique: Dict[str, Item], full: Dict[str, Item], target: Dict[str, List[Item]],
-                 parantheticals: set, both_continuities: set, no_canon_index: List[Item]=None, no_legends_index: List[Item]=None, reprints: dict=None):
+                 parantheticals: set, both_continuities: set, reprints: Dict[str, List[Item]], no_canon_index: List[Item]=None, no_legends_index: List[Item]=None):
         self.unique = unique
         self.full = full
         self.target = target
@@ -230,9 +230,12 @@ class PageComponents:
         self.apps = SectionComponents([], [], [], '')
         self.links = SectionComponents([], [], [], '')
 
+    def get_navs(self):
+        return [*self.apps.nav, *self.nca.nav, *self.src.nav, *self.ncs.nav, *self.links.nav]
+
 
 class AnalysisResults:
-    def __init__(self, apps: List[ItemId], nca: List[ItemId], src: List[ItemId], ncs: List[ItemId], canon: bool, abridged: list, mismatch: List[ItemId], disambig_links: list, reprints: dict):
+    def __init__(self, apps: List[ItemId], nca: List[ItemId], src: List[ItemId], ncs: List[ItemId], canon: bool, abridged: list, mismatch: List[ItemId], disambig_links: list, reprints: Dict[str, List[Item]]):
         self.apps = apps
         self.nca = nca
         self.src = src
@@ -281,12 +284,13 @@ class SectionItemIds:
 
 
 class SectionComponents:
-    def __init__(self, items: list[Item], pre: list[str], suf: list[str], after: str):
+    def __init__(self, items: list[Item], pre: list[str], suf: list[str], after: str, nav=None):
         self.items = items
         self.preceding = pre
         self.trailing = suf
         self.after = after
         self.before = ""
+        self.nav = nav or []
 
     def has_text(self):
         return self.preceding or self.trailing or self.after or self.before
@@ -301,12 +305,13 @@ class FinishedSection:
 
 class NewComponents:
     def __init__(self, apps: FinishedSection, nca: FinishedSection, src: FinishedSection, ncs: FinishedSection,
-                 links: FinishedSection):
+                 links: FinishedSection, navs: list):
         self.apps = apps
         self.nca = nca
         self.src = src
         self.ncs = ncs
         self.links = links
+        self.navs = navs
 
 
 class UnknownItems:

@@ -638,6 +638,8 @@ def check_policy(site: Site):
     text = page.get()
 
     year = datetime.today().year
+    if f"={year}=" not in text:
+        return {}
     section = text.split(f"={year}=")[1]
     section = section.split(f"={year - 1}")[0]
     updates = {}
@@ -862,18 +864,21 @@ def augment_site_map(site, series, urls):
     db_entries = {}
     series_db_entries = {}
     for s in series:
-        st = convert_to_url(s.replace("Star Wars: ", ""))
+        st = convert_to_url(s.replace(":", ""))
         _, series_urls, series_db = check_series_page(f"https://starwars.com/series/{st}")
         urls_to_check.update(series_urls)
         series_db_entries.update(series_db)
 
-        data = requests.get(f"https://www.starwars.com/_grill/filter/series/{st}?filter=All&mod=8&slug=all").json()
+        d = requests.get(f"https://www.starwars.com/_grill/filter/series/{st}?filter=All&mod=8&slug=all")
+        if d.status_code != 200:
+            continue
+        data = d.json()
         for a in data['data']:
-            series_db_entries[a['href'].split('.com/')[-1]] = re.sub(" ?- ?The Acolyte", "", a['title'])
+            series_db_entries[a['href'].split('.com/')[-1]] = re.sub(" ?- ?Skeleton Crew", "", a['title'])
         while data.get('next'):
             data = requests.get(f"https://www.starwars.com/_grill/filter/series/{st}{data['next']}").json()
             for a in data['data']:
-                series_db_entries[a['href'].split('.com/')[-1]] = re.sub(" ?- ?The Acolyte", "", a['title'])
+                series_db_entries[a['href'].split('.com/')[-1]] = re.sub(" ?- ?Skeleton Crew", "", a['title'])
 
         cat = Category(site, f"Category:{s} episodes")
         if not cat.exists():
@@ -886,7 +891,6 @@ def augment_site_map(site, series, urls):
                 if check_episode(st, episode.replace("'", ""), urls, urls_to_check, db_entries):
                     continue
             check_episode(st, episode, urls, urls_to_check, db_entries)
-        check_episode(st, "season-1-episode-8-the-acolyte", urls, urls_to_check, db_entries)
 
     return urls_to_check, db_entries, series_db_entries
 

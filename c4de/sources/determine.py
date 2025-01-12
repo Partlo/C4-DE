@@ -115,9 +115,11 @@ TEMPLATE_MAPPING = {
 }
 
 PREFIXES = {
-    "Jedi Temple Challenge": "Star Wars: Jedi Temple Challenge - Episode <x>",
-    "CW": "Chapter <x> (Clone Wars)",
-    "VaderImmortal": "Vader Immortal – Episode <x>"
+    "Jedi Temple Challenge": "Episode <x> (Star Wars: Jedi Temple Challenge)",
+    "JTC": "Episode <x> (Star Wars: Jedi Temple Challenge)",
+    "CW": "Chapter <x> (Star Wars: Clone Wars)",
+    "VaderImmortal": "Vader Immortal – Episode <x>",
+    "DisneyGallery": "<x> (Disney Gallery: The Mandalorian)"
 }
 
 
@@ -305,6 +307,12 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     elif template in IGNORE_TEMPLATES:
         print(f"Skipping {mode} template: {template}: {z}")
         return None
+    elif template == "GoC" or template == "GalacticPals":
+        m = re.search("\{\{(GoC|GalacticPals)\|(.*?)}}", s)
+        if m and m.group(1) in ["Rancor", "Tauntaun", "Porgs"]:
+            return Item(z, mode, a, target=f"{m.group(1)} ({'Galactic Pals' if template == 'GalacticPals' else 'Galaxy of Creatures'})",
+                        template=template)
+        return Item(z, mode, a, target=m.group(1), template=template)
 
     # # # Template-specific logic
     # IDWAdventures annual= parameter
@@ -411,9 +419,9 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         if m:
             return Item(z, mode, a, target=m.group(2), template="TOMCite", parent=f"Star Wars - Das offizielle Magazin {m.group(1)}", format_text=m.group(3))
     elif template == "LSWCite":
-        m = re.search("\{\{LSWCite\|([0-9]+)\|(.*?)(\|(.*?))?}}", s)
+        m = re.search("\{\{LSWCite\|((Special )?[0-9]+)\|(.*?)(\|(.*?))?}}", s)
         if m:
-            return Item(z, mode, a, target=m.group(2), template=template, parent=f"LEGO Star Wars {m.group(1)}", format_text=m.group(4))
+            return Item(z, mode, a, target=m.group(3), template=template, parent=f"LEGO Star Wars {m.group(1)}", format_text=m.group(5))
     elif template == "ForceCollection":
         m = re.search("{{[^|\[}\n]+\|(.*?)(\|star=([0-9S]))?(\|.*?)?}}", s)
         if m:
@@ -442,7 +450,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         return Item(z, mode, a, target=m.group('set'), template=template, text=m.group('scenario'))
 
     # Magazine articles with issue as second parameter
-    m = re.search("{{[^|\[}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(issue[0-9]?=)?(?P<issue>(Special Edition |Interview Special|Souvenir Special|Premiere Issue)?H?S? ?[0-9.]*)(\|issue[0-9]=.*?)?\|(story=|article=)?\[*(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?]*(\|.*?)?}}", s.replace("&#61;", "="))
+    m = re.search("{{[^|\[}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(issue[0-9]?=)?(?P<issue>(Special Edition |Digital Sampler Edition|Interview Special|Souvenir Special|Premiere Issue)?H?S? ?[0-9.]*)(\|issue[0-9]=.*?)?\|(story=|article=)?\[*(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?]*(\|.*?)?}}", s.replace("&#61;", "="))
     if not m:
         m = re.search("{{[^|\[}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(story=|article=)?\[*(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?]*\|(issue[0-9]?=)?(?P<issue>(Special Edition |Souvenir Special|Premiere Issue)?H?S? ?[0-9.]*)(\|issue[0-9]=.*?)?(\|.*?)?}}", s.replace("&#61;", "="))
     if m and template != "StoryCite" and template != "SimpleCite":
@@ -576,7 +584,7 @@ def parse_card_line(s: str, z: str, template: str, mode: str, a: bool):
     if template in GAME_TEMPLATES and "cardname=" not in s and "set=" not in s:
         return Item(z, mode, a, target=GAME_TEMPLATES[template], template=None)
 
-    if template == "SWCT":
+    if template == "SWCT" and "cardname=" not in s:
         m = re.search("{+[^|\[}\n]+\|(set=)?(.*?)(\|.*?)?}}", s)
         if m:
             return Item(z, mode, a, target=None, template=template, parent="Star Wars: Card Trader", card=m.group(2),
@@ -587,14 +595,6 @@ def parse_card_line(s: str, z: str, template: str, mode: str, a: bool):
         card_set = re.search("\|stext=(.*?)[|}].*?$", s).group(1).replace("''", "")
     elif card_set and template == "TopTrumps":
         card_set = f"Top Trumps: {card_set}"
-    # elif card_set and template == "SWU":
-    #     if card_set == "Spark of Rebellion":
-    #         card_set = f"{card_set} (Star Wars: Unlimited)"
-    # elif card_set and template == "SWMiniCite":
-    #     if card_set not in ["Alliance and Empire", "Clone Strike", "The Dark Times", "Rebel Storm", "Galaxy Tiles",
-    #                         "Starship Battles", "Rebels and Imperials"] \
-    #             and not card_set.endswith("Pack") and "Star Wars Miniatures" not in card_set:
-    #         card_set = f"{card_set} (Star Wars Miniatures)"
 
     if card_set and "cardname=" in card_set:
         card = card_set.replace("cardname=", "")
@@ -606,6 +606,9 @@ def parse_card_line(s: str, z: str, template: str, mode: str, a: bool):
     t = re.search("{[^|\[}\n]+\|.*?text=(?P<text>.*?)[|}]", s)
     ss = re.search("subset=(.*?)(\|.*?)?}}", s)
     subset = ss.group(1) if ss else None
+
+    if template == "SWCT":
+        print(card_set, s)
 
     if not t:
         t = re.search("{[^|\[}\n]+\|.*?\|(?P<text>.*?)(\|.*?)?}}", s)
@@ -715,10 +718,15 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
 
     # Template-specific matching
     if o.template == "SWCT" and o.card:
-        matches = []
+        convert, matches = [], []
         for s, x in data.items():
-            if x.template == "SWCT" and x.card and x.card in o.card:
-                matches.append(x)
+            if x.template == "SWCT" and x.target and (x.target == o.parent or x.target in o.card):
+                (convert if f"- {x.card}" in o.card else matches).append(x)
+        if convert:
+            x = sorted(convert, key=lambda a: len(a.card))[-1]
+            y = o.card.split(f"- {x.card}", 1)[0].strip()
+            o.original = f"{{{{SWCT|set={x.card}|cardname={y}}}}}"
+            return ItemId(o, x, True, False)
         if matches:
             x = sorted(matches, key=lambda a: len(a.card))[-1]
             return ItemId(o, x, True, False)
@@ -746,21 +754,26 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
             if m:
                 return m
 
-        set_match = None
+        exact = []
+        start = []
         if set_name is not None:
             for s, x in data.items():
                 if do_card_templates_match(set_name, o, x):
-                    if (x.target and (x.target.startswith(set_name) or set_name in x.target)) or \
-                            (x.parent and (x.parent.startswith(set_name) or set_name in x.parent)):
+                    if any(t and (t == set_name or t.replace(" - ", " ") == set_name.replace(" - ", " ")) for t in (x.target, x.parent)):
                         if (x.card and x.card == o.card) or (x.text and x.text == o.text):
                             return ItemId(o, x, False, False)
-                        elif not set_match:
-                            set_match = x
-        if set_match:
+                        else:
+                            exact.append(x)
+                    if any(t and (t.startswith(set_name) or set_name in t) for t in (x.target, x.parent)):
+                        if (x.card and x.card == o.card) or (x.text and x.text == o.text):
+                            return ItemId(o, x, False, False)
+                        else:
+                            start.append(x)
+        if exact or start:
             if o.mode == "Toys" and o.template != "SWMiniCite":
                 print(f"Unknown {o.template} set: {o.card}/{o.special}")
                 o.unknown = True
-            return ItemId(o, set_match, True, False)
+            return ItemId(o, exact[0] if exact else start[0], True, False)
 
     if o.mode == "Cards" or o.mode == "Toys":
         set_name = o.parent or o.target
@@ -1060,6 +1073,8 @@ TEMPLATE_SUFFIXES = {
     "EncyclopediaCite": ["Star Wars Encyclopedia"],
     "StoryCite": ["short story"],
     "CWACite": ["comic"],
+    "GoC": ["episode", "Galaxy of Creatures"],
+    "GalacticPals": ["episode", "Galactic Pals"],
     "InsiderCite": ["Star Wars Insider", "article"],
 }
 
@@ -1087,7 +1102,7 @@ def match_specific_target(o: Item, target: str, by_target: Dict[str, List[Item]]
         if "(" not in target and o.tv:
             targets.append(f"{target} (episode)")
             targets.append(f"{target} (short film)")
-            if o.template in TV_SUFFIXES:
+            if o.template in TV_SUFFIXES and TV_SUFFIXES[o.template] not in target:
                 targets.append(f"{target} ({TV_SUFFIXES[o.template]})")
         if "(" not in target and o.template in TEMPLATE_SUFFIXES:
             for i in TEMPLATE_SUFFIXES[o.template]:

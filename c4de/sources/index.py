@@ -33,11 +33,17 @@ def flatten(items: List[ItemId], found: List[ItemId], missing: List[ItemId]):
 
 def prepare_results(results: AnalysisResults) -> Tuple[List[ItemId], List[ItemId]]:
     found, missing = [], []
-    for x in [results.apps, results.nca, results.src, results.ncs, *list(results.reprints.values())]:
+    for x in [results.apps, results.nca, results.src, results.ncs]:
         for i in x:
             if i.master.sort_index(results.canon) is None:
                 print(i.master.target, i.master.original)
         flatten(x, found, missing)
+    for x in results.reprints.values():
+        for i in x:
+            if i.has_date():
+                found.append(ItemId(i, i, False))
+            else:
+                missing.append(ItemId(i, i, False))
 
     found = sorted(found, key=lambda a: (a.master.date, a.master.mode == "DB", a.master.sort_index(results.canon), a.sort_text()))
     return found, missing

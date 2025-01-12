@@ -89,9 +89,13 @@ def build_fields_for_infobox(page) -> InfoboxInfo:
                 combo[y] = x
                 groups[x].append(y)
     for r in re.findall("<(data|image|title) source=\"(.*?)\" ?/?>", text):
-        if r[1].startswith('b') and re.match("b[0-9]+", r[1]):
-            fields.append(r[1].replace("b", "battles"))
-        fields.append(r[1])
+        print(r, fields)
+        if r[0] == "image":
+            fields.append("image")
+        else:
+            if r[1].startswith('b') and re.match("b[0-9]+", r[1]):
+                fields.append(r[1].replace("b", "battles"))
+            fields.append(r[1])
     return InfoboxInfo(fields, optional, combo, groups)
 
 
@@ -133,24 +137,28 @@ def parse_infobox(text: str, all_infoboxes: dict):
                 field = m.group(1).strip()
                 data[field] = data.get(field) or m.group(2).strip()
             elif field:
-                data[field] += f"\n{line}"
+                data[field] = f"{data[field]}\n{line}"
 
             if o == c:
                 if data[field].endswith("}}"):
                     data[field] = data[field][:-2]
                 done = True
+            elif o == (c - 1) and data[field].endswith("}}"):
+                data[field] = data[field][:-2]
+                done = True
 
             if field not in data:
                 continue
-            n = re.search("\|([A-Za-z_ 0-9]+?)\=(.*)$", data[field].replace("\n", ""))
+            n = re.search("\|([A-Za-z_ 0-9]+?)=(.*)$", data[field].replace("\n", ""))
             while n:
                 if data[field].startswith("|"):
-                    n = re.search("^\|([A-Za-z_ 0-9]+?)\=(.*)$", data[field].replace("\n", ""))
+                    n = re.search("^\|([A-Za-z_ 0-9]+?)=(.*)$", data[field].replace("\n", ""))
                     if n:
                         data[field] = ""
                         field = n.group(1).strip()
                         data[field] = data.get(field) or n.group(2).strip()
                 elif data[field].count("{{") != data[field].count("}}") or (data[field].count("}}") == 0 and data[field].count("{{") == 0):
+                    # print(field, line, data[field], n)
                     n = re.search("^.*?(\|([A-Za-z_ 0-9]+?)\=(.*))$", data[field].replace("\n", ""))
                     if n:
                         data[field] = data[field].replace(n.group(1), "")
@@ -159,7 +167,7 @@ def parse_infobox(text: str, all_infoboxes: dict):
                 else:
                     n = None
         else:
-            m = re.search("^[ ]*(\{\{.*?\}\})?(\{\{.*?\}\})?(\{\{.*?\}\})?(\{\{([A-Za-z _]+).*)$", line)
+            m = re.search("^[ ]*(\{\{.*?}})?(\{\{.*?}})?(\{\{.*?}})?(\{\{([A-Za-z _]+).*)$", line)
             if m:
                 if m.group(1):
                     pre.append(m.group(1))

@@ -18,10 +18,12 @@ def analyze(*args):
     log = False
     start_on, skip_start, skip_end, redo = None, None, None, None
     include_date = False
-    legends = False
+    legends, canon = False, False
     always = False
     end_on = None
     bot = True
+    count = 0
+    encyclopedia, ultimate, ultimate2 = [], [], []
     for arg in handle_args(*args):
         if arg.startswith("-page:"):
             log = True
@@ -40,10 +42,18 @@ def analyze(*args):
             include_date = True
         if "legends" in arg.lower():
             legends = True
+        if "canon:" in arg.lower():
+            canon = True
         if "always" in arg.lower():
             always = True
         if "-bot:" in arg.lower():
             bot = False
+        if "-count:" in arg.lower():
+            count = int(arg.replace("-count:", ""))
+        if "canon" in arg.lower() and not encyclopedia:
+            encyclopedia = [p.title() for p in Page(gen_factory.site, "Star Wars Encyclopedia: The Comprehensive Guide to the Star Wars Galaxy").linkedPages(namespaces=0)]
+            ultimate = [p.title() for p in Page(gen_factory.site, "Ultimate Star Wars").linkedPages(namespaces=0)]
+            ultimate2 = [p.title() for p in Page(gen_factory.site, "Ultimate Star Wars, New Edition").linkedPages(namespaces=0)]
     gen_factory.site.login(user="C4-DE Bot")
     if start_on:
         print(f"Starting on {start_on}")
@@ -63,7 +73,7 @@ def analyze(*args):
 
     ci = 46540
     li = 116015
-    i = -1
+    i = count -1
     if any("Legends articles" in a or "C4-DE traversal" in a for a in args):
         i += ci
     total = ci + li
@@ -73,6 +83,9 @@ def analyze(*args):
     message = "Source Engine analysis of Appearances, Sources and references"
     since = Timestamp(2024, 10, 19)
     for page in gen:
+        if page.title().startswith("Map:"):
+            continue
+
         i += 1
         z = str(i / total * 100).zfill(10)[:6]
         if i % 100 == 0:
@@ -80,6 +93,10 @@ def analyze(*args):
         if i % 250 == 0 and i > 0 and not start_on:
             appearances = load_full_appearances(gen_factory.site, types, False, log_match=False)
             sources = load_full_sources(gen_factory.site, types, False)
+            switch = Page(gen_factory.site, "User:C4-DE Bot/Kill Switch")
+            if switch.exists() and "stop" in switch.get(force=True).lower():
+                print("Kill switch active; stopping script")
+                quit()
 
         if start_on:
             if page.title().lower() >= start_on.lower() and not page.title().startswith("Wookieepedia:"):
@@ -96,6 +113,9 @@ def analyze(*args):
         if legends:
             if not any(c.title(with_ns=False) == "Legends articles" for c in page.categories()):
                 continue
+        elif canon:
+            if not any(c.title(with_ns=False) == "Canon articles" for c in page.categories()):
+                continue
         try:
             bf = bot
             if any(c.title() in STATUS for c in page.categories()):
@@ -111,8 +131,15 @@ def analyze(*args):
                     if r['timestamp'] < since or (r['user'] != 'C4-DE Bot' and r['user'] != 'RoboCade'):
                         print(f"Reloaded revision {r['revid']} for {page.title()}")
                         break
+            extra = []
+            if page.title() in encyclopedia:
+                extra.append("Star Wars Encyclopedia: The Comprehensive Guide to the Star Wars Galaxy")
+            if page.title() in ultimate:
+                extra.append("Ultimate Star Wars")
+            if page.title() in ultimate2:
+                extra.append("Ultimate Star Wars, New Edition")
             text = build_new_text(page, infoboxes, types, [], appearances, sources, remap, include_date,
-                                  checked, log=log, handle_references=True, collapse_audiobooks=True, manual=old_revision)
+                                  checked, log=log, handle_references=True, collapse_audiobooks=True, manual=old_revision, extra=extra)
             if text is None:
                 continue
 
@@ -138,6 +165,8 @@ def analyze(*args):
             if not override and match and always_comment:
                 page.put(text, message, botflag=match or bf)
                 continue
+            if not override:
+                override = "RelatedCategories" in text
 
             # showDiff(old_text, text, context=1)
             showDiff(re.sub("<!--.*?-->", "", z2), re.sub("<!--.*?-->", "", z1), context=1)
@@ -162,8 +191,8 @@ def analyze(*args):
                 always = True
             else:
                 continue
-        except KeyboardInterrupt as e:
-            quit()
+        # except KeyboardInterrupt as e:
+        #     quit()
         except Exception as e:
             traceback.print_exc()
             print(e)

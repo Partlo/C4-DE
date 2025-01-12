@@ -74,6 +74,8 @@ def calculate_isbns_for_all_pages(site):
             continue
         elif p.title() in isbns_by_page:
             continue
+        elif p.isRedirectPage():
+            p = p.getRedirectTarget()
         extract_isbns(p.title(), p.get(), isbns_by_page)
 
     log("ISBN Protocol: Checking template usages")

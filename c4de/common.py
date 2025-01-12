@@ -70,8 +70,11 @@ def build_redirects(page: Page, manual: str = None):
     for r in page.linkedPages(follow_redirects=False):
         pages.append(r)
         pagenames.append(r.title())
+    for r in page.imagelinks():
+        pages.append(r)
+        pagenames.append(r.title())
     if manual:
-        for _, x, _ in re.findall("\[\[(?!(Category:|File:))(.*?)(\|.*?)?]]", manual):
+        for _, x, _ in re.findall("\[\[(?!(Category:))(.*?)(\|.*?)?]]", manual):
             if x not in pagenames:
                 pages.append(Page(page.site, x))
                 pagenames.append(x)
@@ -87,7 +90,9 @@ def build_redirects(page: Page, manual: str = None):
     for i, r in enumerate(pages):
         if is_redirect(r, pagenames[i]):
             t = r.getRedirectTarget().title()
-            if not t.startswith("Category:"):
+            if t.startswith("File:"):
+                results[r.title().replace(" ", "_")] = t.replace(" ", "_")
+            elif not t.startswith("Category:"):
                 results[r.title()] = f":{t}" if t.startswith("Category:") else t
     return results
 
@@ -113,10 +118,10 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
         if t in disambigs or "(disambiguation)" in t:
             fix_disambigs(r, t, text)
             continue
-        elif t in remap:
+        elif t in remap and "Free Comic Book" not in t:
             log(f"Skipping remap redirect {t}")
             continue
-        if f"[[{r.lower()}" in text.lower() or f"={r.lower()}" in text.lower():
+        if f"[[{r.lower()}" in text.lower() or f"={r.lower()}" in text.lower() or f"[[{r.lower().replace('_', ' ')}" in text.lower():
             if section_name:
                 print(f"Fixing {section_name} redirect {r} to {t}")
             if section_name == "Appearances" and "Star Wars Galaxies" in r:
@@ -131,7 +136,7 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
             else:
                 text = re.sub("('')?\[\[" + x + "\|('')?(" + prepare_title(t) + ")('')?]](s)?('')?", f"\\1\\2[[\\3]]\\5\\1\\2", text)
                 text = re.sub("\[\[" + x + "(\|.*?)]](s)?", f"[[{t}\\1\\2]]", text)
-                if file or r.replace("Star Wars: Republic: ", "Star Wars: ") == t:
+                if file or r.replace("Star Wars: Republic: ", "Star Wars: ") == t or r.startswith("File:"):
                     text = re.sub("\[\[(" + x + ")(s)?]]", f"[[{t}]]\\2", text)
                 else:
                     text = re.sub("('')?\[\[(" + x + ")]]([A-Za-z']*)", f"[[{t}|\\1\\2\\3]]", text)
@@ -140,7 +145,8 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
                     text = re.sub("(\{\{(?!WP)[A-Za-z0-9]+\|)" + x + "}}", "\\1    " + t + "}}", text).replace("    ", "")
                 except Exception as e:
                     print(e, x, t)
-            text = text.replace(f"set={r}", f"set={t}")
+            if f"set={r} Expansion Pack" not in text:
+                text = text.replace(f"set={r}", f"set={t}")
             text = text.replace(f"book={r}", f"book={t}")
             text = text.replace(f"story={r}|", f"story={t}|")
             text = text.replace(f"story={r}" + "}", f"story={t}|" + "}")
@@ -157,9 +163,14 @@ def do_final_replacements(new_txt, replace):
         new_txt2 = re.sub("(\|set=(.*?) \(.*?\))\|(s?text|sformatt?e?d?)=\\2([|}])", "\\1\\4", new_txt2)
         new_txt2 = new_txt2.replace("{{'}}\n", "{{'}}")
         new_txt2 = re.sub("(\[\[((.*?) \((.*?)\)).*?]].*?)(\{\{Ab\|.*?)\[\[\\2\|''\\3'' \\4]]", "\\1\\5[[\\2|\\4]]", new_txt2)
+        new_txt2 = re.sub("(\{\{[^\n{}]+?)(\|nolive=1)([^\n{}]*?(\|nobackup=1)?[^\n{}]*?)}}", "\\1\\3\\2}}", new_txt2)
+        new_txt2 = re.sub("(\{\{[^\n{}]+?)(\|nobackup=1)([^\n{}]+?)}}", "\\1\\3\\2}}", new_txt2)
         x = re.search("\[\[([A-Z])(.*?)\|(.\\2)(.*?)]]", new_txt2)
         if x and x.group(3).lower().startswith(x.group(1).lower()) and x.group(3).lower() != "ochi of bestoon":
             new_txt2 = new_txt2.replace(x.group(0), f"[[{x.group(3)}]]{x.group(4)}")
+
+        new_txt2 = re.sub("(\{\{Top.*?)(\|italics=1)(.*?)(\|italics2=1)?(.*?)}}", "\\1\\3\\5\\2\\4}}", new_txt2)
+        new_txt2 = re.sub("(\{\{Top.*?)(\|italics2=1)(.+?)}}", "\\1\\3\\2}}", new_txt2)
 
         # new_txt2 = re.sub("}} \{\{C\|Reissued in (\[\[.*?)}}", "reissued=\\1}}", new_txt2)
         # new_txt2 = re.sub("(reissused?=.*?\[\[.*?\|)''(.*?)'']]", "\\1\\2]]", new_txt2)
