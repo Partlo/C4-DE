@@ -9,8 +9,10 @@ from c4de.common import build_redirects, fix_redirects
 
 
 SUBPAGES = [
-    "Canon/General", "Legends/General/1977-2000", "Legends/General/2000s", "Legends/General/2010s", "Canon/Toys",
-    "Legends/Toys", "CardSets", "Soundtracks", "Canon/RefMagazine", "Legends/RefMagazine", "Reprint"
+    # "Canon/General", "Legends/General/1977-2000", "Legends/General/2000s", "Legends/General/2010s",
+    "Canon/General", "Legends/General",
+    "Canon/Toys", "Legends/Toys", "Canon/RefMagazine", "Legends/RefMagazine", "Canon/CardSets", "Legends/CardSets",
+    "Canon/Miniatures", "Legends/Miniatures", "Reprint", "Soundtracks",
 ]
 
 HYPERSPACE = {
@@ -173,26 +175,26 @@ SERIES_MAPPING = {
     "Star Wars Manga: The Empire Strikes Back": ["Star Wars Manga: The Empire Strikes Back", 1, 4],
     "Star Wars Manga: The Phantom Menace": ["Star Wars Manga: The Phantom Menace", 1, 2],
     "Star Wars: A New Hope - The Special Edition": ["Star Wars: A New Hope - The Special Edition", 1, 4],
-    "Star Wars: Agent of the Empire—Hard Targets": ["Agent of the Empire – Hard Targets", 1, 5],
-    "Star Wars: Agent of the Empire—Iron Eclipse": ["Agent of the Empire – Iron Eclipse", 1, 5],
-    "Star Wars: Blood Ties: A Tale of Jango and Boba Fett": ["Blood Ties: A Tale of Jango and Boba Fett", 1, 4],
+    "Star Wars: Agent of the Empire – Hard Targets": ["Agent of the Empire – Hard Targets", 1, 5],
+    "Star Wars: Agent of the Empire – Iron Eclipse": ["Agent of the Empire – Iron Eclipse", 1, 5],
+    "Star Wars: Blood Ties": ["Blood Ties", 1, 4],
     "Star Wars: Blood Ties: Boba Fett is Dead": ["Blood Ties: Boba Fett is Dead", 1, 4],
     "Star Wars: Boba Fett: Enemy of the Empire": ["Boba Fett: Enemy of the Empire", 1, 4],
     "Star Wars: Chewbacca (2000)": ["Chewbacca (2000)", 1, 4],
     "Star Wars: Crimson Empire II: Council of Blood": ["Crimson Empire II: Council of Blood", 1, 6],
-    "Star Wars: Crimson Empire III—Empire Lost": ["Crimson Empire III: Empire Lost", 1, 6],
+    "Star Wars: Crimson Empire III: Empire Lost": ["Crimson Empire III: Empire Lost", 1, 6],
     "Star Wars: Crimson Empire": ["Crimson Empire", 1, 6],
     "Star Wars: Dark Empire II": ["Dark Empire II", 1, 6],
     "Star Wars: Dark Empire": ["Dark Empire", 1, 6],
-    "Star Wars: Dark Force Rising": ["Dark Force Rising", 1, 6],
+    "Star Wars: Dark Force Rising (comic series)": ["Dark Force Rising", 1, 6],
     "Star Wars: Dark Times": ["Dark Times", 1, 17],
     "Star Wars: Dark Times: Blue Harvest": ["Dark Times: Blue Harvest, Part", 1, 2],
     "Star Wars: Dark Times—A Spark Remains": ["Dark Times—A Spark Remains", 1, 5],
     "Star Wars: Dark Times—Fire Carrier": ["Dark Times—Fire Carrier", 1, 5],
     "Star Wars: Dark Times—Out of the Wilderness": ["Dark Times—Out of the Wilderness", 1, 5],
     "Star Wars: Darth Maul (2000)": ["Darth Maul (2000)", 1, 4],
-    "Star Wars: Darth Maul—Death Sentence": ["Darth Maul—Death Sentence", 1, 4],
-    "Star Wars: Darth Maul—Son of Dathomir": ["Darth Maul—Son of Dathomir", 1, 4],
+    "Star Wars: Darth Maul — Death Sentence": ["Darth Maul — Death Sentence", 1, 4],
+    "Star Wars: Darth Maul — Son of Dathomir": ["Darth Maul — Son of Dathomir", 1, 4],
     "Star Wars: Darth Vader and the Cry of Shadows": ["Darth Vader and the Cry of Shadows", 1, 5],
     "Star Wars: Darth Vader and the Ghost Prison": ["Darth Vader and the Ghost Prison", 1, 5],
     "Star Wars: Darth Vader and the Lost Command": ["Darth Vader and the Lost Command", 1, 5],
@@ -205,12 +207,12 @@ SERIES_MAPPING = {
     "Star Wars: Droids (1995)": ["Droids (1995)", 1, 8],
     "Star Wars: Empire": ["Empire", 1, 40],
     "Star Wars: Empire's End": ["Empire's End", 1, 2],
-    "Star Wars: Episode I — The Phantom Menace": ["Star Wars: Episode I — The Phantom Menace", 1, 4],
-    "Star Wars: Episode II — Attack of the Clones": ["Star Wars: Episode II — Attack of the Clones", 1, 4],
-    "Star Wars: Episode III — Revenge of the Sith": ["Star Wars: Episode III — Revenge of the Sith", 1, 4],
+    "Star Wars: Episode I — The Phantom Menace (comic series)": ["Star Wars: Episode I — The Phantom Menace", 1, 4],
+    "Star Wars: Episode II — Attack of the Clones (comic series)": ["Star Wars: Episode II — Attack of the Clones", 1, 4],
+    "Star Wars: Episode III — Revenge of the Sith (comic series)": ["Star Wars: Episode III — Revenge of the Sith", 1, 4],
     "Star Wars: Ewoks (1985)": ["Ewoks (1985)", 1, 14],
     "Star Wars: General Grievous": ["General Grievous", 1, 4],
-    "Star Wars: Heir to the Empire": ["Heir to the Empire", 1, 6],
+    "Star Wars: Heir to the Empire (comic series)": ["Heir to the Empire", 1, 6],
     "Star Wars: In the Shadow of Yavin": ["Star Wars (2013)", 1, 20],
     "Star Wars: Invasion: Refugees": ["Invasion", 1, 5],
     "Star Wars: Invasion: Rescues": ["Invasion: Rescues", 1, 6],
@@ -220,15 +222,15 @@ SERIES_MAPPING = {
     "Star Wars: Jedi Council: Acts of War": ["Jedi Council: Acts of War", 1, 4],
     "Star Wars: Jedi Quest (comic series)": ["Jedi Quest", 1, 4],
     "Star Wars: Jedi vs. Sith": ["Jedi vs. Sith", 1, 6],
-    "Star Wars: Jedi—The Dark Side": ["Jedi—The Dark Side", 1, 5],
+    "Star Wars: Jedi — The Dark Side": ["Jedi — The Dark Side", 1, 5],
     "Star Wars: Knight Errant: Aflame": ["Knight Errant: Aflame", 1, 5],
     "Star Wars: Knight Errant: Deluge": ["Knight Errant: Deluge", 1, 5],
     "Star Wars: Knight Errant: Escape": ["Knight Errant: Escape", 1, 5],
     "Star Wars: Knights of the Old Republic (comic series)": ["Knights of the Old Republic", 1, 50],
     "Star Wars: Legacy Volume 2": ["Legacy (2013)", 1, 18],
     "Star Wars: Legacy": ["Legacy (2006)", 1, 50],
-    "Star Wars: Legacy—War": ["Legacy—War", 1, 6],
-    "Star Wars: Lost Tribe of the Sith—Spiral": ["Lost Tribe of the Sith—Spiral", 1, 5],
+    "Star Wars: Legacy — War": ["Legacy — War", 1, 6],
+    "Star Wars: Lost Tribe of the Sith — Spiral": ["Lost Tribe of the Sith — Spiral", 1, 5],
     "Star Wars: Mara Jade – By the Emperor's Hand": ["Mara Jade – By the Emperor's Hand", 1, 6],
     "Star Wars: Obsession": ["Obsession", 1, 5],
     "Star Wars: Purge – The Tyrant's Fist": ["Purge – The Tyrant's Fist", 1, 2],
@@ -241,7 +243,7 @@ SERIES_MAPPING = {
     "Star Wars: River of Chaos": ["River of Chaos", 1, 4],
     "Star Wars: Shadows of the Empire (comic series)": ["Shadows of the Empire", 1, 6],
     "Star Wars: Shadows of the Empire: Evolution": ["Shadows of the Empire: Evolution", 1, 5],
-    "Star Wars: Splinter of the Mind's Eye": ["Splinter of the Mind's Eye", 1, 4],
+    "Star Wars: Splinter of the Mind's Eye (comic series)": ["Splinter of the Mind's Eye", 1, 4],
     "Star Wars: Starfighter: Crossbones": ["Starfighter: Crossbones", 1, 3],
     "Star Wars: Tales of the Jedi (miniseries)": ["Tales of the Jedi", 1, 5],
     "Star Wars: Tales of the Jedi – Dark Lords of the Sith": ["Tales of the Jedi – Dark Lords of the Sith", 1, 6],
@@ -255,8 +257,8 @@ SERIES_MAPPING = {
     "Star Wars: The Clone Wars: Hero of the Confederacy": ["The Clone Wars", 10, 12],
     "Star Wars: The Clone Wars: In Service of the Republic": ["The Clone Wars", 7, 12],
     "Star Wars: The Clone Wars: Slaves of the Republic": ["The Clone Wars", 1, 12],
-    "Star Wars: The Last Command": ["The Last Command", 1, 6],
-    "Star Wars: The Old Republic—The Lost Suns": ["The Old Republic—The Lost Suns", 1, 5],
+    "Star Wars: The Last Command (comic series)": ["The Last Command", 1, 6],
+    "Star Wars: The Old Republic — The Lost Suns": ["The Old Republic — The Lost Suns", 1, 5],
     "Star Wars: Underworld: The Yavin Vassilika": ["Underworld: The Yavin Vassilika", 1, 5],
     "Star Wars: Union": ["Union", 1, 4],
     "Star Wars: Vader's Quest": ["Vader's Quest", 1, 4],
@@ -572,7 +574,7 @@ def build_template_types(site):
 
     list_templates(site, "Category:YouTube citation templates", results, "YT")
     list_templates(site, "Category:Card game citation templates", results, "Cards")
-    list_templates(site, "Category:Miniature game citation templates", results, "Cards")
+    list_templates(site, "Category:Miniature game citation templates", results, "Minis")
     list_templates(site, "Category:Toy citation templates", results, "Toys")
     list_templates(site, "Category:TV citation templates", results, "TV")
 
@@ -581,7 +583,7 @@ def build_template_types(site):
     results["Magazine"] = {}
     for p in Category(site, "Category:Magazine citation templates").articles(recurse=True):
         txt = p.get()
-        if "BaseCitation/Magazine" in txt:
+        if "BaseCitation" in txt and "mode=magazine" in txt:
             x = re.search("\|series=([A-z0-9:()\-&/ ]+)[|\n]", txt)
             if x:
                 results["Magazine"][p.title(with_ns=False)] = x.group(1)
@@ -653,11 +655,10 @@ def load_source_lists(site, log):
             #     skip = False
             #     continue
             if line and not line.startswith("==") and not "/Header}}" in line and line != "----":
-                # if line.count("{{") > line.count("}}"):
-                #     if o + 1 != len(lines) and lines[o + 1].count("}}") > lines[o + 1].count("{{"):
-                #         line = f"{line}{lines[o + 1]}"
-                #         skip = True
-                #         bad.append(o)
+                line = line.replace(" |reprint=", "|reprint=")
+                line = re.sub("(\{\{SWMiniCite.*?)\|num=[0-9-]+", "\\1", line)
+                if "Miniatures" in sp or "RefMagazine" in sp:
+                    line = re.sub("<!-- .*? -->", "", line)
 
                 if "Toys" in sp:
                     line = re.sub("(\|text=.*?)(\|set=.*?)\|", "\\2\\1|", line)
@@ -790,6 +791,7 @@ def load_full_sources(site, types, log) -> FullListData:
     today = datetime.now().strftime("%Y-%m-%d")
     ff_data = {}
     reprints = {}
+    card_suffixes = {}
     for i in sources:
         try:
             unlicensed = "{{c|unlicensed" in i['item'].lower() or "{{un}}" in i['item'].lower()
@@ -820,8 +822,15 @@ def load_full_sources(site, types, log) -> FullListData:
                 x.index = i['index']
                 x.extra = c
                 x.parenthetical = parenthetical
-                if (x.mode == "Cards" or x.mode == "Toys") and parenthetical:
+                if x.master_page.endswith("CardSets") and x.parenthetical:
+                    if x.template not in card_suffixes:
+                        card_suffixes[x.template] = {}
+                    card_suffixes[x.template][x.target] = f"{x.target} ({parenthetical})"
+                if parenthetical and f"({parenthetical})" not in x.target:
                     x.target = f"{x.target} ({parenthetical})"
+                elif x.is_card_or_mini() and x.card:
+                    if x.template in card_suffixes and x.parent in card_suffixes[x.template]:
+                        x.parent = card_suffixes[x.template][x.parent]
                 if i.get("int"):
                     x.target = f"{i['int']}"
                 x.unlicensed = unlicensed
@@ -844,6 +853,7 @@ def load_full_sources(site, types, log) -> FullListData:
                         d = set(i.canon for i in target_sources[x.target])
                         if True in d and False in d:
                             both_continuities.add(x.target)
+                            x.both_continuities = True
                 if x.ff_data:
                     if x.issue not in ff_data:
                         ff_data[x.issue] = []
@@ -937,14 +947,23 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 crp = True
                 i['item'] = i['item'].replace(x3.group(0), '').strip()
 
+            parenthetical = ''
+            if "|p=" in i['item']:
+                pr = re.search("\|p=(.*?)(\|.*?)?}}", i['item'])
+                if pr:
+                    parenthetical = pr.group(1)
+                    i['item'] = i['item'].replace(f"|p={parenthetical}", "").strip()
+
             x = extract_item(i['item'], True, i['page'], types, master=True)
-            if x and (x.template == "Film" or x.template == "TCW" or x.target == "Star Wars: The Clone Wars (film)") and x.unique_id() in unique_appearances:
-                x.both_continuities = True
-                both_continuities.add(x.target)
-                continue
-            elif x and x.template and x.template.startswith("FactFile") and "y=2014" in x.original:
-                x.both_continuities = True
-                both_continuities.add(x.target)
+            if x and x.unique_id() in unique_appearances:
+                if x.template == "Film" or x.template == "TCW" or x.target == "Star Wars: The Clone Wars (film)":
+                    x.both_continuities = True
+                    both_continuities.add(x.target)
+                    continue
+                elif x.canon != unique_appearances[x.unique_id()].canon:
+                    x.both_continuities = True
+                    both_continuities.add(x.target)
+                    continue
 
             if x:
                 x.master_page = i['page']
@@ -953,6 +972,10 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 x.date = i['date']
                 x.future = x.date and (x.date == 'Future' or x.date > today)
                 x.extra = c
+                x.parenthetical = parenthetical
+                if parenthetical and f"({parenthetical})" not in x.target:
+                    x.target = f"{x.target} ({parenthetical})"
+
                 x.alternate_url = alternate
                 x.unlicensed = "Unlicensed" in i['page'] or "unlicensed" in c
                 if is_source:
@@ -1025,13 +1048,13 @@ def determine_index(x: Item, target, i: dict, canon, legends, c_unknown, l_unkno
     canon_index_expected = x.canon and x.match_expected() and not i['audiobook'] and target not in AUDIOBOOK_MAPPING.values() and not x.german_ad and target not in c_unknown
     legends_index_expected = not x.canon and x.match_expected() and not i['audiobook'] and target not in AUDIOBOOK_MAPPING.values() and not x.german_ad and target not in l_unknown
 
-    canon_index = match_audiobook(target, canon, log_match and canon_index_expected, x.master_page)
+    canon_index = match_audiobook(x, target, canon, log_match and canon_index_expected, x.master_page)
     if canon_index is not None:
         x.canon_index = canon_index + o
     elif canon_index_expected:
         c = True
 
-    legends_index = match_audiobook(target, legends, log_match and legends_index_expected, x.master_page)
+    legends_index = match_audiobook(x, target, legends, log_match and legends_index_expected, x.master_page)
     if legends_index is not None:
         x.legends_index = legends_index + o
     elif legends_index_expected:
@@ -1157,7 +1180,7 @@ GERMAN_MAPPING = {
 }
 
 
-def match_audiobook(target, data, log, page):
+def match_audiobook(x: Item, target, data, log, page):
     if target in data:
         return data[target]
     elif target in SPECIAL_INDEX_MAPPING and SPECIAL_INDEX_MAPPING[target] in data:
@@ -1170,6 +1193,8 @@ def match_audiobook(target, data, log, page):
         issue = next(f"Knights of the Old Republic {k}" for k, v in TEMPLATE_MAPPING["KOTORbackups"].items() if v == target)
         if issue in data:
             return data[issue]
+    elif x.parenthetical and target.replace(f" ({x.parenthetical})", "") in data:
+        return data[target.replace(f" ({x.parenthetical})", "")]
 
     for x in ["audiobook", "unabridged audiobook", "abridged audiobook", "audio", "script", "audio drama", "German audio drama"]:
         if target.replace(f"({x})", "(novelization)") in data:

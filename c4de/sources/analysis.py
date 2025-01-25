@@ -6,7 +6,8 @@ from datetime import datetime, timedelta
 from pywikibot import Page, showDiff
 from typing import List, Tuple, Union, Dict, Optional
 
-from c4de.sources.determine import extract_item, determine_id_for_item, convert_issue_to_template, swap_parameters
+from c4de.sources.determine import extract_item, determine_id_for_item, convert_issue_to_template, swap_parameters, \
+    REFERENCE_MAGAZINES
 from c4de.sources.engine import AUDIOBOOK_MAPPING, GERMAN_MAPPING, SERIES_MAPPING, EXPANSION
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, AnalysisResults, SectionComponents, \
     SectionItemIds, FinishedSection, NewComponents, UnknownItems
@@ -39,36 +40,89 @@ REPLACEMENTS = [
     ("Apearance", "Appearance"), ("Appearence", "Appearance"), ("&#40;&#63;&#41;", "(?)"), ("{{MO}}", "{{Mo}}"),
     ("{{mO}}", "{{Mo}}"), ("*{{Indexpage", "{{Indexpage"), ("DisneyPlusYT", "DisneyPlusYouTube"), ("<br>", "<br />"),
     ("Youtube", "YouTube"), ("{{Shortstory", "{{StoryCite"), ("{{Scrollbox", "{{Scroll_box"),
-    ("{{scrollbox", "{{Scroll_box"), ("FFCite", "FactFile"), ("</reF>", "</ref>"),
+    ("{{scrollbox", "{{Scroll_box"), ("FFCite", "FactFile"), ("</reF>", "</ref>"), ("\n</ref>", "</ref>"),
     ("[[B1-Series battle droid]]", "[[B1-series battle droid/Legends|B1-series battle droid]]"),
     ("[[Variable Geometry Self-Propelled Battle Droid, Mark I/Legends|Variable Geometry Self-Propelled Battle Droid, Mark I]]", "[[Vulture-class starfighter/Legends|''Vulture''-class starfighter]]"),
     ("[[Variable Geometry Self-Propelled Battle Droid, Mark I]]", "[[Vulture-class starfighter|''Vulture''-class starfighter]]"),
 
     ("Tales of the Jedi —", "Tales of the Jedi –"), ("Tales of the Jedi &mdash;", "Tales of the Jedi –"),
-    ("FactFile|year=", "FactFile|y="),
-    ("Vader Immortal: A Star Wars VR Series – Episode", "Vader Immortal – Episode")
-]
+    ("FactFile|year=", "FactFile|y="), ("Category:Images from Star Wars Legion - Clone Wars Core Set", "Images from the Clone Wars Core Set"),
+    ("Vader Immortal: A Star Wars VR Series – Episode", "Vader Immortal – Episode"),
+    ("Red Five (Star Wars Insider)", "Red Five (department)"),
+    ("A Certain Point of View (Star Wars Insider)", "A Certain Point of View (department)"),
+    (" (Disney Gallery: The Mandalorian)}}", "}}"), ("Carlissian", "Calrissian"),
+    (" (Disney Gallery: The Mandalorian episode)}}", "}}"),
+    ("Star Wars: Legion - Clone Wars Core Set|Clone Wars Core Set", "set=Clone Wars Core Set"),
+    ("Star Wars: Legion - Clone Wars Core Set|", "set=Clone Wars Core Set|"),
+    ("set=Imperial Raider Expansion Pack (Star Wars: X-Wing Miniatures Game)", "set=Imperial Raider Expansion Pack"),
 
-COLLECTION = [("Star Wars Universe\|Star Wars Universe\|", "Star Wars Universe|"),
-    ("\{\{BustCollectionCite\|2\|(.*?Stormtroopers)", "{{BustCollectionCite|3|\\1"),
-    ("\{\{BustCollectionCite\|3\|(.*?(Chewbacca|Kashyyyk))", "{{BustCollectionCite|5|\\1"),
-    ("\{\{BustCollectionCite\|4\|(.*?(Searching for the Map|Kylo Ren))", "{{BustCollectionCite|15|\\1"),
-    ("\{\{BustCollectionCite\|6\|(.*?(Luke Skywalker))", "{{BustCollectionCite|22|\\1"),
-    ("\{\{BustCollectionCite\|7\|(.*?Boba )", "{{BustCollectionCite|2|\\1"),
-    ("\{\{BustCollectionCite\|8\|(.*?From Supporting|Han Solo)", "{{BustCollectionCite|25|\\1"),
-    ("\{\{BustCollectionCite\|10\|(.*?Specialized)", "{{BustCollectionCite|6|\\1"),
-    ("\{\{BustCollectionCite\|12\|(.*?Trade Federation)", "{{BustCollectionCite|13|\\1"),
-    ("\{\{BustCollectionCite\|14\|(.*?Endor)", "{{BustCollectionCite|36|\\1"),
-    ("\{\{BustCollectionCite\|17\|(.*?Fighter Pilot)", "{{BustCollectionCite|10|\\1"),
-    ("\{\{BustCollectionCite\|20\|(.*?Boush)", "{{BustCollectionCite|11|\\1"),
-    ("\{\{BustCollectionCite\|34\|(.*?Greedo)", "{{BustCollectionCite|32|\\1"),
-    ("\{\{HelmetCollectionCite\|([0-9]+)\|Databank\|", "{{HelmetCollectionCite|\\1|Databank A-Z|"),
-    ("\{\{HelmetCollectionCite\|3\|(.*?Rescue)", "{{HelmetCollectionCite|5|\\1"),
-    ("\{\{HelmetCollectionCite\|5\|(.*?Scout)", "{{HelmetCollectionCite|7|\\1"),
-    ("\{\{HelmetCollectionCite\|5\|(.*?Bounty Hunters)", "{{HelmetCollectionCite|2|\\1"),
-    ("\{\{HelmetCollectionCite\|5\|(.*?Imperial Fleet)", "{{HelmetCollectionCite|6|\\1"),
-    ("\{\{HelmetCollectionCite\|6\|(.*?Sebulba)", "{{HelmetCollectionCite|17|\\1"),
-    ("\{\{HelmetCollectionCite\|53\|(.*?Bly)", "{{HelmetCollectionCite|73|\\1")]
+    ("[[First-degree droid]]", "[[Class one droid/Legends|Class one droid]]"),
+    ("[[First-degree droid|First-degree]]", "[[Class one droid/Legends|Class one]]"),
+    ("[[First-degree droid|", "[[Class one droid/Legends|"),
+    ("[[first-degree droid]]", "[[Class one droid/Legends|class one droid]]"),
+    ("[[Second-degree droid]]", "[[Class two droid/Legends|Class two droid]]"),
+    ("[[Second-degree droid|Second-degree]]", "[[Class two droid/Legends|Class two]]"),
+    ("[[Second-degree droid|", "[[Class two droid/Legends|"),
+    ("[[second-degree droid]]", "[[Class two droid/Legends|class two droid]]"),
+    ("[[Third-degree droid]]", "[[Class three droid/Legends|Class three droid]]"),
+    ("[[Third-degree droid|Third-degree]]", "[[Class three droid/Legends|Class three]]"),
+    ("[[Third-degree droid|", "[[Class three droid/Legends|"),
+    ("[[third-degree droid]]", "[[Class three droid/Legends|class three droid]]"),
+    ("[[Fourth-degree droid]]", "[[Class four droid/Legends|Class four droid]]"),
+    ("[[Fourth-degree droid|Fourth-degree]]", "[[Class four droid/Legends|Class four]]"),
+    ("[[Fourth-degree droid|", "[[Class four droid/Legends|"),
+    ("[[fourth-degree droid]]", "[[Class four droid/Legends|class four droid]]"),
+    ("[[Fifth-degree droid]]", "[[Class five droid/Legends|Class five droid]]"),
+    ("[[Fifth-degree droid|Fifth-degree]]", "[[Class five droid/Legends|Class five]]"),
+    ("[[Fifth-degree droid|", "[[Class five droid/Legends|"),
+    ("[[fifth-degree droid]]", "[[Class five droid/Legends|class five droid]]"),
+
+    ("[[First class droid]]", "[[Class one droid]]"),
+    ("[[First class droid|First class]]", "[[Class one droid|Class one]]"),
+    ("[[First class droid|Class 1]]", "[[Class one droid|Class one]]"),
+    ("[[First class droid|class 1]]", "[[Class one droid|class one]]"),
+    ("[[First class droid|Class one droid]]", "[[Class one droid]]"),
+    ("[[First class droid|class one droid]]", "[[class one droid]]"),
+    ("[[First class droid|", "[[Class one droid|"),
+    ("[[first class droid]]", "[[class one droid]]"),
+
+    ("[[Second class droid]]", "[[Class two droid]]"),
+    ("[[Second class droid|Second class]]", "[[Class two droid|Class two]]"),
+    ("[[Second class droid|Class 2]]", "[[Class two droid|Class two]]"),
+    ("[[Second class droid|class 2]]", "[[Class two droid|class two]]"),
+    ("[[Second class droid|Class two droid]]", "[[Class two droid]]"),
+    ("[[Second class droid|class two droid]]", "[[class two droid]]"),
+    ("[[Second class droid|", "[[Class two droid|"),
+    ("[[second class droid]]", "[[class two droid]]"),
+
+    ("[[Third class droid]]", "[[Class three droid]]"),
+    ("[[Third class droid|Third class]]", "[[Class three droid|Class three]]"),
+    ("[[Third class droid|Class 3]]", "[[Class three droid|Class three]]"),
+    ("[[Third class droid|class 3]]", "[[Class three droid|Class three]]"),
+    ("[[Third class droid|Class three droid]]", "[[Class three droid]]"),
+    ("[[Third class droid|class three droid]]", "[[class three droid]]"),
+    ("[[Third class droid|", "[[Class three droid|"),
+    ("[[third class droid]]", "[[class three droid]]"),
+
+    ("[[Fourth class droid]]", "[[Class three droid]]"),
+    ("[[Fourth class droid|Fourth class]]", "[[Class three droid|Class three]]"),
+    ("[[Fourth class droid|Class 4]]", "[[Class four droid|Class four]]"),
+    ("[[Fourth class droid|class 4]]", "[[Class four droid|Class four]]"),
+    ("[[Fourth class droid|Class four droid]]", "[[Class four droid]]"),
+    ("[[Fourth class droid|class four droid]]", "[[class four droid]]"),
+    ("[[Fourth class droid|", "[[Class four droid|"),
+    ("[[fourth class droid]]", "[[class four droid]]"),
+
+    ("[[Fifth class droid]]", "[[Class five droid]]"),
+    ("[[Fifth class droid|Fifth class]]", "[[Class five droid|Class five]]"),
+    ("[[Fifth class droid|Class 5]]", "[[Class five droid|Class five]]"),
+    ("[[Fifth class droid|class 5]]", "[[Class five droid|class five]]"),
+    ("[[Fifth class droid|Class five droid]]", "[[Class five droid]]"),
+    ("[[Fifth class droid|class five droid]]", "[[class five droid]]"),
+    ("[[Fifth class droid|", "[[Class five droid|"),
+    ("[[fifth class droid]]", "[[class five droid]]"),
+    ("[[2-1B-series medical droid]]", "[[2-1B surgical droid]]"),
+]
 
 
 def initial_cleanup(target: Page, all_infoboxes, before: str=None):
@@ -147,19 +201,20 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
 
     before = re.sub("\|story=\[\[(.*?)(\|.*?)?]]", "|story=\\1", before)
     before = re.sub("(\|set=.*?)(\|subset=.*?)(\|stext=.*?)(\|.*?)?}}", "\\1\\3\\2\\4}}", before)
+    before = re.sub("(\{\{([A-z_ ]+)\|set=[^|\n]+?)(\|link=[^|\n}]+?)(\|cardname=[^|\n}]+?)}}", "\\1\\4\\3}}", before)
 
     # temp fixes
+    before = re.sub("\{\{([A-z _]+)\|(.*?)( \(.*?\))\|\\2\|card", "{{\\1|set=\\2\\3|card", before)
+    before = re.sub("(\{\{SWMiniCite\|set=.*?) \(Star Wars Miniatures\)", "\\1", before)
     before = re.sub("\{\{Topps\|set=Star Wars: Card Trader\|(cardname=)?", "{{SWCT|", before)
     before = re.sub("(\{\{Databank.*?}})( \{\{C\|alternate:.*?}})+", "\\1", before)
     before = before.replace("(Force Pack)", "(Star Wars: The Card Game)")
+    before = re.sub("FFGXW2\|set=(.*?) \(Second Edition\)", "FFGXW2|set=\\1", before)
+    # before = re.sub("(\{\{[A-z]+\|)([^\n|=]+?)\|([^\n|]+/[^\n|]+/[^\n|]*?)")
 
     # Galaxies fixes
     while re.search("\[\[Category:[^\n|\]_]+_", before):
         before = re.sub("(\[\[Category:[^\n|\]_]+)_", "\\1 ", before)
-
-    if "CollectionCite" in before:
-        for (x, y) in COLLECTION:
-            before = re.sub(x, y, before)
     # print(f"regex-1: {(datetime.now() - now).microseconds / 1000} microseconds")
 
     # now = datetime.now()
@@ -435,7 +490,7 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
     scroll_box = False
     cs = 0
     section = re.sub("({{CardGameSet\|set=.*?)\n\|cards=", "\\1|cards=\n", section)
-    section = re.sub("'*\[\[Star Wars Miniatures]]'*: '*\[\[(.*?)(\|.*?)?]]'*", "{{SWMiniCite|set=\\1}}", section)
+    section = re.sub("({{SourceContents\|issue=.*?)\n\|contents=", "\\1|contents=\n", section)
     section = re.sub("(?<!Hamm) \((as .*?)\)", " {{C|\\1}}", section)
     section = section.replace("]]{{Mediacat", "]]\n{{Mediacat")
     for s in section.splitlines():
@@ -443,7 +498,10 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
             other2.append(s)
             continue
         if "CardGameSet" in s:
-            s = re.sub("{{CardGameSet\|(set=)?.*?\|cards=", "", s)
+            s = re.sub("\*?{{CardGameSet\|(set=)?(.*?)\|cards=", "\\2", s)
+            cs += 1
+        if "SourceContents" in s:
+            s = re.sub("\*?{{SourceContents\|(issue=)?(.*?)\|contents=", "\\2", s)
             cs += 1
 
         if name.startswith("File:"):
@@ -491,6 +549,7 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
                 x = re.search("\{\{(.*?)(\|.*?)?}}", s)
                 if x and is_nav_template(x.group(1), types):
                     navs.append(s)
+                    continue
                 elif x and is_nav_or_date_template(x.group(1), types):
                     extra.append(s)
                     continue
@@ -519,7 +578,6 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
 
     if name.startswith("File:"):
         z = re.sub("\[\[(The )?Topps( Company.*?)?]]'? ('*\[\[)", "\\3", z)
-
 
     x2 = re.search("\{\{[Aa]b\|.*?}}", z)
     ab = x2.group(0) if x2 else ''
@@ -632,7 +690,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
         for link in links:
             x = extract_item(link[0], False, "reference", types)
             if x:
-                o = determine_id_for_item(x, page.site, appearances.unique, appearances.target, sources.unique, sources.target, remap, canon, log)
+                o = determine_id_for_item(x, page, appearances.unique, appearances.target, sources.unique, sources.target, remap, canon, log)
                 if o and not o.use_original_text and o.replace_references:
                     found.append(o)
                     if o.master.template and not x.template and x.target and not re.search("^['\"]*\[\[" + prepare_title(x.target) + "(\|.*?)?]]['\"]*$", new_ref):
@@ -676,9 +734,9 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
             if x:
                 if x.template and is_nav_or_date_template(x.template, types):
                     continue
-                o = determine_id_for_item(x, page.site, appearances.unique, appearances.target, sources.unique,
-                                          sources.target, {}, canon, log)
-                if o and o.current.mode == "Cards":
+                o = determine_id_for_item(x, page, appearances.unique, appearances.target, sources.unique,
+                                          sources.target, {}, canon, log, ref=True)
+                if o and o.current.is_card_or_mini():
                     new_templates.append((t, o, []))
                 elif o and not (o.use_original_text or o.current.collapsed) and t != o.master.original:
                     found.append(o)
@@ -696,8 +754,10 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                     found.append(o)
 
         for ot, ni, extra in new_templates:
-            if ni.master.mode == "Cards":
+            if ni.master.is_card_or_mini():
                 z = build_card_text(ni, ni)
+            elif ni.master.ref_magazine:
+                z = re.sub("(\{\{(?!FactFile)[A-z0-9]+\|[0-9]+\|.*?)(\|.*?(\{\{'s?}})?.*?)?}}", "\\1}}", ni.master.original)
             else:
                 z = swap_parameters(ni.master.original)
             if extra:
@@ -1171,7 +1231,7 @@ def build_item_ids_for_section(page: Page, real, name, original: List[Item], dat
     other_extra = False
     for i, o in enumerate(original):
         o.index = i
-        d = determine_id_for_item(o, page.site, data.unique, data.target, other.unique, other.target, remap, canon, log)
+        d = determine_id_for_item(o, page, data.unique, data.target, other.unique, other.target, remap, canon, log)
         if not d and o.parent:
             p = Page(page.site, o.parent)
             if "[[w:c:" in o.original:
@@ -1180,7 +1240,7 @@ def build_item_ids_for_section(page: Page, real, name, original: List[Item], dat
                 if log:
                     print(f"Followed redirect {o.parent} to {p.getRedirectTarget().title()}")
                 o.parent = p.getRedirectTarget().title().split('#', 1)[0]
-                d = determine_id_for_item(o, page.site, data.unique, data.target, other.unique, other.target, remap, canon, log)
+                d = determine_id_for_item(o, page, data.unique, data.target, other.unique, other.target, remap, canon, log)
 
         if d and name == "Appearances" and "Core Set" in o.original and o.template == "SWIA":
             wrong.append(d)
@@ -1222,7 +1282,7 @@ def build_item_ids_for_section(page: Page, real, name, original: List[Item], dat
         elif d and d.master.from_extra and not d.master.reprint and d.master.target not in SERIES_MAPPING and d.master.target not in EXPANSION and not d.master.non_canon and not d.master.collection_type:
             other_extra = True
 
-        if d and (o.mode == "Cards" or o.template == "ForceCollection"):
+        if d and (o.is_card_or_mini() or o.template == "ForceCollection"):
             handle_card_item(d, o, cards, src.found if (src and "scenario" not in o.original) else found, src.wrong if src else wrong, extra, name, log)
         elif o.mode != "Toys" and is_external_link(d, o, unknown):
             if d:
@@ -1356,7 +1416,7 @@ def handle_cards(cards: Dict[str, List[ItemId]], data: FullListData, other: Full
 
 def handle_card_item(d: ItemId, o: Item, cards: Dict[str, List[ItemId]], found: List[ItemId], wrong: List[ItemId],
                      extra: Dict[str, ItemId], name, log):
-    if d.current.card and d.current.card == d.master.card and d.master.has_date():
+    if d.current.card and d.current.card == d.master.card and d.master.has_date() and not d.master.is_card_or_mini():
         found.append(d)
         return
     elif o.template == "ForceCollection":
@@ -1390,6 +1450,8 @@ def handle_card_item(d: ItemId, o: Item, cards: Dict[str, List[ItemId]], found: 
 
     if o.card:
         cards[parent_set].append(d)
+        for _, i in o.others.items():
+            cards[parent_set].append(ItemId(i, i, False, False))
     elif o.special and d.from_other_data:
         if log:
             print(f"({name}) Listed in wrong section: {o.original}")
@@ -1435,7 +1497,7 @@ def build_new_external_links(page: Page, original: List[Item], data: FullListDat
                 o.original = o.original.replace("WebCite", "OfficialSite")
 
         o.index = i
-        d = determine_id_for_item(o, page.site, data.unique, data.target, other.unique, other.target, remap, canon, log)
+        d = determine_id_for_item(o, page, data.unique, data.target, other.unique, other.target, remap, canon, log)
         if not d and o.parent:
             p = Page(page.site, o.parent)
             if "[[w:c:" in o.original:
@@ -1444,7 +1506,7 @@ def build_new_external_links(page: Page, original: List[Item], data: FullListDat
                 if log:
                     print(f"Followed redirect {o.parent} to {p.getRedirectTarget().title()}")
                 o.parent = p.getRedirectTarget().title().split('#', 1)[0]
-                d = determine_id_for_item(o, page.site, data.unique, data.target, other.unique, other.target, remap, canon, log)
+                d = determine_id_for_item(o, page, data.unique, data.target, other.unique, other.target, remap, canon, log)
         is_external_link(d, o, [])
 
         if d and d.master.is_internal_mode() and not d.master.external:
@@ -1463,6 +1525,8 @@ def build_new_external_links(page: Page, original: List[Item], data: FullListDat
             zn = swap_parameters(zn)
             zn = zn.replace("–", "&ndash;").replace("—", "&mdash;")
             z = f"{zn} {d.current.extra}"
+            if d.master.mode == "Minis" and d.master.card:
+                z = re.sub("\|link=.*?(\|.*?)?}}", "\\1}}", re.sub(" ?\{\{[Cc]\|[Rr]eissued.*?}}", "", z))
             z = z if z.startswith("*") else f"*{z}"
             if z not in done:
                 found.append((o.mode, d.master, z))
@@ -1531,21 +1595,51 @@ def build_new_section(name, section: SectionItemIds, title: str, mode: str, date
 
         d = build_date_text(o, include_date).replace("E -->", " -->")
         if o.current.full_id() in section.sets:
-            set_cards = section.cards[section.sets[o.current.full_id()]]
+            set_items = section.cards[section.sets[o.current.full_id()]]
             ct = 0
             rows += 1
-            if len(set_cards) > 1:
-                new_text.append(f"{d}{{{{CardGameSet|set={o.current.original}|cards=")
-                ct = 2
-            for c in sorted(set_cards, key=lambda a: (a.current.card if a.current.card else a.current.original).replace("''", "")):
-                ot = build_card_text(o, c).replace("|parent=1", "")
-                zt = "*" + d + re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", f"{ot} {c.current.extra.strip()}").strip()
-                if title and "1stID" in zt and re.search("\{\{1stID(}}|\|simult=)", zt):
-                    zt = zt.replace("{{1stID", f"{{{{1stID|{title}")
+            block = []
+            if o.master.is_card_or_mini():
+                set_items = sorted(set_items, key=lambda a: (a.current.card if a.current.card else a.current.original).replace("''", ""))
+
+            if o.master.ref_magazine:
+                parent = o.current.original
+            elif any(i.master.ref_magazine for i in set_items):
+                parent = f"{{{{{set_items[0].master.template}|{set_items[0].master.issue}}}}} {o.current.extra}".strip()
+            else:
+                parent = o.current.original
+            for c in set_items:
+                if c.current.card:
+                    ot = build_card_text(o, c).replace("|parent=1", "")
+                else:
+                    ot = build_item_text(o, d, nl, sl, final_without_extra, final_items, new_text, section.name, title, collapse_audiobooks, section.mark_as_non_canon, unlicensed, log)
+                if o.master.mode == "Minis" and o.master.card:
+                    ot = re.sub("\|link=.*?(\|.*?)?}}", "\\1}}", ot)
+                if ot in final_without_extra:
+                    continue
+                ex = c.current.extra.strip()
+                if "1stID" in ex:
+                    if title and re.search("\{\{1stID(}}|\|simult=)", ex):
+                        ex = ex.replace("{{1stID", f"{{{{1stID|{title}")
+                    id = re.search("(\{\{1stID[^{}]*(\{\{.*?}})?[^{}]*}})", ex)
+                    if id:
+                        parent = f"{parent} {id.group(1)}"
+                        ex = ex.replace(id.group(1), "").replace("  ", " ")
+                zt = "*" + d + re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", f"{ot} {ex}").strip()
                 ct += zt.count("{")
                 ct -= zt.count("}")
+                if c.master.mode == "Minis" and c.master.card:
+                    zt = re.sub(" ?\{\{[Cc]\|[Rr]eissued.*?}}", "", zt)
                 final_items.append(c)
-                new_text.append(zt)
+                final_without_extra.append(ot)
+                block.append(zt)
+            if len(block) > 1:
+                if o.master.is_card_or_mini():
+                    block.insert(0, f"{d}{{{{CardGameSet|set={parent}|cards=")
+                else:
+                    block.insert(0, f"{d}{{{{SourceContents|issue={parent}|contents=")
+                ct += 2
+            new_text += block
             if ct:
                 new_text.append("".join("}" for _ in range(ct)))
         elif not real and o.master.reprint and o.master.target in targets:
@@ -1566,12 +1660,19 @@ def build_new_section(name, section: SectionItemIds, title: str, mode: str, date
 
 def build_card_text(o: ItemId, c: ItemId):
     ot = c.current.original
+    if c.master.template and c.master.mode == "Minis" and c.master.card:
+        ot = c.master.original
     if c.current.subset and "subset=" not in ot:
         ot = re.sub("({{[^|}]*?\|(set=)?[^|}]*?\|(s?text=.*?\|)?)", f"\\1subset={o.current.subset}|", ot)
     while ot.count("|subset=") > 1:
         ot = re.sub("(\|subset=.*?)\1", "\1", ot)
     if o.master.template and o.master.master_page:
         ot = re.sub("\{\{([A-z0-9]+)\|.*?\|(url=|subset=|scenario=|pack=|cardname=|(swg)?(alt)?link=)", re.sub("\|p=.*?(\|.*?)?}}", "\\1", o.master.original.replace("}}", "")) + "|\\2", ot)
+        if o.master.mode == "Minis" and c.master.card:
+            ot = re.sub("\|link=.*?(\|.*?)?}}", "\\1}}", ot)
+            if "link=" in ot:
+                ot = re.sub("\|link=.*?(\|.*?)?}}", "\\1}}", ot)
+            ot = re.sub("(\|cardname=.*?)(\|.*?)?\|cardname=.*?(\|.*?)?}}", "\\1\\2\\3}}", ot)
     if o.master.template == "SWIA" and "text" in ot:
         ot = re.sub("\|set=(.*?)\|text=''\\1''", "|set=\\1", ot)
     ot = re.sub("(\{\{.*?\|set=(.*?))\|s?text=\\2\|", "\\1|", ot)
@@ -1579,6 +1680,7 @@ def build_card_text(o: ItemId, c: ItemId):
     ot = re.sub("\{\{SWU\|(.*?)( \(.*?\))?\|'*\\1'*\|", "{{SWU|set=\\1|", ot)
     ot = re.sub("\{\{SWU\|(?!(cardname=|set=))", "{{SWU|set=", ot)
     ot = re.sub("\|stext=(.*?)\|\\1\|", "|stext=\\1|", ot)
+    ot = re.sub("(\|(ship|pack|cardname)=.*?)\\1(\|.*?)?}}", "\\1\\3}}", ot)
     ot = ot.replace("–", "&ndash;").replace("—", "&mdash;").replace("  ", " ").replace("|parent=1", "")
     return ot
 
@@ -1589,6 +1691,9 @@ def build_item_text(o: ItemId, d: str, nl: str, sl: str, final_without_extra: li
     zt = o.current.original if o.use_original_text else o.master.original
     if not zt.strip():
         return 0
+    if o.master.ref_magazine:
+        zt = re.sub("(\{\{(?!FactFile)[A-z0-9]+\|[0-9]+\|.*?)(\|.*?(\{\{'s?}})?.*?)?}}", "\\1}}", zt)
+
     if o.current.subset:
         zt = re.sub("({{[^|}]*?\|(set=)?[^|}]*?\|(stext=.*?\|)?)", f"\\1subset={o.current.subset}|", zt)
     while zt.count("|subset=") > 1:
@@ -1661,6 +1766,8 @@ def build_item_text(o: ItemId, d: str, nl: str, sl: str, final_without_extra: li
         z = swap_parameters(f"{zn} {e}").strip()
         if not is_file and o.master.date and o.master.date.startswith("Cancel") and "{{c|cancel" not in z.lower():
             z += " {{C|canceled}}"
+        if o.master.mode == "Minis" and o.master.card:
+            z = re.sub("\|link=.*?(\|.*?)?}}", "\\1}}", re.sub(" ?\{\{[Cc]\|[Rr]eissued.*?}}", "", z))
         z = z.replace("–", "&ndash;").replace("—", "&mdash;").replace("  ", " ").replace("|parent=1", "")
         # z = re.sub("\|stext=(.*?)\|\\1\|", "|stext=\\1|", z)
         final_items.append(o)
@@ -1842,7 +1949,7 @@ def find_matching_audiobook(a: ItemId, existing: list, appearances: FullListData
         return []
 
     z = None
-    if a.master.target in appearances.parantheticals:
+    if a.master.target in appearances.parentheticals:
         z = a.master.target
     elif a.master.target.endswith(")") and not a.master.target.endswith("webcomic)"):
         z = a.master.target.rsplit("(", 1)[0].strip()
@@ -1878,7 +1985,7 @@ def find_matching_parent_audiobook(a: ItemId, existing: list, appearances: FullL
         return []
 
     z = None
-    if a.master.parent in appearances.parantheticals:
+    if a.master.parent in appearances.parentheticals:
         z = a.master.parent
     elif a.master.parent.endswith(")"):
         z = a.master.parent.rsplit("(", 1)[0].strip()

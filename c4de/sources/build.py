@@ -75,7 +75,9 @@ def find_media_categories(page: Page):
     return image_cat, audio_cat
 
 
-def sort_categories(text):
+def sort_categories(text, namespace_id):
+    if namespace_id == 6:
+        return text
     final = []
     categories = []
     related_cats = []
@@ -106,7 +108,8 @@ def sort_categories(text):
 def build_final_text(page: Page, results: PageComponents, disambigs: list, remap: dict, redirects: dict,
                      components: NewComponents, log: bool):
     # now = datetime.now()
-    pieces = [results.before.strip(), ""]
+    pieces = [sort_top_template(l) if "{{top" in l.lower() else l for l in results.before.strip().splitlines()]
+    pieces.append("")
 
     if "{{mediacat" in results.final.lower() or "{{imagecat" in results.final.lower():
         media_cat = None
@@ -159,11 +162,13 @@ def build_final_text(page: Page, results: PageComponents, disambigs: list, remap
 
     for i in components.navs:
         pieces.append(i)
+    if components.navs:
+        pieces.append("")
 
     if results.final:
         pieces.append(build_final(results.final, media_cat, results.real))
 
-    new_txt = sort_categories("\n".join(pieces))
+    new_txt = sort_categories("\n".join(pieces), page.namespace().id)
     if results.canon and "/Legends" in new_txt:
         new_txt = handle_legends_links(new_txt, page.title())
 
@@ -199,6 +204,39 @@ def handle_legends_links(text, title):
             new_lines.append(line)
         body = "\n".join(new_lines)
     return f"{body}{header}{bts}"
+
+
+TOP_ORDER = [
+    ["fa", "pfa", "ffa", "ga", "pga", "fga", "ca", "pca", "fca"],
+    ["fprot", "sprot", "ssprot", "mprot"],
+    ["real", "rwm", "rwp", "rwc", "music"],
+    ["noncanon", "can", "leg", "ncc", "ncl"],
+    ["dotj", "tor", "thr", "fotj", "rote", "aor", "tnr", "rofo", "cnjo"],
+    ["pre", "btr", "old", "imp", "reb", "new", "njo", "lgc", "inf"],
+    ["canon", "legends", "hide"],
+    ["italics", "title", "italics2", "title2", "notitle"],
+    ["notoc", "audio"]
+]
+FULL_ORDER = [tp for pgroup in TOP_ORDER for tp in pgroup]
+
+
+def sort_top_template(t):
+    px = re.search("^(.*?\{\{Top\|)(.*?)(}}.*?)$", t)
+    if px and "|" in px.group(2):
+        new_params = []
+        unknown = []
+        for p in px.group(2).split("|"):
+            v = ""
+            if "=" in p:
+                p, v = p.split("=", 1)
+            if p in FULL_ORDER:
+                new_params.append((p, v))
+            else:
+                unknown.append((p, v))
+        params = sorted(new_params, key=lambda a: FULL_ORDER.index(a[0]))
+        new_text = "|".join(f"{a}={b}" if b else a for a, b in [*params, *unknown])
+        return px.group(1) + new_text + px.group(3)
+    return t
 
 
 def build_final(final, media_cat, real):

@@ -15,6 +15,7 @@ SORT_MODES = {
     "DB": 2,
     "Toys": 3,
     "Cards": 4,
+    "Minis": 4
 }
 
 
@@ -25,7 +26,7 @@ class Item:
     """
     def __init__(self, original: str, mode: str, is_app: bool, *, invalid=False, target: str = None, text: str = None,
                  parent: str = None, template: str = None, url: str = None, issue: str = None, subset: str=None,
-                 card: str = None, special=None, collapsed=False, format_text: str = None, no_issue=False,
+                 card: str = None, special=None, collapsed=False, format_text: str = None, no_issue=False, ref_magazine=False,
                  full_url: str=None, check_both=False, date="", archivedate=""):
         self.master_page = None
         self.is_appearance = is_app
@@ -48,6 +49,7 @@ class Item:
         self.special = self.strip(special)
         self.subset = self.strip(subset)
         self.collapsed = collapsed
+        self.ref_magazine = ref_magazine
         self.ff_data = {}
 
         if self.card:
@@ -101,6 +103,7 @@ class Item:
         self.extra = ''
         self.bold = False
         self.master_text = ''
+        self.others = {}
 
     def copy(self):
         return copy.copy(self)
@@ -113,6 +116,12 @@ class Item:
 
     def is_internal_mode(self):
         return self.mode == "Web" or self.mode == "YT" or self.mode == "Toys" or self.mode == "Cards"
+
+    def is_card_or_mini(self):
+        return self.mode == "Cards" or self.mode == "Minis"
+
+    def is_card_or_toy(self):
+        return self.is_card_or_mini() or self.mode == "Toys"
 
     def __str__(self):
         return f"Item[{self.full_id()}]"
@@ -156,16 +165,17 @@ REF_MAGAZINE_ORDERING = {
     "BuildFalconCite": ["Starship Fact File", "Secrets of Spaceflight", "Guide to the Galaxy", "Build the Falcon"],
     "BuildR2Cite": ["Building the Galaxy", "Droid Directory", "Understanding Robotics", "Build R2-D2"],
     "BuildXWingCite": ["Creating a Starship Fleet", "Starfighter Aces", "Rocket Science", "Build the X-Wing"],
-    "BustCollectionCite": ["Star Wars Universe", "Behind the Cameras"],
+    "BustCollectionCite": ["Character", "Star Wars Universe", "Behind the Cameras"],
     "FalconCite": ["Starship Fact File", "Secrets of Spaceflight", "Guide to the Galaxy", "Build the Falcon"],
     "HelmetCollectionCite": ["Databank A-Z", "Helmets", "Weapons & Uniforms", "Highlights of the Saga"],
     "ShipsandVehiclesCite": ["History of the Ship", "Pilots and Crew Members", "Starships and Vehicles"],
+    "DarthVaderCite": ["The Dark Side", "Villains of the Galaxy"],
 }
 
 
 class ItemId:
     def __init__(self, current: Item, master: Item, use_original_text: bool,
-                 from_other_data=False, wrong_continuity=False, by_parent=False, ref_magazine=False):
+                 from_other_data=False, wrong_continuity=False, by_parent=False):
         self.current = current
         self.master = master
         self.use_original_text = use_original_text or current.old_version
@@ -175,7 +185,6 @@ class ItemId:
         self.from_other_data = from_other_data
         self.wrong_continuity = wrong_continuity
         self.by_parent = by_parent
-        self.ref_magazine = ref_magazine
 
         self.replace_references = master.original and "]]'' ([[" not in master.original
 
@@ -187,7 +196,7 @@ class ItemId:
         return self.master.date
 
     def sort_text(self):
-        if self.ref_magazine or self.current.template in REF_MAGAZINE_ORDERING:
+        if self.current.ref_magazine or self.current.template in REF_MAGAZINE_ORDERING:
             z = REF_MAGAZINE_ORDERING.get(self.current.template) or []
             x = z.index(self.current.target) if self.current.target in z else 9
             return f"{self.current.index} {x} {self.current.original}"
@@ -206,7 +215,7 @@ class FullListData:
         self.unique = unique
         self.full = full
         self.target = target
-        self.parantheticals = parantheticals
+        self.parentheticals = parantheticals
         self.reprints = reprints
         self.both_continuities = both_continuities
         self.no_canon_index = no_canon_index

@@ -83,7 +83,7 @@ def analyze(*args):
     message = "Source Engine analysis of Appearances, Sources and references"
     since = Timestamp(2024, 10, 19)
     for page in gen:
-        if page.title().startswith("Map:"):
+        if page.title().startswith("Map:") or page.title() == "Forum:WPWeb:Template icons standardization":
             continue
 
         i += 1
@@ -165,8 +165,10 @@ def analyze(*args):
             if not override and match and always_comment:
                 page.put(text, message, botflag=match or bf)
                 continue
-            if not override:
-                override = "RelatedCategories" in text
+            # if not override:
+            #     override = "RelatedCategories" in text and "RelatedCategories" not in old_text
+            # if override:
+            #     continue
 
             # showDiff(old_text, text, context=1)
             showDiff(re.sub("<!--.*?-->", "", z2), re.sub("<!--.*?-->", "", z1), context=1)

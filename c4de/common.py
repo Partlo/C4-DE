@@ -145,9 +145,11 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
                     text = re.sub("(\{\{(?!WP)[A-Za-z0-9]+\|)" + x + "}}", "\\1    " + t + "}}", text).replace("    ", "")
                 except Exception as e:
                     print(e, x, t)
-            if f"set={r} Expansion Pack" not in text:
-                text = text.replace(f"set={r}", f"set={t}")
-            text = text.replace(f"book={r}", f"book={t}")
+            text = text.replace(f"set={r}|", f"set={t}|").replace(f"set={r}}}", f"set={t}}}")
+            if t.startswith(f"{r} ("):
+                text = re.sub("book=" + x + "([|}])", f"book={r}\\1", text)
+            else:
+                text = text.replace(f"book={r}", f"book={t}")
             text = text.replace(f"story={r}|", f"story={t}|")
             text = text.replace(f"story={r}" + "}", f"story={t}|" + "}")
     return text
@@ -179,6 +181,7 @@ def do_final_replacements(new_txt, replace):
         new_txt2 = new_txt2.replace(" (SWGTCG)|scenario=", "|scenario=")
         new_txt2 = new_txt2.replace("[[Ochi]] of Bestoon", "[[Ochi|Ochi of Bestoon]]")
         new_txt2 = new_txt2.replace("[[Battle station/Legends|battlestation", "[[Battle station/Legends|battle station")
+        new_txt2 = re.sub("(\{\{SWMiniCite\|set=.*?) \(Star Wars Miniatures\)", "\\1", new_txt2)
         new_txt2 = re.sub("\*.*?\{\{FactFile\|1\|Gala.*? [Mm]ap.*?}}", "*<!-- 2001-12-27 -->{{FactFile|1|[[:File:Galaxymap3.jpg|Galaxy Map poster]]}}", new_txt2)
         new_txt2 = re.sub("(\{\{FFCite\|.*?}})<.*?>", "\\1", new_txt2)
         if "'''s " in new_txt2:

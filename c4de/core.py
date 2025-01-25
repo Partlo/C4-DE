@@ -40,7 +40,7 @@ from c4de.sources.build import analyze_target_page
 from c4de.sources.domain import FullListData
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, build_template_types
 from c4de.sources.index import create_index
-from c4de.sources.infoboxer import list_all_infoboxes, InfoboxInfo, reload_infoboxes, load_infoboxes
+from c4de.sources.infoboxer import reload_infoboxes, load_infoboxes
 from c4de.sources.updates import get_future_products_list, handle_results, search_for_missing
 
 import logging
@@ -1735,6 +1735,8 @@ class C4DE_Bot(commands.Bot):
             s = (m['site'].split('.com:')[0] + '.com') if '.com:' in m['site'] else m['site']
             t = f"New Article on {s}"
         f = m["title"].replace("''", "*").replace("’", "'")
+        if youtube:
+            f = f.replace("=", "{{=}}")
         f = re.sub("^(''[^'\n]+'')'s ", "\\1{{'s}} ", f)
         f = re.sub("( ''[^'\n]+'')'s ", "\\1{{'s}} ", f)
         msg = "{0} **{1}:**    {2}\n- <{3}>".format(self.emoji_by_name(site_data["emoji"]), t, f, m["url"])

@@ -78,7 +78,7 @@ def build_fields_for_infobox(page) -> InfoboxInfo:
     theme = re.search("theme-source=\"(.*?)\"", text)
     if theme:
         fields.append(theme.group(1))
-    o = re.search("optional=(.*?)\|", text)
+    o = re.search("optional=(.*?)[|}]", text)
     if o:
         optional += re.split('[,]', o.group(1))
     combo, groups = {}, {}
@@ -89,9 +89,10 @@ def build_fields_for_infobox(page) -> InfoboxInfo:
                 combo[y] = x
                 groups[x].append(y)
     for r in re.findall("<(data|image|title) source=\"(.*?)\" ?/?>", text):
-        print(r, fields)
         if r[0] == "image":
             fields.append("image")
+            if r[1] == "imagefallback":
+                fields += ["option1", "image2", "option2", "image3", "option3"]
         else:
             if r[1].startswith('b') and re.match("b[0-9]+", r[1]):
                 fields.append(r[1].replace("b", "battles"))
@@ -189,7 +190,7 @@ def parse_infobox(text: str, all_infoboxes: dict):
                     pre.append(m.group(4))
                 else:
                     pre.append(line)
-            elif "[[File:" in line and not data.get("image"):
+            elif "[[File:" in line and not data.get("image") and "image2" not in line and "image3" not in line:
                 data["image"] = line
             elif line.startswith("<!--") or "__NOTOC__" in line:
                 pre.append(line)
@@ -252,6 +253,7 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes):
     for f in infobox.params:
         i += 1
         v = data.get(f)
+        print(f, v, f in infobox.optional, infobox.optional)
         if not v or v == "new":
             if f == "not_appearance":
                 continue

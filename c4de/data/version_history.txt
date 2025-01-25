@@ -184,3 +184,8 @@
 **New commands and protocols, including:
 ***Automatic handling of double redirects daily, just before spoiler template handling
 ***Automatic maintaining of [[Wookieepedia:WookieeProject Images/Unused images]]
+*'''4.2.0''': January 24, 2025
+**Variety of Source Engine fixes
+**Fixed bugs in infobox processing
+**Support for Miniatures processing
+**Support for Template:SourceContents

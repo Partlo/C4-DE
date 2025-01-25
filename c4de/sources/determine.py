@@ -6,11 +6,6 @@ from pywikibot import Page
 from c4de.sources.domain import Item, ItemId
 
 
-SUBPAGES = [
-    "Canon/General", "Legends/General/1977-2000", "Legends/General/2000s", "Legends/General/2010s", "Canon/Toys",
-    "Legends/Toys", "CardSets", "Soundtracks"
-]
-
 IGNORE_TEMPLATES = ["BookCite", "=", "Subtitles", "PAGENAME"]
 
 
@@ -36,12 +31,13 @@ COLLAPSED_MAGAZINES = {
 }
 
 REFERENCE_MAGAZINES = {
-    "BuildFalconCite": "Star Wars: Build the Millennium Falcon",
-    "BuildR2Cite": "Star Wars: Build Your Own R2-D2",
-    "BuildXWingCite": "Star Wars: Build Your Own X-Wing",
-    "BustCollectionCite": "Star Wars Bust Collection",
-    "HelmetCollectionCite": "Star Wars Helmet Collection",
-    "ShipsandVehiclesCite": "Star Wars Starships & Vehicles"
+    "BuildFalconCite": "Star Wars: Build the Millennium Falcon <x>",
+    "BuildR2Cite": "Star Wars: Build Your Own R2-D2 <x>",
+    "BuildXWingCite": "Star Wars: Build Your Own X-Wing <x>",
+    "BustCollectionCite": "Star Wars Bust Collection <x>",
+    "DarthVaderCite": "Star Wars: Darth Vader <x> (magazine)",
+    "HelmetCollectionCite": "Star Wars Helmet Collection <x>",
+    "ShipsandVehiclesCite": "Star Wars Starships & Vehicles <x>"
 }
 
 TEMPLATE_MAPPING = {
@@ -119,7 +115,8 @@ PREFIXES = {
     "JTC": "Episode <x> (Star Wars: Jedi Temple Challenge)",
     "CW": "Chapter <x> (Star Wars: Clone Wars)",
     "VaderImmortal": "Vader Immortal – Episode <x>",
-    "DisneyGallery": "<x> (Disney Gallery: The Mandalorian)"
+    "DisneyGallery": "<x> (Disney Gallery: The Mandalorian)",
+    "GroguCutest": "Episode <x> (Grogu Cutest In The Galaxy)"
 }
 
 
@@ -286,12 +283,14 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
 
     for i, k in REFERENCE_MAGAZINES.items():
         if i.split('\\', 1)[0].lower() in s.lower():
-            m = re.search("\{\{" + i + "\|([0-9]+)(\|(multiple=)?(.*?)(\|(.*?))?(\|(.*?))?)}}", s)
+            m = re.search("\{\{" + i + "\|([0-9]+)(\|(.*?))?(\|(.*?))?}}", s)
             mode = types.get(i, "General")
-            if m and m.group(4):
-                return Item(z, mode, a, parent=f"{k} {m.group(1)}", target=m.group(4), template=i, issue=m.group(1), text=m.group(6) if m.group(4) == 'Star Wars Universe' else None)
+            if m and m.group(3) and m.group(4) and "|parent=" in m.group(4):
+                return Item(z, mode, a, target=k.replace("<x>", m.group(1)), template=i, issue=m.group(1), ref_magazine=True)
+            elif m and m.group(3):
+                return Item(z, mode, a, parent=k.replace("<x>", m.group(1)), template=i, issue=m.group(1), target=m.group(3), text=m.group(5), ref_magazine=True)
             elif m:
-                return Item(z, mode, a, parent=f"{k} {m.group(1)}", template=i, issue=m.group(1), text=m.group(2), collapsed=True)
+                return Item(z, mode, a, parent=k.replace("<x>", m.group(1)), template=i, issue=m.group(1), text=m.group(2), collapsed=True, ref_magazine=True)
 
     m = re.search('\{\{([^|\[}\n]+)[|}]', s)
     template = m.group(1) if m else ''
@@ -307,12 +306,13 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     elif template in IGNORE_TEMPLATES:
         print(f"Skipping {mode} template: {template}: {z}")
         return None
-    elif template == "GoC" or template == "GalacticPals":
-        m = re.search("\{\{(GoC|GalacticPals)\|(.*?)}}", s)
-        if m and m.group(1) in ["Rancor", "Tauntaun", "Porgs"]:
-            return Item(z, mode, a, target=f"{m.group(1)} ({'Galactic Pals' if template == 'GalacticPals' else 'Galaxy of Creatures'})",
-                        template=template)
-        return Item(z, mode, a, target=m.group(1), template=template)
+    # elif template == "GoC" or template == "GalacticPals":
+    #     m = re.search("\{\{(GoC|GalacticPals)\|(.*?)}}", s)
+    #     if m:
+    #         y = "episode"
+    #         if m.group(2) in ["Rancor", "Tauntaun", "Porgs"]:
+    #             y = 'Galactic Pals' if template == 'GalacticPals' else 'Galaxy of Creatures'
+    #         return Item(z, mode, a, target=f"{m.group(2)} ({y})", template=template)
 
     # # # Template-specific logic
     # IDWAdventures annual= parameter
@@ -434,7 +434,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
             m = re.search("\{\{SimpleToyCite\|.*?(item|nolink)=(?P<i>.*?)(\|.*?)?\|parent=(?P<p>.*?)(\|.*?)?}}", s)
         if m:
             return Item(z, mode, a, target=None, template=template, parent=m.groupdict()['p'], card=m.groupdict()['i'])
-    elif mode == "Cards" or mode == "Toys" or "|card" in s:
+    elif mode == "Cards" or mode == "Minis" or mode == "Toys" or "|card" in s:
         x = parse_card_line(s, z, template, mode, a)
         if x:
             return x
@@ -518,10 +518,10 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
 
     # Web templates without named parameters
     if mode == "Web" or mode == "External" or mode == "Commercial":
-        m = re.search("{{[^|\[}\n]+\|(subdomain=.*?\|)?(.*?)\|(.*?)(\|.*?)?}}", s)
+        m = re.search("{{[^|\[}\n]+\|(date=.*?\|)?(subdomain=.*?\|)?(.*?)\|(.*?)(\|.*?)?}}", s)
         if m:
             y = re.search("\|int=(.*?)[|}]", s)
-            return Item(z, mode, a, template=template, url=m.group(2), text=m.group(3), target=y.group(1) if y else None)
+            return Item(z, mode, a, template=template, url=m.group(3), text=m.group(4), target=y.group(1) if y else None)
 
     m = re.search("['\"]*\[\[(.*?)(\|.*?)?]]['\"]* ?[-—] ?['\"]*\[\[(.*?) ?([0-9]*?)(\|.*?)?]]", s)
     if m and m.group(4):
@@ -581,8 +581,11 @@ def parse_card_line(s: str, z: str, template: str, mode: str, a: bool):
     m = re.search("{[^|\[}\n]+\|(set=)?(?P<set>.*?)[|}]", s)
     card_set = m.group(2) if m else None
 
-    if template in GAME_TEMPLATES and "cardname=" not in s and "set=" not in s:
+    if template in GAME_TEMPLATES and "cardname=" not in s and "mission=" not in s and "set=" not in s:
         return Item(z, mode, a, target=GAME_TEMPLATES[template], template=None)
+    elif template in GAME_TEMPLATES and "cardname=" in s and "set=" not in s:
+        c = re.search("\|cardname=(.*?)(\|.*?)?}}", s)
+        return Item(z, mode, a, target=None, parent=GAME_TEMPLATES[template], template=template, card=c.group(1))
 
     if template == "SWCT" and "cardname=" not in s:
         m = re.search("{+[^|\[}\n]+\|(set=)?(.*?)(\|.*?)?}}", s)
@@ -600,15 +603,14 @@ def parse_card_line(s: str, z: str, template: str, mode: str, a: bool):
         card = card_set.replace("cardname=", "")
         card_set = None
     else:
-        m = re.search("{[^|\[}\n]+\|.*?(cardname|pack|card|scenario)=(?P<card>.*?)?[|}]", s)
+        m = re.search("{[^|\[}\n]+\|.*?(cardname|pack|card|mission|scenario)=(?P<card>.*?)?[|}]", s)
         card = m.group(2) if m else None
     u = re.search("(url|link)=(.*?)[|}]", s)
     t = re.search("{[^|\[}\n]+\|.*?text=(?P<text>.*?)[|}]", s)
+    sh = re.search("\|ship=(.*?)[|}]", s)
+    ship = sh.group(1) if sh else None
     ss = re.search("subset=(.*?)(\|.*?)?}}", s)
     subset = ss.group(1) if ss else None
-
-    if template == "SWCT":
-        print(card_set, s)
 
     if not t:
         t = re.search("{[^|\[}\n]+\|.*?\|(?P<text>.*?)(\|.*?)?}}", s)
@@ -619,10 +621,10 @@ def parse_card_line(s: str, z: str, template: str, mode: str, a: bool):
                     url=u.group(2) if u else None, text=t.group('text') if t else None)
     elif card:
         return Item(z, mode, a, target=None, template=template, parent=card_set, card=card, subset=subset,
-                    url=u.group(2) if u else None, text=t.group('text') if t else None)
+                    url=u.group(2) if u else None, text=t.group('text') if t else None, special=ship)
     elif card_set:
         return Item(z, mode, a, target=card_set, template=template, parent=None, subset=subset,
-                    text=t.group('text') if t else None)
+                    text=t.group('text') if t else None, special=ship)
     else:
         print(s)
     return None
@@ -652,16 +654,16 @@ def do_card_templates_match(set_name, o: Item, x: Item):
 
 
 def check_targets(o: Item, target, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]],
-                  use_original_text=False, ref_magazine=False, by_parent=False):
+                  use_original_text=False, by_parent=False):
     if by_target and by_target.get(target):
-        return ItemId(o, by_target[target][0], use_original_text, False, ref_magazine=ref_magazine, by_parent=by_parent)
+        return ItemId(o, by_target[target][0], use_original_text, False, by_parent=by_parent)
     elif other_targets and other_targets.get(target):
-        return ItemId(o, other_targets[target][0], use_original_text, True, ref_magazine=ref_magazine, by_parent=by_parent)
+        return ItemId(o, other_targets[target][0], use_original_text, True, by_parent=by_parent)
     return None
 
 
-def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[str, List[Item]], other_data: Dict[str, Item],
-                          other_targets: Dict[str, List[Item]], remap: dict, canon: bool, log: bool):
+def determine_id_for_item(o: Item, page: Page, data: Dict[str, Item], by_target: Dict[str, List[Item]], other_data: Dict[str, Item],
+                          other_targets: Dict[str, List[Item]], remap: dict, canon: bool, log: bool, ref=False):
     """ :rtype: ItemId """
 
     # Remapping common mistakes in naming
@@ -669,8 +671,10 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
         m = check_targets(o, remap[o.target], by_target, other_targets, use_original_text=False)
         if m:
             return m
+    if o.template == "SWR" and o.card:
+        return ItemId(o, o, True, False)
 
-    if o.unique_id() in data or o.unique_id() in other_data:
+    if (o.unique_id() in data or o.unique_id() in other_data) and not o.card:
         m = data.get(o.unique_id(), other_data.get(o.unique_id()))
         if m.template == "SWE" and not canon and not o.override:
             o.override_date = "2014-04-25"
@@ -683,8 +687,8 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
         return x
     elif o.template == "InsiderCite" and (o.target == "The Last Page" or o.target == "From the Editor's Desk"):
         t = f"General|None|Star Wars Insider {o.issue}|None|None|None|None|None"
-        if t in data:
-            return ItemId(o, data[t], True, False)
+        if t in data or t in other_data:
+            return ItemId(o, data[t] if t in data else other_data[t], True, False)
 
     if o.mode == "External" or o.mode == "Basic":
         if o.url:
@@ -704,8 +708,8 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
             return m
 
     if o.check_both:
-        x = match_parent_target(o, o.parent, o.target, by_target, other_targets, site)
-        y = match_parent_target(o, o.target, o.parent, by_target, other_targets, site, False)
+        x = match_parent_target(o, o.parent, o.target, by_target, other_targets, page.site)
+        y = match_parent_target(o, o.target, o.parent, by_target, other_targets, page.site, False)
         if x and y:
             if x.master.parent and y.master.target and x.master.parent == y.master.target:
                 return x
@@ -717,82 +721,122 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
             return x
 
     # Template-specific matching
-    if o.template == "SWCT" and o.card:
-        convert, matches = [], []
-        for s, x in data.items():
-            if x.template == "SWCT" and x.target and (x.target == o.parent or x.target in o.card):
-                (convert if f"- {x.card}" in o.card else matches).append(x)
-        if convert:
-            x = sorted(convert, key=lambda a: len(a.card))[-1]
-            y = o.card.split(f"- {x.card}", 1)[0].strip()
-            o.original = f"{{{{SWCT|set={x.card}|cardname={y}}}}}"
-            return ItemId(o, x, True, False)
-        if matches:
-            x = sorted(matches, key=lambda a: len(a.card))[-1]
-            return ItemId(o, x, True, False)
-        o.unknown = True
-        return ItemId(o, o, True, False)
-    elif o.template == "LEGOCite" and o.special:
-        alt = []
-        for s, x in data.items():
-            if x.template == "LEGOCite" and x.special == o.special:
-                return ItemId(o, x, False, False)
-            elif x.template == "LEGOCite" and x.card and o.card and \
-                    (x.card.lower() == o.card.lower() or x.card.lower().replace('starfighter', 'fighter') == o.card.lower().replace('starfighter', 'fighter')):
-                alt.append(x)
-        if alt:
-            return ItemId(o, alt[-1], False, False)
-    elif o.template == "CalendarCite":
-        for s, x in data.items():
-            if x.target == o.target:
+    for d in [data, other_data]:
+        if o.template == "SWCT" and o.card:
+            convert, matches = [], []
+            for s, x in d.items():
+                if x.template == "SWCT" and x.target and (x.target == o.parent or x.target in o.card):
+                    (convert if f"- {x.card}" in o.card else matches).append(x)
+            if convert:
+                x = sorted(convert, key=lambda a: len(a.card))[-1]
+                y = o.card.split(f"- {x.card}", 1)[0].strip()
+                o.original = f"{{{{SWCT|set={x.card}|cardname={y}}}}}"
                 return ItemId(o, x, True, False)
+            if matches:
+                x = sorted(matches, key=lambda a: len(a.card))[-1]
+                return ItemId(o, x, True, False)
+            o.unknown = True
+            return ItemId(o, o, True, False)
+        elif o.template == "SWR" and o.card:
+            return ItemId(o, o, True, False)
+        elif o.template == "LEGOCite" and o.special:
+            alt = []
+            for s, x in d.items():
+                if x.template == "LEGOCite" and x.special == o.special:
+                    return ItemId(o, x, False, False)
+                elif x.template == "LEGOCite" and x.card and o.card and \
+                        (x.card.lower() == o.card.lower() or x.card.lower().replace('starfighter', 'fighter') == o.card.lower().replace('starfighter', 'fighter')):
+                    alt.append(x)
+            if alt:
+                return ItemId(o, alt[-1], False, False)
+        elif o.template == "CalendarCite":
+            for s, x in d.items():
+                if x.target == o.target:
+                    return ItemId(o, x, True, False)
 
-    if (o.mode == "Cards" or o.mode == "Toys") and (o.card or o.special):
+    is_tracked_mini = o.mode == "Minis" and o.template not in ["Shatterpoint"]
+    if o.mode == "Minis":
         set_name = o.parent or o.target
-        if o.url:
+        m = match_miniatures(o, set_name, data, other_data, canon, ref, is_tracked_mini)
+        # if o.template == "SWMiniCite":
+        #     for t in re.findall("'''(.*?)s?'''", page.get()):
+        #         m2 = match_miniatures(o, set_name, data, other_data, canon, ref, is_tracked_mini, t)
+        #         if m and m2:
+        #             m.current.others[m2.master.original] = m2.master
+        #             for ik, iv in m2.current.others.items():
+        #                 print(ik, ik in m.current.others, iv)
+        #                 if ik not in m.current.others:
+        #                     m.current.others[ik] = iv
+        #         elif m2:
+        #             break
+        if m:
+            return m
+
+    if o.is_card_or_toy() and (o.card or o.special):
+        set_name = o.parent or o.target
+        if o.url and o.mode != "Minis":
             m = match_by_url(o, o.url, data, False)
+            if not m:
+                m = match_by_url(o, o.url, other_data, False)
             if m:
                 return m
 
-        exact = []
-        start = []
+        exact, start, other_set = [], [], []
         if set_name is not None:
-            for s, x in data.items():
-                if do_card_templates_match(set_name, o, x):
-                    if any(t and (t == set_name or t.replace(" - ", " ") == set_name.replace(" - ", " ")) for t in (x.target, x.parent)):
-                        if (x.card and x.card == o.card) or (x.text and x.text == o.text):
-                            return ItemId(o, x, False, False)
-                        else:
-                            exact.append(x)
-                    if any(t and (t.startswith(set_name) or set_name in t) for t in (x.target, x.parent)):
-                        if (x.card and x.card == o.card) or (x.text and x.text == o.text):
-                            return ItemId(o, x, False, False)
-                        else:
-                            start.append(x)
-        if exact or start:
-            if o.mode == "Toys" and o.template != "SWMiniCite":
-                print(f"Unknown {o.template} set: {o.card}/{o.special}")
+            for other, d in {False: data, True: other_data}.items():
+                for s, x in d.items():
+                    if do_card_templates_match(set_name, o, x) and x.canon == canon:
+                        check = True
+                        if any(t and (t == set_name or t.replace(" - ", " ") == set_name.replace(" - ", " ")) for t in (x.target, x.parent)):
+                            check = False
+                            if (x.card and x.card == o.card) or (x.text and x.text == o.text):
+                                return ItemId(o, x, False, other)
+                            elif o.mode == "Minis" and x.card and o.card and flatten_card(x.card) == flatten_card(o.card, True):
+                                return ItemId(o, x, False, other)
+                            elif o.mode == "Minis" and x.card and x.url and o.url and x.url == o.url:
+                                return ItemId(o, x, False, other)
+                            elif o.mode != "Minis":
+                                exact.append(x)
+                        if any(t and (t.startswith(set_name) or set_name in t) for t in (x.target, x.parent)):
+                            check = False
+                            if (x.card and x.card == o.card) or (x.text and x.text == o.text):
+                                return ItemId(o, x, False, other)
+                            elif o.mode == "Minis" and x.card and o.card and flatten_card(x.card) == flatten_card(o.card, True):
+                                return ItemId(o, x, False, other)
+                            elif o.mode == "Minis" and x.card and x.url and o.url and x.url == o.url:
+                                return ItemId(o, x, False, other)
+                            elif o.mode != "Minis":
+                                start.append(x)
+                        if o.mode == "Minis" and check and "bypass" not in o.original:
+                            if (x.card and x.card == o.card) or (x.text and x.text == o.text):
+                                return ItemId(o, x, False, other)
+                            elif x.card and o.card and flatten_card(x.card) == flatten_card(o.card, True):
+                                return ItemId(o, x, False, other)
+                            elif x.card and x.url and o.url and x.url == o.url:
+                                return ItemId(o, x, False, other)
+        if is_tracked_mini and exact:
+            return ItemId(o, exact[0], True, False)
+        elif is_tracked_mini and other_set:
+            print(f"Converting {o.parent} card {o.card} to correct set {other_set[0].parent}")
+            xz = [i for i in other_set if i.canon == canon]
+            return ItemId(o, xz[0] if xz else other_set[0], False, False)
+        elif exact or start:
+            if o.mode == "Toys" or o.mode == "Minis":
+                print(f"Unknown {o.template} set: {o.card}/{o.special}/{o.parent}")
                 o.unknown = True
             return ItemId(o, exact[0] if exact else start[0], True, False)
 
-    if o.mode == "Cards" or o.mode == "Toys":
+    if o.is_card_or_toy():
         set_name = o.parent or o.target
         if o.card or o.special:
-            if o.mode == "Toys" and o.template != "SWMiniCite":
+            if o.mode == "Toys":
                 print(f"{o.mode} {o.template} with {o.card}/{o.special} card/special fell through specific logic")
                 o.unknown = True
         m = match_by_set_name(o, o.mode, o.template, set_name, data, other_data)
+        if not m:
+            m = match_by_set_name(o, o.mode, None, set_name, data, other_data)
         if m:
             return m
-
-        m = match_by_set_name(o, o.mode, None, set_name, data, other_data)
-        if m:
-            return m
-
-        if o.template == "SWMiniCite":
-            m = match_by_set_name(o, "General", "None", set_name, data, other_data)
-            if m:
-                return m
 
     # Find a match by URL
     if o.url and 'starwars/article/dodcampaign' not in o.url:
@@ -801,7 +845,7 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
             return m
 
     # if Toy/Card isn't matched by the URL, then use the original
-    if o.mode == "Cards" and (o.card or o.special):
+    if o.is_card_or_mini() and (o.card or o.special):
         return ItemId(o, o, True, False)
     elif o.mode == "Toys" and (o.card or o.special):
         o.unknown = True
@@ -811,14 +855,14 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
         is_ref = o.template in REFERENCE_MAGAZINES
         t = f"{o.mode}|None|{o.target}|None|None|None|None|None"
         if t in data:
-            return ItemId(o, data[t], o.collapsed, False, ref_magazine=is_ref)
+            return ItemId(o, data[t], o.collapsed, False)
         elif o.parent and "Special Edition" in o.parent and by_target.get(o.parent):
-            return ItemId(o, by_target[o.parent][0], True, False, ref_magazine=is_ref)
-        x = match_issue_target(o, by_target, other_targets, True, is_ref)
+            return ItemId(o, by_target[o.parent][0], True, False)
+        x = match_issue_target(o, by_target, other_targets, True)
         if not x and o.target and not o.followed_redirect:
-            if follow_redirect(o, site, True):
+            if follow_redirect(o, page.site, True):
                 o.followed_redirect = True
-                x = match_issue_target(o, by_target, other_targets, False, is_ref)
+                x = match_issue_target(o, by_target, other_targets, False)
         if not x or (x and x.master.issue != o.issue and o.parent in by_target):
             targets = [(t, False) for t in get_possible_targets(o, by_target)]
             targets += [(t, True) for t in get_possible_targets(o, other_targets)]
@@ -829,22 +873,22 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
             numbers = [(t, c) for (t, c) in targets if t.issue and t.issue.isnumeric()]
 
             if len(exact) == 1:
-                x = ItemId(o, exact[0][0], False, exact[0][1], False, ref_magazine=is_ref)
+                x = ItemId(o, exact[0][0], False, exact[0][1], False)
             elif len(targets) == 1:
-                x = ItemId(o, targets[0][0], False, targets[0][1], False, ref_magazine=is_ref)
+                x = ItemId(o, targets[0][0], False, targets[0][1], False)
             elif len(magazine) == 1:
-                x = ItemId(o, magazine[0][0], False, magazine[0][1], False, ref_magazine=is_ref)
+                x = ItemId(o, magazine[0][0], False, magazine[0][1], False)
             elif o.issue and o.issue.isnumeric() and len(numbers) == 1:
-                x = ItemId(o, numbers[0][0], False, numbers[0][1], False, ref_magazine=is_ref)
+                x = ItemId(o, numbers[0][0], False, numbers[0][1], False)
             elif by_target.get(o.parent):
                 parent = by_target[o.parent][0]
-                x = ItemId(o, parent, True, False, by_parent=True, ref_magazine=is_ref)
+                x = ItemId(o, parent, True, False, by_parent=True)
         if x:
             return x
         if o.target == o.parent and by_target.get(o.parent) and o.text and o.text.replace("'", "") != o.target:
-            return ItemId(o, by_target[o.parent][0], True, False, by_parent=True, ref_magazine=is_ref)
+            return ItemId(o, by_target[o.parent][0], True, False, by_parent=True)
 
-    x = match_parent_target(o, o.parent, o.target, by_target, other_targets, site)
+    x = match_parent_target(o, o.parent, o.target, by_target, other_targets, page.site)
     if x:
         if o.target in ["The Last Page", "From the Editor's Desk"]:
             x.by_parent = False
@@ -862,7 +906,7 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
 
     x = match_target(o, by_target, other_targets, log)
     if not x and o.target and not o.followed_redirect:
-        if follow_redirect(o, site, log):
+        if follow_redirect(o, page.site, log):
             o.followed_redirect = True
             x = match_target(o, by_target, other_targets, log)
 
@@ -881,6 +925,64 @@ def determine_id_for_item(o: Item, site, data: Dict[str, Item], by_target: Dict[
                     elif "featurette=" in o.original and "featurette=<FEATURETTE>" in v.original:
                         return ItemId(o, v, True, is_other)
     return x
+
+
+def flatten_card(s, x=False):
+    return (s.split("&mdash;")[0].split("—")[0] if x else s).replace("''", "").replace('"', "").replace("The ", "").replace("0", "O").replace("1", "I").lower()
+
+
+def match_individual_miniature(o: Item, oc: str, x: Item):
+    close = []
+    if x.url and o.url and x.url == o.url:
+        return True, []
+    elif x.card and oc:
+        if flatten_card(x.card) == oc:
+            if flatten_card(x.special or '') == flatten_card(o.special or ''):
+                return True, []
+            elif (x.special and not o.special) or (o.special and not x.special):
+                close.append(x)
+        elif o.template == "SWMiniCite" and oc in flatten(x.card):
+            return True, []
+    return False, close
+
+
+def match_miniatures(o: Item, set_name, data, other_data, canon, ref, is_tracked_mini):
+    oc = flatten_card(o.card or '', True)
+    exact, other_set, close = [], [], []
+    z = {True: other_data, False: data} if ref else {False: data, True: other_data}
+    for other, d in z.items():
+        for s, x in d.items():
+            if do_card_templates_match(set_name, o, x) and x.card:
+                # if x.canon != canon:
+                #     continue
+                for t in [x.target, x.parent]:
+                    if t and (t == set_name or t.replace(" - ", " ") == set_name.replace(" - ", " ") or t.startswith(set_name)):
+                        m, c = match_individual_miniature(o, oc, x)
+                        exact += c
+                        if m:
+                            return ItemId(o, x, False, other)
+                if "bypass" not in o.original:
+                    m, c = match_individual_miniature(o, oc, x)
+                    close += c
+                    if m:
+                        other_set.append(x)
+
+    if exact:
+        if not o.card:
+            o.card = exact[0].card
+        return ItemId(o, exact[0], False, False)
+    elif other_set and o.template != "SWMiniCite":
+        print(f"Converting {o.parent} card {o.card} to correct set {other_set[0].parent}")
+        if not o.card:
+            o.card = other_set[0].card
+        return ItemId(o, other_set[0], False, False)
+    elif close and o.template != "SWMiniCite":
+        print(f"Unknown {o.template} set: {o.card}/{o.special}/{o.parent}")
+        o.unknown = True
+        return ItemId(o, close[0], True, False)
+    if is_tracked_mini:
+        print(f"{'Ref: ' if ref else ''}{o.template} [{set_name}] [{oc}] [{o.special}] [{o.url}] (canon={canon}) fell through miniatures logic: {o.original}")
+    return None
 
 
 def match_fact_file(o: Item, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]]):
@@ -982,7 +1084,7 @@ def find_matching_set(mode, template, set_name, data: dict):
 
     partial = []
     for x, y in data.items():
-        if (y.template == template or not template) and y.target:
+        if (y.template == template or not template) and y.target and set_name:
             if y.target == set_name:
                 return y
             elif y.target.startswith(set_name):
@@ -1001,37 +1103,48 @@ def find_matching_issue(items, issue, text):
     return items[0]
 
 
-def match_issue_target(o: Item, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]], use_original, is_ref):
+def match_issue_target(o: Item, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]], use_original):
     # if o.target and by_target and o.target in by_target:
-    #     return ItemId(o, find_matching_issue(by_target[o.target], o.issue, o.original), use_original, False, ref_magazine=is_ref)
+    #     return ItemId(o, find_matching_issue(by_target[o.target], o.issue, o.original), use_original, False)
     # elif o.target and other_targets and o.target in other_targets:
-    #     return ItemId(o, find_matching_issue(other_targets[o.target], o.issue, o.original), use_original, False, ref_magazine=is_ref)
-    match = match_target_issue_name(o, o.target, by_target, other_targets, use_original, is_ref)
+    #     return ItemId(o, find_matching_issue(other_targets[o.target], o.issue, o.original), use_original, False)
+    match = match_target_issue_name(o, o.target, by_target, other_targets, use_original)
     if not match and o.target and "&hellip;" in o.target and "dash;" in o.target:
-        match = match_target_issue_name(o, o.target.replace("&hellip;", "...").replace("&ndash;", '–').replace('&mdash;', '—'), by_target, other_targets, use_original, is_ref)
+        match = match_target_issue_name(o, o.target.replace("&hellip;", "...").replace("&ndash;", '–').replace('&mdash;', '—'), by_target, other_targets, use_original)
     if not match and o.target and "&hellip;" in o.target:
-        match = match_target_issue_name(o, o.target.replace("&hellip;", "..."), by_target, other_targets, use_original, is_ref)
+        match = match_target_issue_name(o, o.target.replace("&hellip;", "..."), by_target, other_targets, use_original)
     if not match and o.target and "dash;" in o.target:
-        match = match_target_issue_name(o, o.target.replace("&ndash;", '–').replace('&mdash;', '—'), by_target, other_targets, use_original, is_ref)
+        match = match_target_issue_name(o, o.target.replace("&ndash;", '–').replace('&mdash;', '—'), by_target, other_targets, use_original)
     # if not match and o.template == "InsiderCite":
-    #     match = match_target_issue_name(o, f"{o.target} (Star Wars Insider)", by_target, other_targets, use_original, is_ref)
+    #     match = match_target_issue_name(o, f"{o.target} (Star Wars Insider)", by_target, other_targets, use_original)
     # if not match and o.template:
-    #     match = match_target_issue_name(o, f"{o.target} (article)", by_target, other_targets, use_original, is_ref)
+    #     match = match_target_issue_name(o, f"{o.target} (article)", by_target, other_targets, use_original)
     if match:
         return match
 
     if o.target and o.parent and o.target.startswith(f"{o.parent}#"):
-        m = check_targets(o, o.parent, by_target, other_targets, use_original_text=True, ref_magazine=is_ref)
+        m = check_targets(o, o.parent, by_target, other_targets, use_original_text=True)
         if m:
             return m
     return None
 
 
-def match_target_issue_name(o, target, by_target, other_targets, use_original, is_ref):
+def match_target_issue_name(o, target, by_target, other_targets, use_original):
+    if o.ref_magazine and target and target == "Star Wars Universe":
+        for name in ["Character", "Star Wars Universe"]:
+            for b, targets in {False: by_target, True: other_targets}.items():
+                if not targets:
+                    continue
+                items = [i for i in (targets.get(name) or []) if i.issue == o.issue]
+                if o.text:
+                    items = [i for i in items if i.text and o.text.lower() in i.text or i.text.startswith(o.text[:6])]
+                if items:
+                    return ItemId(o, items[0], False, b)
+
     if target and by_target and target in by_target:
-        return ItemId(o, find_matching_issue(by_target[target], o.issue, o.original), use_original, False, ref_magazine=is_ref)
+        return ItemId(o, find_matching_issue(by_target[target], o.issue, o.original), use_original, False)
     elif target and other_targets and target in other_targets:
-        return ItemId(o, find_matching_issue(other_targets[target], o.issue, o.original), use_original, False, ref_magazine=is_ref)
+        return ItemId(o, find_matching_issue(other_targets[target], o.issue, o.original), use_original, False)
     return None
 
 

@@ -101,6 +101,8 @@ def analyze_page(page, category, infobox):
     t = determine_app_or_source(text, (category or '').replace("Category:", ""), (infobox or '').replace("_", " "))
     if "audiobook)" in page.title():
         t = "Audiobooks"
+    elif "soundtrack" in page.title().lower():
+        t = "Soundtracks"
     print(t, page.title(), (category or '').replace("Category:", ""), (infobox or '').replace("_", " "))
     return FutureProduct(page, category, dates, infobox, ct, t)
 
@@ -166,7 +168,7 @@ def parse_page(p: Page, types):
     for i, line in enumerate(text.splitlines()):
         parse_line(line, i, p, types, full, unique, target)
 
-    return FullListData(unique, full, target, {}, set(), set())
+    return FullListData(unique, full, target, set(), set(), {})
 
 
 def parse_line(line, i, p: Page, types, full, unique, target):
@@ -188,6 +190,7 @@ def parse_line(line, i, p: Page, types, full, unique, target):
                 item = item.replace(ab, '').strip()
 
             parenthetical = ''
+            original_item = f"{item}"
             if "|p=" in item:
                 pr = re.search("\|p=(.*?)(\|.*?)?}}", item)
                 if pr:
@@ -198,13 +201,15 @@ def parse_line(line, i, p: Page, types, full, unique, target):
             if x:
                 if x.template == "SWCT" and not x.target:
                     x.target = x.card
+                if x.original != original_item:
+                    x.original = original_item
                 x.index = i
                 x.department = z.group(2) or ''
                 x.canon = "/Canon" in p.title()
                 x.date = date
                 x.extra = f"{ab} {c}".strip()
                 x.parenthetical = parenthetical
-                if (x.mode == "Cards" or x.mode == "Toys") and parenthetical:
+                if parenthetical and f"({parenthetical})" not in x.target:
                     x.target = f"{x.target} ({parenthetical})"
                 full[x.full_id()] = x
                 unique[x.unique_id()] = x
@@ -216,7 +221,7 @@ def parse_line(line, i, p: Page, types, full, unique, target):
             print(f"Cannot parse line: {line}")
 
 
-def dates_match(dates: List[Tuple[str, datetime, str]], master):
+def dates_match(dates: List[Tuple[str, datetime, str]], master, infobox):
     for t, d, r in dates:
         if d.year > 2030:
             continue
@@ -228,6 +233,8 @@ def dates_match(dates: List[Tuple[str, datetime, str]], master):
                 return True
         elif t == "year":
             if master == d.strftime("%Y-XX-XX"):
+                return True
+            elif infobox and "comic" in infobox.lower() and master.startswith(f"{d.year}-") and master.endswith("-XX"):
                 return True
     return False
 
@@ -332,14 +339,10 @@ def check_category(c: Category, cats_checked, pages_checked, tracked, infoboxes,
     return not_found
 
 
-def merge_full_lists(l1, l2, l3):
-    return FullListData(l1.unique + l2.unique + l3.unique, l1.full + l2.full + l3.full, l1.target + l2.target + l3.target, {}, set(), set())
-
-
 def build_item_type(item_type, i: FutureProduct):
     z = item_type or ''
     is_legends = (i.canon_type == 'leg' or i.canon_type == 'ncl') if i.canon_type else False
-    if z.startswith("Appearances") or z.startswith("Sources"):
+    if z.startswith("Appearances") or z.startswith("Sources") or z.startswith("CardSets"):
         z = f"{z}|{is_legends}"
     return z
 
@@ -358,35 +361,43 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
     audio = parse_page(audio_page, types)
     col_page = Page(site, "Wookieepedia:Appearances/Collections")
     cols = parse_page(col_page, types)
-    l_src_page1 = Page(site, "Wookieepedia:Sources/Legends/General/2010s")
-    l_srcs1 = parse_page(l_src_page1, types)
-    l_src_page2 = Page(site, "Wookieepedia:Sources/Legends/General/2000s")
-    l_srcs2 = parse_page(l_src_page2, types)
-    l_src_page3 = Page(site, "Wookieepedia:Sources/Legends/General/1977-2000")
-    l_srcs3 = parse_page(l_src_page3, types)
+    # l_src_page1 = Page(site, "Wookieepedia:Sources/Legends/General/2010s")
+    # l_srcs1 = parse_page(l_src_page1, types)
+    # l_src_page2 = Page(site, "Wookieepedia:Sources/Legends/General/2000s")
+    # l_srcs2 = parse_page(l_src_page2, types)
+    # l_src_page3 = Page(site, "Wookieepedia:Sources/Legends/General/1977-2000")
+    # l_srcs3 = parse_page(l_src_page3, types)
+    l_src_page = Page(site, "Wookieepedia:Sources/Legends/General")
+    l_srcs = parse_page(l_src_page, types)
     c_src_page = Page(site, "Wookieepedia:Sources/Canon/General")
     c_srcs = parse_page(c_src_page, types)
-    sets_page = Page(site, "Wookieepedia:Sources/CardSets")
-    sets = parse_page(sets_page, types)
+    c_sets_page = Page(site, "Wookieepedia:Sources/Canon/CardSets")
+    c_sets = parse_page(c_sets_page, types)
+    l_sets_page = Page(site, "Wookieepedia:Sources/Legends/CardSets")
+    l_sets = parse_page(l_sets_page, types)
+    tracks_page = Page(site, "Wookieepedia:Sources/Soundtracks")
+    tracks = parse_page(tracks_page, types)
 
-    master_data = {"Legends Appearances": l_apps, "Canon Appearances": c_apps, "Audiobooks": audio,
-                   "Collections": cols, "Legends-2010s Sources": l_srcs1, "Legends-2000s Sources": l_srcs2,
-                   "Legends-1900s Sources": l_srcs3, "Canon Sources": c_srcs, "Series": series, "Extra": extra, "CardSets": sets}
+    master_data = {
+        "Audiobooks": audio, "Collections": cols, "Soundtracks": tracks, "Series": series, "Extra": extra,
+        # "Legends-2010s Sources": l_srcs1, "Legends-2000s Sources": l_srcs2, "Legends-1900s Sources": l_srcs3,
+        "Canon Sources": c_srcs, "Legends Appearances": l_apps, "Canon Appearances": c_apps,
+        "Legends CardSets": l_sets, "Canon CardSets": c_sets, "Legends Sources": l_srcs}
 
-    new_items = {"Audiobooks": [], "Collections": collections}
+    new_items = {"Audiobooks": [], "Collections": collections, "Soundtracks": []}
     changed_dates = {}
 
     for i in results:
         z = build_item_type(i.item_type, i)
-        if z == "Sources|True":
-            d = build_date(i.dates)
-            if d:
-                if d.startswith("19") or d.startswith("2000"):
-                    z = "Sources|True|3"
-                elif d.startswith("200") or d.startswith("2010"):
-                    z = "Sources|True|2"
-                else:
-                    z = "Sources|True|1"
+        # if z == "Sources|True":
+        #     d = build_date(i.dates)
+        #     if d:
+        #         if d.startswith("19") or d.startswith("2000"):
+        #             z = "Sources|True|3"
+        #         elif d.startswith("200") or d.startswith("2010"):
+        #             z = "Sources|True|2"
+        #         else:
+        #             z = "Sources|True|1"
 
         found = False
         for t, data in master_data.items():
@@ -395,7 +406,7 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
                 if i.item_type != t.split(" ")[-1]:
                     print(f"{i.item_type}: {i.page.title()} is classified as {t}")
                     z = build_item_type(t.split(" ")[-1], i)
-                if i.dates and not dates_match(i.dates, data.target[i.page.title()][0].date):
+                if i.dates and not dates_match(i.dates, data.target[i.page.title()][0].date, i.infobox):
                     if z not in changed_dates:
                         changed_dates[z] = {}
                     changed_dates[z][i.page.title()] = i
@@ -406,7 +417,7 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
             print(f"Skipping {i.page.title()}")
         else:
             print(f"Unknown: {i.item_type}: {i.page.title()}")
-            if z == "Sources|False" and i.page.title() in master_data["CardSets"].target:
+            if z == "Sources|False" and (i.page.title() in master_data["Canon CardSets"].target or i.page.title() in master_data["Legends CardSets"].target):
                 continue
             if z not in new_items:
                 new_items[z] = []
@@ -417,15 +428,19 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
     build_new_page(l_app_page, l_apps, "Appearances|True", new_items, changed_dates, True, save)
 
     build_new_page(c_src_page, c_srcs, "Sources|False", new_items, changed_dates, True, save)
-    build_new_page(l_src_page1, l_srcs1, "Sources|True|1", new_items, changed_dates, True, save)
-    build_new_page(l_src_page2, l_srcs2, "Sources|True|2", new_items, changed_dates, True, save)
-    build_new_page(l_src_page3, l_srcs3, "Sources|True|3", new_items, changed_dates, True, save)
+    build_new_page(l_src_page, l_srcs, "Sources|True", new_items, changed_dates, True, save)
+    # build_new_page(l_src_page1, l_srcs1, "Sources|True|1", new_items, changed_dates, True, save)
+    # build_new_page(l_src_page2, l_srcs2, "Sources|True|2", new_items, changed_dates, True, save)
+    # build_new_page(l_src_page3, l_srcs3, "Sources|True|3", new_items, changed_dates, True, save)
+
+    build_new_page(c_sets_page, c_sets, "CardSets|False", new_items, changed_dates, True, save)
+    build_new_page(l_sets_page, l_sets, "CardSets|True", new_items, changed_dates, True, save)
 
     build_new_page(extra_page, extra, "Extra", new_items, changed_dates, True, save)
     build_new_page(series_page, series, "Series", new_items, changed_dates, False, save)
     build_new_page(audio_page, audio, "Audiobooks", new_items, changed_dates, True, save)
+    build_new_page(tracks_page, tracks, "Soundtracks", new_items, changed_dates, True, save)
     build_new_page(col_page, cols, "Collections", new_items, changed_dates, True, save)
-    build_new_page(sets_page, sets, "CardSets", new_items, changed_dates, True, save)
 
 
 DATES = {"Wookieepedia:Appearances/Legends": "1977",
@@ -435,8 +450,10 @@ DATES = {"Wookieepedia:Appearances/Legends": "1977",
          "Wookieepedia:Sources/Legends/General/1977-2000": "1977",
          "Wookieepedia:Sources/Legends/General/2000s": "2000",
          "Wookieepedia:Sources/Legends/General/2010s": "2010",
+         "Wookieepedia:Sources/Legends/General": "1977",
          "Wookieepedia:Sources/Canon/General": "2014",
-         "Wookieepedia:Sources/CardSets": "1977"}
+         "Wookieepedia:Sources/Legends/CardSets": "1977",
+         "Wookieepedia:Sources/Canon/CardSets": "2013"}
 
 
 def prep_date(d):
@@ -505,7 +522,8 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
         text = page.get() + "\n"
         for txt, d, _, _, _ in final:
             text += f"\n#{d}: {txt}"
-        page.put(text, "Updating Source Engine Masterlist with new future products", botflag=False)
+        if save and text != page.get():
+            page.put(text, "Updating Source Engine Masterlist with new future products", botflag=False)
         return
 
     for x, i in data.full.items():
