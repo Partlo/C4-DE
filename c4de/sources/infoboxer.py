@@ -92,7 +92,9 @@ def build_fields_for_infobox(page) -> InfoboxInfo:
         if r[0] == "image":
             fields.append("image")
             if r[1] == "imagefallback":
-                fields += ["option1", "image2", "option2", "image3", "option3"]
+                fields += ["option1", "image2", "option2"]
+                if "image3" in optional:
+                    fields += ["image3", "option3"]
         else:
             if r[1].startswith('b') and re.match("b[0-9]+", r[1]):
                 fields.append(r[1].replace("b", "battles"))
@@ -253,7 +255,6 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes):
     for f in infobox.params:
         i += 1
         v = data.get(f)
-        print(f, v, f in infobox.optional, infobox.optional)
         if not v or v == "new":
             if f == "not_appearance":
                 continue

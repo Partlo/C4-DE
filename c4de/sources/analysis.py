@@ -498,7 +498,7 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
             other2.append(s)
             continue
         if "CardGameSet" in s:
-            s = re.sub("\*?{{CardGameSet\|(set=)?(.*?)\|cards=", "\\2", s)
+            s = re.sub("\*?{{CardGameSet\|(set=)?(.*?)\|cards=", "", s)
             cs += 1
         if "SourceContents" in s:
             s = re.sub("\*?{{SourceContents\|(issue=)?(.*?)\|contents=", "\\2", s)
@@ -1090,11 +1090,11 @@ def analyze_section_results(target: Page, results: PageComponents, disambigs: li
             print(f"Moving {len(wrong)} misclassified sources from External Links to Sources")
         new_src.found += wrong
 
-    if new_nca.found and not (new_apps.found or new_apps.sets or new_apps.cards):
+    if new_nca.found and not (new_apps.found or new_apps.group_ids or new_apps.group_items):
         new_apps = new_nca
         new_apps.mark_as_non_canon = "{{Nc}}"
         new_nca = None
-    if new_ncs.found and not (new_src.found or new_src.sets or new_src.cards):
+    if new_ncs.found and not (new_src.found or new_src.group_ids or new_src.group_items):
         new_src = new_ncs
         new_src.mark_as_non_canon = "{{Ncs}}"
         new_ncs = None
@@ -1223,7 +1223,7 @@ def build_item_ids_for_section(page: Page, real, name, original: List[Item], dat
     wrong = []
     links = []
     non_canon = []
-    cards = _cards()
+    group_items = _cards()
     extra = {}
     page_links = []
     any_expanded = []
@@ -1283,7 +1283,11 @@ def build_item_ids_for_section(page: Page, real, name, original: List[Item], dat
             other_extra = True
 
         if d and (o.is_card_or_mini() or o.template == "ForceCollection"):
-            handle_card_item(d, o, cards, src.found if (src and "scenario" not in o.original) else found, src.wrong if src else wrong, extra, name, log)
+            handle_card_item(d, o, group_items, src.found if (src and "scenario" not in o.original) else found, src.wrong if src else wrong, extra, name, log)
+        elif d and d.current.ref_magazine:
+            if d.master.parent not in group_items:
+                group_items[d.master.parent] = []
+            group_items[d.master.parent].append(d)
         elif o.mode != "Toys" and is_external_link(d, o, unknown):
             if d:
                 o.master_text = d.master.original
@@ -1356,14 +1360,14 @@ def build_item_ids_for_section(page: Page, real, name, original: List[Item], dat
             elif real:
                 found.append(ItemId(o, o, False))
 
-    set_ids = {}
+    group_ids = {}
     if name.startswith("File:"):
         pass
     elif src:
-        handle_cards(cards, data, other, src.found, src.sets, extra, unknown, src)
-        cards = {}
+        handle_groups(group_items, data, other, src.found, src.group_ids, extra, unknown, src)
+        group_items = {}
     else:
-        handle_cards(cards, data, other, found, set_ids, extra, unknown)
+        handle_groups(group_items, data, other, found, group_ids, extra, unknown)
 
     found += list(extra.values())
     if any_expanded:
@@ -1371,11 +1375,11 @@ def build_item_ids_for_section(page: Page, real, name, original: List[Item], dat
         for x in any_expanded:
             if x.current.target not in targets:
                 found.append(x)
-    return SectionItemIds(name, found, wrong, non_canon, cards, set_ids, links, len(any_expanded) > 0 or other_extra)
+    return SectionItemIds(name, found, wrong, non_canon, group_items, group_ids, links, len(any_expanded) > 0 or other_extra)
 
 
-def handle_cards(cards: Dict[str, List[ItemId]], data: FullListData, other: FullListData, found: list, set_ids: dict, extra: dict, unknown, src: SectionItemIds=None):
-    for s, c in cards.items():
+def handle_groups(groups: Dict[str, List[ItemId]], data: FullListData, other: FullListData, found: List[ItemId], group_ids: dict, extra: dict, unknown, src: SectionItemIds=None):
+    for s, c in groups.items():
         if not c:
             continue
         t = data.target.get(s)
@@ -1393,8 +1397,9 @@ def handle_cards(cards: Dict[str, List[ItemId]], data: FullListData, other: Full
             t[0].index = c[0].current.index
             if c[0].current.subset:
                 t[0].subset = c[0].current.subset
-            found.append(ItemId(t[0], t[0], False))
-            set_ids[t[0].full_id()] = s
+            if not any(x.current.target == s and x.current.template and x.current.ref_magazine for x in found):
+                found.append(ItemId(t[0], t[0], False))
+            group_ids[t[0].full_id()] = s
             if t[0].target in extra:
                 extra.pop(t[0].target)
         elif c[0].current.template == "Topps":
@@ -1404,10 +1409,10 @@ def handle_cards(cards: Dict[str, List[ItemId]], data: FullListData, other: Full
             for i in c:
                 i.current.unknown = True
             found += c
-        if src and s in src.cards:
-            src.cards[s] += c
+        if src and s in src.group_items:
+            src.group_items[s] += c
         elif src:
-            src.cards[s] = c
+            src.group_items[s] = c
 
         for i in c:
             if i.current.unknown and i.current.template == "SWCT":
@@ -1594,37 +1599,39 @@ def build_new_section(name, section: SectionItemIds, title: str, mode: str, date
                 o.current.original = f"[[{o.current.target}|''{o.current.target}'' ({o.master.date[:4]}]]"
 
         d = build_date_text(o, include_date).replace("E -->", " -->")
-        if o.current.full_id() in section.sets:
-            set_items = section.cards[section.sets[o.current.full_id()]]
+        if o.current.full_id() in section.group_ids:
+            set_items = section.group_items[section.group_ids[o.current.full_id()]]
             ct = 0
             rows += 1
             block = []
             if o.master.is_card_or_mini():
                 set_items = sorted(set_items, key=lambda a: (a.current.card if a.current.card else a.current.original).replace("''", ""))
 
-            if o.master.ref_magazine:
-                parent = o.current.original
-            elif any(i.master.ref_magazine for i in set_items):
-                parent = f"{{{{{set_items[0].master.template}|{set_items[0].master.issue}}}}} {o.current.extra}".strip()
+            if any(i.master.ref_magazine for i in set_items):
+                parent = f"{{{{{set_items[0].current.template}|{set_items[0].master.issue}|parent=1}}}} {o.current.extra}".strip()
             else:
                 parent = o.current.original
+            items = []
             for c in set_items:
                 if c.current.card:
                     ot = build_card_text(o, c).replace("|parent=1", "")
                 else:
-                    ot = build_item_text(o, d, nl, sl, final_without_extra, final_items, new_text, section.name, title, collapse_audiobooks, section.mark_as_non_canon, unlicensed, log)
+                    ot = re.sub("(\{\{[A-z0-9]+\|[0-9]+\|.*?)(\|.*?)?}}", "\\1}}", c.master.original)
                 if o.master.mode == "Minis" and o.master.card:
                     ot = re.sub("\|link=.*?(\|.*?)?}}", "\\1}}", ot)
-                if ot in final_without_extra:
-                    continue
+                if ot not in final_without_extra:
+                    items.append((c, ot))
+
+            for c, ot in items:
                 ex = c.current.extra.strip()
                 if "1stID" in ex:
                     if title and re.search("\{\{1stID(}}|\|simult=)", ex):
                         ex = ex.replace("{{1stID", f"{{{{1stID|{title}")
-                    id = re.search("(\{\{1stID[^{}]*(\{\{.*?}})?[^{}]*}})", ex)
-                    if id:
-                        parent = f"{parent} {id.group(1)}"
-                        ex = ex.replace(id.group(1), "").replace("  ", " ")
+                    if len(items) > 1:
+                        xid = re.search("(\{\{1stID[^{}]*(\{\{.*?}})?[^{}]*}})", ex)
+                        if xid:
+                            parent = f"{parent} {xid.group(1)}"
+                            ex = ex.replace(xid.group(1), "").replace("  ", " ")
                 zt = "*" + d + re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", f"{ot} {ex}").strip()
                 ct += zt.count("{")
                 ct -= zt.count("}")

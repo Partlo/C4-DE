@@ -306,7 +306,6 @@ def handle_references(*, site, fixer: CanonLegendsSwitcher, replacements: dict, 
     # fixer.accept_all = False
     canon_template_refs = []
     for template, refs in templates.items():
-        print(template, len(refs))
         t = pywikibot.Page(site, template)
         fixer.check_page(t, replacements)
         for ref in refs:

@@ -258,13 +258,13 @@ class AnalysisResults:
 
 class SectionItemIds:
     def __init__(self, name, found: List[ItemId], wrong: List[ItemId], non_canon: List[ItemId],
-                 cards: Dict[str, List[ItemId]], sets: Dict[str, str], links: List[Item], expanded):
+                 group_items: Dict[str, List[ItemId]], group_ids: Dict[str, str], links: List[Item], expanded):
         self.name = name
         self.found = found
         self.wrong = wrong
         self.non_canon = non_canon
-        self.cards = cards
-        self.sets = sets
+        self.group_items = group_items
+        self.group_ids = group_ids
         self.links = links
         self.is_appearances = name and "appearances" in name.lower()
         self.expanded = expanded
@@ -278,16 +278,16 @@ class SectionItemIds:
         other.wrong = []
         self.found += other.non_canon
         other.non_canon = []
-        for k, v in other.cards.items():
-            if k in self.cards:
-                self.cards[k] += v
+        for k, v in other.group_items.items():
+            if k in self.group_items:
+                self.group_items[k] += v
             else:
-                self.cards[k] = v
-        other.cards = {}
-        for k, v in other.sets.items():
-            if k not in self.sets:
-                self.sets[k] = v
-        other.sets = {}
+                self.group_items[k] = v
+        other.group_items = {}
+        for k, v in other.group_ids.items():
+            if k not in self.group_ids:
+                self.group_ids[k] = v
+        other.group_ids = {}
         self.links += other.links
         other.links = []
 

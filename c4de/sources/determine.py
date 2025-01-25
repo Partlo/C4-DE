@@ -852,7 +852,6 @@ def determine_id_for_item(o: Item, page: Page, data: Dict[str, Item], by_target:
         return ItemId(o, o, True, False)
 
     if o.issue or o.no_issue:
-        is_ref = o.template in REFERENCE_MAGAZINES
         t = f"{o.mode}|None|{o.target}|None|None|None|None|None"
         if t in data:
             return ItemId(o, data[t], o.collapsed, False)
