@@ -605,12 +605,16 @@ def parse_card_line(s: str, z: str, template: str, mode: str, a: bool):
     else:
         m = re.search("{[^|\[}\n]+\|.*?(cardname|pack|card|mission|scenario)=(?P<card>.*?)?[|}]", s)
         card = m.group(2) if m else None
+        if not card and "rulebook=" in s:
+            card = "Rulebook"
     u = re.search("(url|link)=(.*?)[|}]", s)
     t = re.search("{[^|\[}\n]+\|.*?text=(?P<text>.*?)[|}]", s)
     sh = re.search("\|ship=(.*?)[|}]", s)
     ship = sh.group(1) if sh else None
     ss = re.search("subset=(.*?)(\|.*?)?}}", s)
     subset = ss.group(1) if ss else None
+    if template == "SWIA" and "mission=" in s:
+        mode = "Minis"
 
     if not t:
         t = re.search("{[^|\[}\n]+\|.*?\|(?P<text>.*?)(\|.*?)?}}", s)
@@ -754,7 +758,7 @@ def determine_id_for_item(o: Item, page: Page, data: Dict[str, Item], by_target:
                 if x.target == o.target:
                     return ItemId(o, x, True, False)
 
-    is_tracked_mini = o.mode == "Minis" and o.template not in ["Shatterpoint"]
+    is_tracked_mini = o.template == "SWIA" or (o.mode == "Minis" and o.template not in ["Shatterpoint"])
     if o.mode == "Minis":
         set_name = o.parent or o.target
         m = match_miniatures(o, set_name, data, other_data, canon, ref, is_tracked_mini)
@@ -1076,7 +1080,7 @@ def match_by_set_name(o: Item, mode: str, template: Optional[str], set_name: str
 
 
 def find_matching_set(mode, template, set_name, data: dict):
-    t = f"{mode}|{template}|{set_name}"
+    t = f"{'Cards' if template == 'SWIA' else mode}|{template}|{set_name}"
     for x in ["", "None"]:
         if f"{t}|None|None|None|None|{x}" in data:
             return data[f"{t}|None|None|None|None|{x}"]
@@ -1129,14 +1133,12 @@ def match_issue_target(o: Item, by_target: Dict[str, List[Item]], other_targets:
 
 
 def match_target_issue_name(o, target, by_target, other_targets, use_original):
-    if o.ref_magazine and target and target == "Star Wars Universe":
-        for name in ["Character", "Star Wars Universe"]:
+    if o.ref_magazine and target and target == "Star Wars Universe" and o.text:
+        for name in ["Star Wars Universe", "Character"]:
             for b, targets in {False: by_target, True: other_targets}.items():
                 if not targets:
                     continue
-                items = [i for i in (targets.get(name) or []) if i.issue == o.issue]
-                if o.text:
-                    items = [i for i in items if i.text and o.text.lower() in i.text or i.text.startswith(o.text[:6])]
+                items = [i for i in (targets.get(name) or []) if i.issue == o.issue and i.text and o.text.lower() in i.text or i.text.startswith(o.text[:6])]
                 if items:
                     return ItemId(o, items[0], False, b)
 

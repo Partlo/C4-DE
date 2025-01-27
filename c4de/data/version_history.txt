@@ -190,3 +190,5 @@
 *'''4.2.2''': January 24, 2025
 **Fixed bugs in infobox processing
 **Support for Template:SourceContents
+*'''4.3.0''': January 27, 2025
+**Alpha build of advanced OOU media page analysis

@@ -223,7 +223,10 @@ class FullListData:
 
 
 class PageComponents:
-    def __init__(self, before, canon, non_canon, unlicensed, real, mode):
+    """
+    :type sections: dict[str, SectionLeaf]
+    """
+    def __init__(self, before: str, canon: bool, non_canon: bool, unlicensed: bool, real: bool, mode, media, infobox):
         self.before = before
         self.final = ""
         self.original = before
@@ -232,12 +235,17 @@ class PageComponents:
         self.unlicensed = unlicensed
         self.real = real
         self.app_mode = mode
+        self.media = media
+        self.infobox = infobox
 
         self.ncs = SectionComponents([], [], [], '')
         self.src = SectionComponents([], [], [], '')
         self.nca = SectionComponents([], [], [], '')
         self.apps = SectionComponents([], [], [], '')
         self.links = SectionComponents([], [], [], '')
+
+        self.collections = SectionComponents([], [], [], '')
+        self.sections = {}
 
     def get_navs(self):
         return [*self.apps.nav, *self.nca.nav, *self.src.nav, *self.ncs.nav, *self.links.nav]
@@ -290,6 +298,40 @@ class SectionItemIds:
         other.group_ids = {}
         self.links += other.links
         other.links = []
+
+
+class SectionLeaf:
+    """
+    :type lines: list[str]
+    :type subsections: dict[str, SectionLeaf]
+    :type other: list[SectionLeaf]
+    """
+    def __init__(self, name, header: str, num: int, level: int, combine=False):
+        self.name = name
+        self.header_line = header
+        self.num = num
+        self.level = level
+        self.lines = []
+        self.subsections = {}
+        self.invalid = False
+        self.flag = False
+        self.combine = combine
+        self.other = []
+
+    def build_text(self, header=None):
+        header_line = header or self.name
+        if "=" not in header_line:
+            header_line = f"{'='*self.level}{header_line}{'='*self.level}"
+        if self.flag:
+            header_line = re.sub("(===?.*?)(===?)", "\\1 {{SectionFlag}}\\2", header_line)
+        if not self.lines:
+            return [header_line]
+
+        lines = [header_line]
+        for ln in self.lines:
+            lines.append(ln)
+        lines.append("")
+        return lines
 
 
 class SectionComponents:

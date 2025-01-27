@@ -21,7 +21,7 @@ import ssl
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
-from pywikibot import Site, Page, Category, User
+from pywikibot import Site, Page, Category, User, FilePage
 from pywikibot.exceptions import NoPageError, LockedPageError, OtherPageSaveError
 from c4de.common import log, error_log, archive_url
 from c4de.data.filenames import *
@@ -906,7 +906,7 @@ class C4DE_Bot(commands.Bot):
 
             await message.add_reaction(TIMER)
             results = analyze_target_page(target, self.infoboxes, self.templates, self.disambigs, self.appearances, self.sources, self.remap,
-                                          save=True, include_date=False, use_index=True, handle_references=True)
+                                          save=True, include_date=False, use_index=True)
             await message.remove_reaction(TIMER, self.user)
             await message.add_reaction(self.emoji_by_name("bb8thumbsup"))
 
@@ -949,7 +949,7 @@ class C4DE_Bot(commands.Bot):
 
             await message.add_reaction(TIMER)
             results = analyze_target_page(target, self.infoboxes, self.templates, self.disambigs, self.appearances, self.sources, self.remap,
-                                          save=True, include_date=use_date, use_index=use_index, handle_references=True)
+                                          save=True, include_date=use_date, use_index=use_index)
             await message.remove_reaction(TIMER, self.user)
 
             rev = next(target.revisions(content=False, total=1))
@@ -1039,6 +1039,12 @@ class C4DE_Bot(commands.Bot):
             files, new_lines = [], []
             for l in text.splitlines():
                 if l.startswith("File:"):
+                    x = l.split("|")[0]
+                    pf = FilePage(self.site, x)
+                    if not pf.exists():
+                        continue
+                    elif any(up.title() != "Wookieepedia:WookieeProject Images/Unused images" for up in pf.using_pages(total=5)):
+                        continue
                     files.append(l)
                 elif l != "</gallery>":
                     new_lines.append(l)
@@ -1735,8 +1741,6 @@ class C4DE_Bot(commands.Bot):
             s = (m['site'].split('.com:')[0] + '.com') if '.com:' in m['site'] else m['site']
             t = f"New Article on {s}"
         f = m["title"].replace("''", "*").replace("’", "'")
-        if youtube:
-            f = f.replace("=", "{{=}}")
         f = re.sub("^(''[^'\n]+'')'s ", "\\1{{'s}} ", f)
         f = re.sub("( ''[^'\n]+'')'s ", "\\1{{'s}} ", f)
         msg = "{0} **{1}:**    {2}\n- <{3}>".format(self.emoji_by_name(site_data["emoji"]), t, f, m["url"])
@@ -1775,7 +1779,7 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def build_citation_template(msg: dict, youtube, site_data: dict, archivedate):
-        t = msg['title'].replace("|", "&#124;").strip()
+        t = msg['title'].replace("|", "&#124;").strip().replace("=", "{{=}}").replace("{{{{=}}}}", "{{=}}")
         x = msg.get('template') or site_data['template']
         if youtube:
             result = f"{x}|{msg['videoId']}|{t}"

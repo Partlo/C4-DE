@@ -2,12 +2,14 @@ import codecs
 import re
 from datetime import datetime
 
+from c4de.sources.media import MEDIA_STRUCTURE, prepare_media_infobox_and_intro
+from c4de.sources.parsing import build_initial_components, build_page_components, build_media_page_components
 from pywikibot import Page, Category, showDiff
 
-from c4de.sources.analysis import build_page_components, analyze_section_results
+from c4de.sources.analysis import analyze_section_results
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, SectionComponents, FinishedSection, \
     NewComponents
-from c4de.common import error_log, fix_redirects, do_final_replacements
+from c4de.common import error_log, fix_redirects, do_final_replacements, sort_top_template
 
 
 def build_section_from_pieces(section: SectionComponents, items: FinishedSection, log, media_cat):
@@ -160,6 +162,11 @@ def build_final_text(page: Page, results: PageComponents, disambigs: list, remap
                 pieces.append(f"{snip.group(1)}\n\n")
         pieces.append(t)
 
+    return final_steps(page, results, components, pieces, disambigs, remap, redirects, media_cat)
+
+
+def final_steps(page: Page, results: PageComponents, components: NewComponents, pieces: list, disambigs: list,
+                remap: dict, redirects: dict, media_cat):
     for i in components.navs:
         pieces.append(i)
     if components.navs:
@@ -180,14 +187,82 @@ def build_final_text(page: Page, results: PageComponents, disambigs: list, remap
     # print(f"rebuild: {(datetime.now() - now).microseconds / 1000} microseconds")
     replace = True
     # if re.sub("<!--.*?-->", "", page.get(force=True)) != re.sub("<!--.*?-->", "", new_txt):
-    new_txt = fix_redirects(redirects, new_txt, "Body", remap, disambigs)
+    if redirects:
+        new_txt = fix_redirects(redirects, new_txt, "Body", remap, disambigs)
     if "{{WP}}" in new_txt:
         new_txt = new_txt.replace("{{WP}}", f"{{{{WP|{page.title()}}}}}")
+    elif "{{WP|{{PAGENAME}}" in new_txt:
+        new_txt = re.sub("(\{\{WP\|[^\n]+?)\{\{PAGENAME}}([^\n}]*?}})", "\\1{{subst:PAGENAME}}\\2",
+                         new_txt.replace("{{WP|{{PAGENAME}}", "{{WP|{{subst:PAGENAME}}"))
 
     # now = datetime.now()
     t = do_final_replacements(new_txt, replace)
     # print(f"replace: {(datetime.now() - now).microseconds / 1000} microseconds")
     return t.replace("\n\n{{RelatedCategories", "\n{{RelatedCategories")
+
+
+def build_media_page(page: Page, results: PageComponents, disambigs: list, remap: dict, redirects: dict,
+                     appearances: FullListData, sources: FullListData, components: NewComponents, log: bool):
+    pieces = prepare_media_infobox_and_intro(page, results, appearances, sources)
+    pieces.append("")
+
+    media_cat = None
+    otx = page.get()
+    for key, header_line in MEDIA_STRUCTURE.items():
+        if key == "References":
+            if key in results.sections:
+                pieces.append("\n".join(results.sections[key].build_text()))
+                if "{{mediacat" in pieces[-1].lower():
+                    media_cat = None
+            elif "<ref" in otx and "{{reflist}}" not in otx:
+                if media_cat:
+                    pieces.append("==Notes and references==\n" + media_cat + "\n{{Reflist}}\n\n")
+                else:
+                    pieces.append("==Notes and references==\n{{Reflist}}\n\n")
+            continue
+        elif key == "Sources":
+            if components.src.text or results.src.has_text():
+                t, added_media_cat = build_section_from_pieces(results.src, components.src, log, media_cat)
+                if "and references" in t:
+                    print(key, t)
+                if added_media_cat:
+                    media_cat = None
+                pieces.append(t)
+            continue
+        elif key == "Links":
+            if components.links.text or results.links.has_text():
+                pieces.append("")
+                t, added_media_cat = build_section_from_pieces(results.links, components.links, log, None)
+                if "and references" in t:
+                    print(key, t)
+                if added_media_cat:
+                    media_cat = None
+                pieces.append(t)
+            continue
+        elif key not in results.sections:
+            continue
+
+        # TODO: mediacat
+        section = results.sections[key]
+        if log:
+            print(f"Creating {key} section with {len(section.lines)} lines and {len(section.subsections)} / {len(section.other)} subsections")
+
+        lines = section.build_text(header_line)
+        for subheader, subsection in section.subsections.items():
+            print(key, subheader, len(subsection.lines))
+            lines += subsection.build_text(subheader)
+        for other in section.other:
+            lines += other.build_text()
+
+        lines.append("")
+
+        text = "\n".join(lines)
+        text = fix_redirects(redirects, text, key, remap, disambigs, overwrite=key == "Appearances")
+
+        pieces.append(do_final_replacements(text, True))
+        pieces.append("")
+
+    return final_steps(page, results, components, pieces, disambigs, remap, {}, media_cat)
 
 
 def handle_legends_links(text, title):
@@ -204,39 +279,6 @@ def handle_legends_links(text, title):
             new_lines.append(line)
         body = "\n".join(new_lines)
     return f"{body}{header}{bts}"
-
-
-TOP_ORDER = [
-    ["fa", "pfa", "ffa", "ga", "pga", "fga", "ca", "pca", "fca"],
-    ["fprot", "sprot", "ssprot", "mprot"],
-    ["real", "rwm", "rwp", "rwc", "music"],
-    ["noncanon", "can", "leg", "ncc", "ncl"],
-    ["dotj", "tor", "thr", "fotj", "rote", "aor", "tnr", "rofo", "cnjo"],
-    ["pre", "btr", "old", "imp", "reb", "new", "njo", "lgc", "inf"],
-    ["canon", "legends", "hide"],
-    ["italics", "title", "italics2", "title2", "notitle"],
-    ["notoc", "audio"]
-]
-FULL_ORDER = [tp for pgroup in TOP_ORDER for tp in pgroup]
-
-
-def sort_top_template(t):
-    px = re.search("^(.*?\{\{Top\|)(.*?)(}}.*?)$", t)
-    if px and "|" in px.group(2):
-        new_params = []
-        unknown = []
-        for p in px.group(2).split("|"):
-            v = ""
-            if "=" in p:
-                p, v = p.split("=", 1)
-            if p in FULL_ORDER:
-                new_params.append((p, v))
-            else:
-                unknown.append((p, v))
-        params = sorted(new_params, key=lambda a: FULL_ORDER.index(a[0]))
-        new_text = "|".join(f"{a}={b}" if b else a for a, b in [*params, *unknown])
-        return px.group(1) + new_text + px.group(3)
-    return t
 
 
 def build_final(final, media_cat, real):
@@ -270,66 +312,46 @@ def build_final(final, media_cat, real):
         return final
 
 
-def build_new_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appearances: FullListData,
-                   sources: FullListData, remap: dict, include_date: bool, checked: list, log=True, use_index=True,
-                   handle_references=False, collapse_audiobooks=True, manual: str = None, extra=None):
-    results, unknown, redirects = build_page_components(target, types, disambigs, appearances, sources, remap, infoboxes, handle_references, log, manual, extra)
+def build_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appearances: FullListData,
+               sources: FullListData, remap: dict, include_date: bool, checked: list, log=True, use_index=True,
+               collapse_audiobooks=True, manual: str = None, extra=None):
+    text, redirects, results = build_initial_components(target, disambigs, infoboxes, manual)
+    if results.media:
+        unknown = build_media_page_components(target, text, redirects, results, types, disambigs, appearances, sources,
+                                              remap, log)
+    else:
+        unknown = build_page_components(target, text, redirects, results, types, disambigs, appearances, sources, remap,
+                                        log=log, extra=extra)
     if results.real and collapse_audiobooks:
         collapse_audiobooks = False
 
     new_components, dates, unknown_items, analysis = analyze_section_results(
         target, results, disambigs, appearances, sources, remap, use_index, include_date, collapse_audiobooks, checked, log)
-    if not new_components:
-        return None
 
-    if unknown or unknown_items.found():
-        with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/sources/unknown.txt", mode="a",
-                         encoding="utf-8") as f:
-            for x in unknown:
-                f.write(u'%s\t%s\n' % (x, target.title()))
-            z = set()
-            for o in [*unknown_items.apps, *unknown_items.src]:
-                z.add(o.original if isinstance(o, Item) else o)
-            for o in unknown_items.links:
-                z.add(f"Links: {o.original if isinstance(o, Item) else o}")
-            for o in unknown_items.final_items:
-                if isinstance(o, ItemId) and o.current.original not in z:
-                    z.add(f"No Date: {o.current.original}")
-                elif not isinstance(o, ItemId) and o not in z:
-                    z.add(f"No Date: {o}")
-            if z:
-                f.writelines("\n".join([f"{o}\t{target.title()}" for o in z]) + "\n")
-
-    return build_final_text(target, results, disambigs, remap, redirects, new_components, log)
+    if results.media:
+        new_txt = build_media_page(target, results, disambigs, remap, redirects, appearances, sources, new_components, log)
+    else:
+        new_txt = build_final_text(target, results, disambigs, remap, redirects, new_components, log)
+    return new_txt, analysis, dates, unknown, unknown_items
 
 
-def record_unknown(unknown, results, f, target):
-    r = ""
-    for o in unknown:
-        x = f"- `{o.original if isinstance(o, Item) else o}`"
-        if len(r) + len(x) > 500:
-            results.append(r)
-            r = f"{x}"
-        else:
-            r = f"{r}\n{x}"
-        if (o.original if isinstance(o, Item) else o).startswith("*"):
-            print(target.title(), o.original)
-    if r:
-        results.append(r)
-    f.writelines("\n" + "\n".join([(o.original if isinstance(o, Item) else o) for o in unknown]))
+def build_new_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appearances: FullListData,
+                   sources: FullListData, remap: dict, include_date: bool, checked: list, log=True, use_index=True,
+                   collapse_audiobooks=True, manual: str = None, extra=None):
+    new_txt, analysis, dates, unknown, unknown_items = build_text(
+        target, infoboxes, types, disambigs, appearances, sources, remap, include_date, checked, log, use_index,
+        collapse_audiobooks, manual, extra)
+
+    record_local_unknown(unknown, unknown_items, target)
+    return new_txt
 
 
 def analyze_target_page(target: Page, infoboxes: dict, types: dict, disambigs: list, appearances: FullListData,
                         sources: FullListData, remap: dict, save: bool, include_date: bool,
-                        log=True, use_index=True, handle_references=False, collapse_audiobooks=True):
-    results, unknown, redirects = build_page_components(target, types, disambigs, appearances, sources, remap, infoboxes, handle_references, log)
-    if results.real and collapse_audiobooks:
-        collapse_audiobooks = False
-
-    new_components, dates, unknown_items, analysis = analyze_section_results(
-        target, results, disambigs, appearances, sources, remap, use_index, include_date, collapse_audiobooks, [], log)
-
-    new_txt = build_final_text(target, results, disambigs, remap, redirects, new_components, log)
+                        log=True, use_index=True, collapse_audiobooks=True):
+    new_txt, analysis, dates, unknown, unknown_items = build_text(
+        target, infoboxes, types, disambigs, appearances, sources, remap, include_date, [], log, use_index,
+        collapse_audiobooks)
 
     with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/test_text.txt", mode="w", encoding="utf-8") as f:
         f.writelines(new_txt)
@@ -394,3 +416,39 @@ def analyze_target_page(target: Page, infoboxes: dict, types: dict, disambigs: l
             final_results.append(i)
 
     return results
+
+
+def record_local_unknown(unknown, unknown_items, target: Page):
+    if unknown or unknown_items.found():
+        with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/sources/unknown.txt", mode="a",
+                         encoding="utf-8") as f:
+            for x in unknown:
+                f.write(u'%s\t%s\n' % (x, target.title()))
+            z = set()
+            for o in [*unknown_items.apps, *unknown_items.src]:
+                z.add(o.original if isinstance(o, Item) else o)
+            for o in unknown_items.links:
+                z.add(f"Links: {o.original if isinstance(o, Item) else o}")
+            for o in unknown_items.final_items:
+                if isinstance(o, ItemId) and o.current.original not in z:
+                    z.add(f"No Date: {o.current.original}")
+                elif not isinstance(o, ItemId) and o not in z:
+                    z.add(f"No Date: {o}")
+            if z:
+                f.writelines("\n".join([f"{o}\t{target.title()}" for o in z]) + "\n")
+
+
+def record_unknown(unknown, results, f, target):
+    r = ""
+    for o in unknown:
+        x = f"- `{o.original if isinstance(o, Item) else o}`"
+        if len(r) + len(x) > 500:
+            results.append(r)
+            r = f"{x}"
+        else:
+            r = f"{r}\n{x}"
+        if (o.original if isinstance(o, Item) else o).startswith("*"):
+            print(target.title(), o.original)
+    if r:
+        results.append(r)
+    f.writelines("\n" + "\n".join([(o.original if isinstance(o, Item) else o) for o in unknown]))

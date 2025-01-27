@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Dict
+from typing import Dict, Tuple, List
 
 from c4de.common import error_log
 from pywikibot import Page, Category
@@ -102,7 +102,7 @@ def build_fields_for_infobox(page) -> InfoboxInfo:
     return InfoboxInfo(fields, optional, combo, groups)
 
 
-def parse_infobox(text: str, all_infoboxes: dict):
+def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List[str], bool, str, bool]:
     found = None
     done = False
     o, c = 0, 0
@@ -201,7 +201,7 @@ def parse_infobox(text: str, all_infoboxes: dict):
                     done = True
                 post.append(line)
 
-    return data, pre, post, on_own_line, found, scroll_box
+    return data, pre, post, on_own_line, found or '', scroll_box
 
 
 def extract_date(text):
@@ -327,4 +327,4 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes):
     new_text = "\n".join([*pre, *new_infobox, *post])
     if new_text.replace("\n}}", "}}") != page.get().replace("\n}}", "}}"):
         print(f"Found changes for {found} infobox")
-    return "\n".join([*pre, *new_infobox, *post])
+    return "\n".join([*pre, *new_infobox, *post]), found

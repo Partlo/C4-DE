@@ -1,3 +1,4 @@
+import json
 import re
 import traceback
 from datetime import datetime
@@ -601,6 +602,26 @@ def build_template_types(site):
     return results
 
 
+def reload_templates(site):
+    templates = build_template_types(site)
+    with open("c4de/data/templates.json", "w") as f:
+        f.writelines(json.dumps(templates))
+    print(f"Loaded {len(templates)} infoboxes from cache")
+    return templates
+
+
+def load_template_types(site):
+    try:
+        with open("c4de/data/templates.json", "r") as f:
+            results = json.loads("\n".join(f.readlines()))
+        if not results:
+            results = reload_templates(site)
+        return results
+    except Exception as e:
+        print(f"Encountered {type(e)} while loading infobox JSON", e)
+        return reload_templates(site)
+
+
 # TODO: Split Appearances category by type
 
 def load_appearances(site, log, canon_only=False, legends_only=False):
@@ -626,7 +647,7 @@ def load_appearances(site, log, canon_only=False, legends_only=False):
                 else:
                     collection_type = None
             elif line and not line.startswith("=="):
-                if "/Header}}" in line or line == "----":
+                if "/Header}}" in line or line.startswith("----"):
                     continue
                 x = re.search("[*#](.*?)( \(.*?\))?:(<!--.*?-->)? (.*?)$", line)
                 if x:
@@ -654,10 +675,11 @@ def load_source_lists(site, log):
             # if skip:
             #     skip = False
             #     continue
-            if line and not line.startswith("==") and not "/Header}}" in line and line != "----":
+            if line and not line.startswith("==") and "/Header}}" not in line and not line.startswith("----"):
                 line = line.replace(" |reprint=", "|reprint=")
-                line = re.sub("(\{\{SWMiniCite.*?)\|num=[0-9-]+", "\\1", line)
                 if "Miniatures" in sp or "RefMagazine" in sp:
+                    line = re.sub("(\{\{SWMiniCite.*?)\|num=[0-9-]+", "\\1", line)
+                    line = re.sub("(\{\{SWIA.*?)\|page=[0-9]+", "\\1", line)
                     line = re.sub("<!-- .*? -->", "", line)
 
                 if "Toys" in sp:
@@ -681,7 +703,7 @@ def load_source_lists(site, log):
             lines = p.get().splitlines()
             bad = []
             for o, line in enumerate(lines):
-                if "/Header}}" in line:
+                if "/Header}}" in line or line.startswith("----"):
                     continue
                 # elif skip:
                 #     skip = False
@@ -704,7 +726,7 @@ def load_source_lists(site, log):
     p = Page(site, f"Wookieepedia:Sources/Web/Current")
     i = 0
     for line in p.get().splitlines():
-        if "/Header}}" in line:
+        if "/Header}}" in line or line.startswith("----"):
             continue
         x = re.search("\*Current:(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?)( †)?( {{C\|(original|alternate): (?P<a>.*?)}})?$", line)
         if x:
@@ -719,7 +741,7 @@ def load_source_lists(site, log):
     p = Page(site, f"Wookieepedia:Sources/Web/Unknown")
     i = 0
     for line in p.get().splitlines():
-        if "/Header}}" in line:
+        if "/Header}}" in line or line.startswith("----"):
             continue
         x = re.search("\*.*?:( [0-9:-]+)? (.*?)( †)?( {{C\|(original|alternate): (.*?)}})?$", line)
         if x:

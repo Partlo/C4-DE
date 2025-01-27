@@ -85,6 +85,8 @@ def analyze(*args):
     for page in gen:
         if page.title().startswith("Map:") or page.title() == "Forum:WPWeb:Template icons standardization":
             continue
+        elif page.namespace().id == 2:
+            continue
 
         i += 1
         z = str(i / total * 100).zfill(10)[:6]
@@ -139,15 +141,8 @@ def analyze(*args):
             if page.title() in ultimate2:
                 extra.append("Ultimate Star Wars, New Edition")
             text = build_new_text(page, infoboxes, types, [], appearances, sources, remap, include_date,
-                                  checked, log=log, handle_references=True, collapse_audiobooks=True, manual=old_revision, extra=extra)
+                                  checked, log=log, collapse_audiobooks=True, manual=old_revision, extra=extra)
             if text is None:
-                continue
-
-            if text.replace("E -->", " -->") == old_text.replace("E -->", " -->"):
-                print(f"{i} -> {z} -> No changes found for {page.title()}")
-                continue
-            elif len(text) - len(old_text) == 1 and text.replace("\n", "") == old_text.replace("\n", ""):
-                print(f"Skipping {page.title()}; infobox newline is only change")
                 continue
 
             z1 = re.sub("(\|[A-z _0-9]+=.*?(\n.+?)?)}}(\n((The |A )?'''|\{\{Quote))", "\\1\n}}\\3",
@@ -157,6 +152,14 @@ def analyze(*args):
                         re.sub("(\|.*?=)}}\n", "\\1\n}}\n", re.sub("(\|book=[^\n}]*?)(\|story=[^\n}]*?)(\|.*?)?}}", "\\2\\1\\3}}", old_text.replace("text=SWCC 2022", "text=SWCA 2022").replace("{{!}}", "|"))))
             z2 = re.sub("(\{\{1st.*?\|\[\[(.*?) \(.*?audiobook\)\|)''\\2'' (.*?audiobook)", "\\1\\3", z2)
             z2 = re.sub("\[\[([Cc])redit]](s)?", "[[Galactic Credit Standard|\\1redit\\2]]", z2)
+
+            text = re.sub("(\{\{[A-z0-9]+\|[0-9]+\|.*?)(\|.*?)?}}", "\\1}}", text)
+            if text.replace("E -->", " -->") == old_text.replace("E -->", " -->"):
+                print(f"{i} -> {z} -> No changes found for {page.title()}")
+                continue
+            elif len(text) - len(old_text) == 1 and text.replace("\n", "") == old_text.replace("\n", ""):
+                print(f"Skipping {page.title()}; infobox newline is only change")
+                continue
 
             match = re.sub("<!--.*?-->", "", z1.replace("–", "&ndash;").replace("—", "&mdash;").replace("{{PageNumber}} ", "").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]")) == \
                     re.sub("<!--.*?-->", "", z2.replace("–", "&ndash;").replace("—", "&mdash;").replace("{{PageNumber}} ", "").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]"))

@@ -9,7 +9,7 @@ import urllib3.exceptions
 import waybackpy
 from waybackpy.exceptions import WaybackError, TooManyRequestsError
 
-from pywikibot import Page, Category, showDiff, pagegenerators
+from pywikibot import Page, Category, pagegenerators
 from datetime import datetime
 
 from c4de.data.nom_data import NOM_TYPES
@@ -64,6 +64,39 @@ def is_redirect(page, title=None):
         return False
 
 
+TOP_ORDER = [
+    ["fa", "pfa", "ffa", "ga", "pga", "fga", "ca", "pca", "fca"],
+    ["fprot", "sprot", "ssprot", "mprot"],
+    ["real", "rwm", "rwp", "rwc", "music"],
+    ["noncanon", "can", "leg", "ncc", "ncl", "ref"],
+    ["dotj", "tor", "thr", "fotj", "rote", "aor", "tnr", "rofo", "cnjo"],
+    ["pre", "btr", "old", "imp", "reb", "new", "njo", "lgc", "inf"],
+    ["canon", "legends", "hide"],
+    ["italics", "title", "italics2", "title2", "notitle"],
+    ["notoc", "audio"]
+]
+FULL_ORDER = [tp for pgroup in TOP_ORDER for tp in pgroup]
+
+
+def sort_top_template(t):
+    px = re.search("^(.*?\{\{Top\|)(.*?)(}}.*?)$", t)
+    if px and "|" in px.group(2):
+        new_params = []
+        unknown = []
+        for p in px.group(2).split("|"):
+            v = ""
+            if "=" in p:
+                p, v = p.split("=", 1)
+            if p in FULL_ORDER:
+                new_params.append((p, v))
+            else:
+                unknown.append((p, v))
+        params = sorted(new_params, key=lambda a: FULL_ORDER.index(a[0]))
+        new_text = "|".join(f"{a}={b}" if b else a for a, b in [*params, *unknown])
+        return px.group(1) + new_text + px.group(3)
+    return t
+
+
 def build_redirects(page: Page, manual: str = None):
     results = {}
     pages, pagenames = [], []
@@ -113,7 +146,7 @@ def fix_disambigs(r, t, text):
     return text
 
 
-def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, remap, file=False, appearances: dict=None, sources: dict=None) -> str:
+def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, remap, file=False, appearances: dict=None, sources: dict=None, overwrite=False) -> str:
     for r, t in redirects.items():
         if t in disambigs or "(disambiguation)" in t:
             fix_disambigs(r, t, text)
@@ -136,7 +169,8 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
             else:
                 text = re.sub("('')?\[\[" + x + "\|('')?(" + prepare_title(t) + ")('')?]](s)?('')?", f"\\1\\2[[\\3]]\\5\\1\\2", text)
                 text = re.sub("\[\[" + x + "(\|.*?)]](s)?", f"[[{t}\\1\\2]]", text)
-                if file or r.replace("Star Wars: Republic: ", "Star Wars: ") == t or r.startswith("File:"):
+                if file or r.replace("Star Wars: Republic: ", "Star Wars: ") == t \
+                        or r.startswith("File:") or (overwrite and "/Legends" not in t and "/Canon" not in t):
                     text = re.sub("\[\[(" + x + ")(s)?]]", f"[[{t}]]\\2", text)
                 else:
                     text = re.sub("('')?\[\[(" + x + ")]]([A-Za-z']*)", f"[[{t}|\\1\\2\\3]]", text)
@@ -145,7 +179,8 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
                     text = re.sub("(\{\{(?!WP)[A-Za-z0-9]+\|)" + x + "}}", "\\1    " + t + "}}", text).replace("    ", "")
                 except Exception as e:
                     print(e, x, t)
-            text = text.replace(f"set={r}|", f"set={t}|").replace(f"set={r}}}", f"set={t}}}")
+            if r.split(" (")[0] != t.split(" (")[0]:
+                text = text.replace(f"set={r}|", f"set={t}|").replace(f"set={r}}}", f"set={t}}}")
             if t.startswith(f"{r} ("):
                 text = re.sub("book=" + x + "([|}])", f"book={r}\\1", text)
             else:
