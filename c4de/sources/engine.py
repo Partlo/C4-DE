@@ -571,6 +571,7 @@ def build_template_types(site):
     list_templates(site, "Category:Internet citation templates", results, "Web")
     list_templates(site, "Category:Internet citation templates for use in External Links", results, "External")
     list_templates(site, "Category:Social media citation templates", results, "Social")
+    list_templates(site, "Category:Publisher internet citation templates", results, "Publisher")
     list_templates(site, "Category:Commercial and product listing internet citation templates", results, "Commercial")
 
     list_templates(site, "Category:YouTube citation templates", results, "YT")
@@ -677,7 +678,7 @@ def load_source_lists(site, log):
             #     continue
             if line and not line.startswith("==") and "/Header}}" not in line and not line.startswith("----"):
                 line = line.replace(" |reprint=", "|reprint=")
-                if "Miniatures" in sp or "RefMagazine" in sp:
+                if "Miniatures" in sp or "RefMagazine" in sp or "CardSets" in sp:
                     line = re.sub("(\{\{SWMiniCite.*?)\|num=[0-9-]+", "\\1", line)
                     line = re.sub("(\{\{SWIA.*?)\|page=[0-9]+", "\\1", line)
                     line = re.sub("<!-- .*? -->", "", line)
@@ -803,6 +804,17 @@ ISSUE_REPRINTS = ["A Certain Point of View (Star Wars Insider)", "Classic Moment
                   "Set Piece", "Second Trooper", "The Star Wars Archive", "The Wonder Column"]
 
 
+def remove_templates(s):
+    if s.count("{{") > 0:
+        y = re.sub(
+            '( ?\{+ ?(1st[A-z]*|V?[A-z][od]|[Ff]act|DLC|[Ll]n|[Cc]rp|[Uu]n|[Nn]cm?|[Aa]mbig|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Uu]nborn|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene|[Cc]rawl) ?[|}].*?$)',
+            "", s)
+        if y != s:
+            print(f"Unexpected template found: {s}")
+        return y
+    return s
+
+
 def load_full_sources(site, types, log) -> FullListData:
     sources = load_source_lists(site, log)
     count = 0
@@ -825,6 +837,7 @@ def load_full_sources(site, types, log) -> FullListData:
                 if cr:
                     c = ' ' + cr.group(1)
                     i['item'] = i['item'].replace(cr.group(1), '').strip()
+            i["item"] = remove_templates(i["item"])
             parenthetical = ''
             if "|p=" in i['item']:
                 pr = re.search("\|p=(.*?)(\|.*?)?}}", i['item'])
@@ -884,10 +897,12 @@ def load_full_sources(site, types, log) -> FullListData:
                     if f"{x.target}|{x.issue}" not in reprints:
                         reprints[f"{x.target}|{x.issue}"] = []
                     reprints[f"{x.target}|{x.issue}"].append(x)
-                elif reprint and x.target not in reprints:
+                elif reprint and x.target and x.target not in reprints:
                     reprints[x.target] = [x]
-                elif reprint:
+                elif reprint and x.target:
                     reprints[x.target].append(x)
+                elif reprint:
+                    print(f"Unexpected state: reprint with no target: {x.original}")
             else:
                 print(f"Unrecognized: {i['item']}")
                 count += 1
@@ -896,6 +911,8 @@ def load_full_sources(site, types, log) -> FullListData:
     for k, v in ff_data.items():
         target_sources[f"FFData|{k}"] = v
     for k, v in reprints.items():
+        if k is None:
+            print(k, v)
         if "|" in k:
             k, _, s = k.partition("|")
             if k in target_sources:
@@ -969,6 +986,7 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 crp = True
                 i['item'] = i['item'].replace(x3.group(0), '').strip()
 
+            i["item"] = remove_templates(i["item"])
             parenthetical = ''
             if "|p=" in i['item']:
                 pr = re.search("\|p=(.*?)(\|.*?)?}}", i['item'])

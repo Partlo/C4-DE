@@ -72,7 +72,7 @@ def convert_date_str(date, links: set):
         return date, None
     else:
         try:
-            d = datetime.strptime(date, "%Y-%m-%d")
+            d = datetime.strptime(re.sub("[A-Z]", "", date), "%Y-%m-%d")
             m = add_link(d.strftime("%B %d"), links)
             y = add_link(d.strftime("%Y"), links)
             return f"{m}, {y}", d
@@ -188,7 +188,9 @@ def create_index(site, page: Page, results: AnalysisResults, save: bool):
             lines.append("}}")
     if re.search("\{\{Top\|(.*?\|)?(real|rwm|rwp)(\|.*?)?}}", page.get()):
         lines.append("\n[[Category:Real-world index pages]]")
-    elif re.search("\{\{Top\|(.*?\|)?nc[cl](\|.*?)?}}", page.get()):
+    elif re.search("\{\{Top\|(.*?\|)?ncl(\|.*?)?}}", page.get()):
+        lines.append("\n[[Category:Non-canon Legends index pages]]")
+    elif re.search("\{\{Top\|(.*?\|)?ncc(\|.*?)?}}", page.get()):
         lines.append("\n[[Category:Non-canon index pages]]")
     elif results.canon:
         lines.append("\n[[Category:Canon index pages]]")

@@ -286,7 +286,7 @@ def parse_archive(site, template):
         return None
     archive = {}
     for u, d in re.findall("\[['\"](.*?)/?['\"]] ?= ?['\"]?(.*?)['\"]?", page.get()):
-        archive[u.replace("\\'", "'")] = d
+        archive[u.replace("\\'", "'").lower()] = d
     return archive
 
 

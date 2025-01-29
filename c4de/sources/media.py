@@ -6,13 +6,6 @@ from typing import List, Tuple, Union, Dict, Optional
 from c4de.sources.domain import FullListData, PageComponents, SectionLeaf
 from c4de.common import sort_top_template
 
-MASTER_STRUCTURE = {
-    "Collections": "==Collections==",
-    "Sources": "==Sources==",
-    "References": "==Notes and references==",
-    "Links": "==External links=="
-}
-
 MEDIA_STRUCTURE = {
     "Publisher Summary": "==Publisher's summary==",
     "Official Description": "==Official description==",
@@ -23,7 +16,7 @@ MEDIA_STRUCTURE = {
     "Development": "==Development==",
     "Release/Reception": "==Release and reception==",
     "Continuity": "==Continuity==",
-    "Adaptations": "==Adaptations and tie-in media",
+    "Adaptations": "==Adaptations and tie-in media==",
     "Legacy": "==Legacy==",
     "Media": "==Media==",
     # "Issues": "===Issues===",
@@ -33,7 +26,7 @@ MEDIA_STRUCTURE = {
     # "Cover Gallery": "===Cover gallery===",
     # "Poster Gallery": "===Poster gallery===",
     # "Content Gallery": "===Content gallery===",
-    "Collections": "==Collections==",
+    # "Collections": "==Collections==",
     "Credits": "==Credits==",
     "Appearances": "==Appearances==",
     "Sources": "==Sources==",
@@ -44,11 +37,11 @@ MEDIA_STRUCTURE = {
 SUBSECTIONS = {
     "Contents": ["Articles", "Departments", "Features"],
     "Development": ["Conception", "Production"],
-    "Media": ["Issues", "Editions", "Episodes", "Seasons", "Cover gallery", "Poster gallery", "Content gallery"]
+    "Media": ["Issues", "Editions", "Episodes", "Seasons", "Collections", "Cover gallery", "Poster gallery", "Content gallery"]
 }
 
 
-def remove(s, x):
+def remove(s, x: list):
     y = f"{s}"
     for i in x:
         y = y.replace(f"{i} ", "")
@@ -60,7 +53,7 @@ def match_header(header: str, infobox):
     h = header.lower().strip().replace("'", "").replace("-", " ")
     if i == "book series" and h == "novels":
         return "Contents"
-    elif i and i.startswith("television") and remove(h, "official") == "description":
+    elif i and i.startswith("television") and remove(h, ["official"]) == "description":
         return "Official Description"
 
     if h in ["behind the scenes", "main characters", "characters", "major characters"]:
@@ -96,7 +89,8 @@ def match_header(header: str, infobox):
         return "Credits"
     elif h in ["appearances"]:
         return "Appearances"
-    elif h in ["adaptation", "adaptations", "adaption", "adaptions", "tie in media"]:
+    elif h in ["adaptation", "adaptations", "adaption", "adaptions", "tie in media", "merchandising", "merchandise",
+               "merchandise and tie in media"]:
         return "Adaptations"
     elif h in ["cover gallery", "cover art"]:
         return "Cover gallery"
@@ -135,8 +129,25 @@ def check_for_cover_image(item: SectionLeaf, valid: dict, images: list):
         item.lines = [ln for i, ln in enumerate(item.lines)]
 
 
-def rearrange_sections(valid: Dict[str, List[SectionLeaf]], infobox):
+def rearrange_sections(valid: Dict[str, List[SectionLeaf]], real, infobox, title, novel: Page):
+    if not real:
+        return {k: v[0] for k, v in valid.items()}
+
     sections = {}
+    if infobox == "audiobook":
+        if "Plot Summary" not in valid:
+            sections["Plot Summary"] = SectionLeaf("Plot Summary", "==Plot summary==", 0, 2)
+            tx = ""
+            if "(" in title:
+                tx = re.sub("^(.*?)( \(.*?\))$", "|''\\1''\\2", title)
+            sections["Plot Summary"].lines = [f"{{{{Plot-link|{title}{tx}}}}}"]
+        if "Appearances" not in valid and "(" in title and novel:
+            sections["Appearances"] = SectionLeaf("Appearances", "==Appearances==", 0, 2)
+            if novel.exists() and not novel.isRedirectPage() and "Plot summary" in novel.get() and "<onlyinclude>\n{{App" not in novel.get():
+                sections["Appearances"].lines = [f"{{{{:{title.split(' (')[0]}}}}}"]
+            else:
+                sections["Appearances"].lines = ["{{MissingAppFlag}}"]
+
     has_summary = False
     images = []
     for key, items in valid.items():
@@ -147,6 +158,39 @@ def rearrange_sections(valid: Dict[str, List[SectionLeaf]], infobox):
 
         for it in items:
             check_for_cover_image(it, valid, images)
+            if key == "Plot Summary":
+                if any("{{opening" in ln.lower() for ln in it.lines):
+                    crawl, other, ct = [], [], 0
+                    for ln in it.lines:
+                        if "{{opening" in ln.lower() or (crawl and ct != 0):
+                            crawl.append(ln)
+                            ct += (ln.count("{{") - ln.count("}}"))
+                        else:
+                            other.append(ln)
+                    it.lines = other
+                    if "Opening Crawl" in sections:
+                        valid["Opening Crawl"][0].lines.append("")
+                        sections["Opening Crawl"].lines += crawl
+                    elif "Opening Crawl" in valid:
+                        valid["Opening Crawl"][0].lines.append("")
+                        valid["Opening Crawl"][0].lines += crawl
+                    else:
+                        sections["Opening Crawl"] = SectionLeaf("Opening Crawl", "==Opening crawl==", 0, 2)
+                        sections["Opening Crawl"].lines = crawl
+
+            # if key == "Release/Reception":
+            #     to_pop = set()
+            #     for sx, sk in it.subsections.items():
+            #         if sx.startswith("Merchandise") or "tie-ins" in sx:
+            #             if "Adaptations" in valid:
+            #                 valid["Adaptations"][0].lines += sk.lines
+            #             elif "Adaptations" not in sections:
+            #                 sections["Adaptations"] = SectionLeaf("Adaptations", MEDIA_STRUCTURE["Adaptations"], 0, 2, sk.lines)
+            #             else:
+            #                 sections["Adaptations"].lines += sk.lines
+            #             to_pop.add(sx)
+            #     for x in to_pop:
+            #         it.subsections.pop(x)
 
         if key in MEDIA_STRUCTURE and key in sections:
             if len(items) > 0:
@@ -227,8 +271,10 @@ def simplify(s):
 
 def prepare_media_infobox_and_intro(page: Page, results: PageComponents, appearances: FullListData,
                                     sources: FullListData) -> List[str]:
-    fmt = None
-    if page.title() in appearances.target:
+    fmt, simple_fmt = None, None
+    if results.infobox == "audiobook":
+        fmt = f"''{page.title().split(' (')[0]}''"
+    elif page.title() in appearances.target:
         if not appearances.target[page.title()][0].template:
             fmt = appearances.target[page.title()][0].original
     elif page.title() in sources.target:
@@ -242,19 +288,27 @@ def prepare_media_infobox_and_intro(page: Page, results: PageComponents, appeara
         if results.infobox in QUOTES:
             fmt = "\"<b>" + re.sub(" \(.*?\)$", "", page.title()) + "<b>\""
     if fmt:
+        if "|" in fmt:
+            fmt = re.sub("^.*\[\[.*?\|(.*?)]].*?$", "\\1", fmt)
+        elif "[[" in fmt:
+            fmt = re.sub("^('')?\[\[(.*?)]]('')?$", "\\1\\2\\3", fmt)
+        simple_fmt = fmt.replace("<b>", "")
         fmt = fmt.replace("<b>", "'''")
 
     pieces = []
     ct = 0
+    publisher_listing = set()
     infobox_found, infobox_done, title_found = False, False, False
     for ln in results.before.strip().splitlines():
         if "{{top" in ln.lower():
             ln = sort_top_template(ln)
         elif f"{{{{{results.infobox}" in ln.lower() or f"{{{{{results.infobox.replace(' ', '_')}" in ln.lower():
             infobox_found = True
-        elif ln.startswith("|title=") and fmt:
-            if "''" in fmt and "''" not in ln:
-                ln = f"|title={fmt}"
+        elif ln.startswith("|title=") and simple_fmt:
+            if "''" in simple_fmt and "''" not in ln:
+                ln = f"|title={simple_fmt}"
+            elif "''" in ln and "''" not in simple_fmt:
+                ln = f"|title={simple_fmt}"
         elif "|series=" in ln:
             x = re.search("series='*\[\[(.*?)(\|.*?)?]]'*", ln)
             if x and x.group(1) in appearances.target:
@@ -284,20 +338,25 @@ def prepare_media_infobox_and_intro(page: Page, results: PageComponents, appeara
             else:
                 ln = re.sub("\"?'''+\"?(.*?)\"?'''+\"?", fmt, ln)
             title_found = True
+        if "{{Marvel|url=comics/" in ln or "{{DarkHorse|url=Comics/" in ln:
+            x = re.search("(\{\{(DarkHorse|Marvel)\|url=[Cc]omics/(?!Preview).*?}})", ln)
+            if x:
+                publisher_listing.add(x[0])
 
         pieces.append(ln)
     return pieces
 
 
 # TODO: italicize publisher's summary
+# TODO: count redlinks and remove redlink template
 # TODO: detect publisher's listing for comic in infobox and add to ExL; tag issues without DH & Marvel
 # TODO: use Masterlist formatting for Contents sections
 # TODO: parse and standardize ISBN lines in Editions
 # TODO: build prettytable for issues sections?
-# TODO: archivedate fixing based on category
+# TODO: split Appearances subsections by length
 # TODO: check for Contents and Plot Summary
 # TODO: check combine flag
 # TODO: Flag Media sections with no subcats
-# TODO: convert Introduction to a Contents bullet
+# TODO: convert "Introduction" to a Contents bullet
 # TODO: Fix redirects in the Contents section without preserving the original pipelink, UNLESS it's a department
 # TODO: flag articles with multiple sections for the same master header for review (Star Wars Gamer 7)

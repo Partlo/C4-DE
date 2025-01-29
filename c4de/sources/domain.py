@@ -114,6 +114,14 @@ class Item:
     def sort_index(self, canon):
         return ((self.canon_index if canon else self.legends_index) or self.index) or 100000
 
+    def card_sort_text(self):
+        if self.card and "#" in self.card:
+            return re.sub("#([0-9])\)", "#0\\1)", self.card.replace("''", ""))
+        elif self.card:
+            return self.card.replace("''", "")
+        else:
+            return self.original
+
     def is_internal_mode(self):
         return self.mode == "Web" or self.mode == "YT" or self.mode == "Toys" or self.mode == "Cards"
 
@@ -306,12 +314,12 @@ class SectionLeaf:
     :type subsections: dict[str, SectionLeaf]
     :type other: list[SectionLeaf]
     """
-    def __init__(self, name, header: str, num: int, level: int, combine=False):
+    def __init__(self, name, header: str, num: int, level: int, combine=False, lines=None):
         self.name = name
         self.header_line = header
         self.num = num
         self.level = level
-        self.lines = []
+        self.lines = lines or []
         self.subsections = {}
         self.invalid = False
         self.flag = False

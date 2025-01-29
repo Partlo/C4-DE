@@ -135,7 +135,7 @@ def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List
             o2 += line.count("{")
             c2 += line.count("}")
 
-            m = re.search("^\|([A-Za-z_ 0-9]+?)\=(.*)$", line)
+            m = re.search("^\|([A-Za-z_ 0-9]+?)=(.*)$", line)
             if m:
                 field = m.group(1).strip()
                 data[field] = data.get(field) or m.group(2).strip()
@@ -143,7 +143,7 @@ def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List
                 data[field] = f"{data[field]}\n{line}"
 
             if o == c:
-                if data[field].endswith("}}"):
+                if field is not None and data[field].endswith("}}"):
                     data[field] = data[field][:-2]
                 done = True
             elif o == (c - 1) and data[field].endswith("}}"):
@@ -162,7 +162,7 @@ def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List
                         data[field] = data.get(field) or n.group(2).strip()
                 elif data[field].count("{{") != data[field].count("}}") or (data[field].count("}}") == 0 and data[field].count("{{") == 0):
                     # print(field, line, data[field], n)
-                    n = re.search("^.*?(\|([A-Za-z_ 0-9]+?)\=(.*))$", data[field].replace("\n", ""))
+                    n = re.search("^.*?(\|([A-Za-z_ 0-9]+?)=(.*))$", data[field].replace("\n", ""))
                     if n:
                         data[field] = data[field].replace(n.group(1), "")
                         field = n.group(2).strip()
@@ -201,7 +201,8 @@ def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List
                     done = True
                 post.append(line)
 
-    return data, pre, post, on_own_line, found or '', scroll_box
+    infobox_type = found if found else ""
+    return data, pre, post, on_own_line, infobox_type, scroll_box
 
 
 def extract_date(text):
@@ -211,7 +212,7 @@ def extract_date(text):
         m = re.search("\*Finished episode.*\n.*?([A-z]+ [0-9]+).*?([0-9]{4})", m.group(3))
     if m:
         date_str = m.group(3).replace("[", "").replace("]", "").replace("*", "").strip()
-        date_str = re.sub("\[\[([A-Z][a-z][a-z]+)([A-z]+) ([0-9]+)\|\\1 \\3, ([0-9]+)\]\]", "\\1\\2 \\3, \\4", date_str)
+        date_str = re.sub("\[\[([A-Z][a-z][a-z]+)([A-z]+) ([0-9]+)\|\\1 \\3, ([0-9]+)]]", "\\1\\2 \\3, \\4", date_str)
         date_str = re.sub("^.*?([A-Za-z]+ [0-9]*?) ?( ?&[mn]dash; ?[A-Za-z]+( [0-9]+))?,? ([0-9]{4}).*", "\\1, \\4",
                           date_str)
     return date_str
@@ -236,12 +237,12 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes):
     data, pre, post, on_own_line, found, scroll_box = parse_infobox(text, all_infoboxes)
     if scroll_box:
         print(f"Scroll box found in infobox; cannot parse {page.title()}")
-        return text
+        return text, found
     if not found or found.lower() not in all_infoboxes:
         print(f"ERROR: no infobox found, or infobox below body text; cannot parse {page.title()}")
-        return text
+        return text, None
     elif found.lower().startswith("year"):
-        return text
+        return text, found
 
     infobox = all_infoboxes.get(found.lower())
     if not infobox:
@@ -268,21 +269,21 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes):
                 x = [k for k, v in REMAP.items() if v == f and data.get(k)]
                 v = data.get(x[0] if x else '') or v
             if f == "release date" and found.lower().replace("_", " ") != "iu media":
-                x = re.search("([Pp]ublished|[Rr]eleased|[Ii]ncluded|from) (in|on)? ?((\[*(January|February|March|April|May|June|July|August|September|October|November|December|fall|spring|winter|autumn)/?\]* ?)*?([0-9\[\], ]*)?(of )?\[*?[0-9]{4}\]*)",
+                x = re.search("([Pp]ublished|[Rr]eleased|[Ii]ncluded|from) (in|on)? ?((\[*(January|February|March|April|May|June|July|August|September|October|November|December|fall|spring|winter|autumn)/?]* ?)*?([0-9\[\], ]*)?(of )?\[*?[0-9]{4}]*)",
                               text)
                 if x:
                     v = x.group(3)
             if f == "published in" and found.lower().replace("_", " ") != "iu media":
                 v = data.get("issue") or ''
-                if re.search("\[\[(.*?) ([0-9]+)\|\\2( of .*?)?\]\]", v):
-                    v = re.sub("\[\[(.*?) ([0-9]+)\|\\2( of .*?)?\]\]", "[[\\1 \\2|''\\1'' \\2]]", v)
+                if re.search("\[\[(.*?) ([0-9]+)\|\\2( of .*?)?]]", v):
+                    v = re.sub("\[\[(.*?) ([0-9]+)\|\\2( of .*?)?]]", "[[\\1 \\2|''\\1'' \\2]]", v)
                 elif extract:
                     x = re.search(
-                        "(published|adventure|released|article|supplement|appearing|appeare?[sd]|included|feature|department) (w?i?t?h?in|of|from) (\[\[(Fantasy Flight Games|De ?Agostini)\]\]'?s? )?(the )?(magazine )?(?P<t>'*\[\[.*?\]\]'*)",
+                        "(published|adventure|released|article|supplement|appearing|appeare?[sd]|included|feature|department) (w?i?t?h?in|of|from) (\[\[(Fantasy Flight Games|De ?Agostini)]]'?s? )?(the )?(magazine )?(?P<t>'*\[\[.*?]]'*)",
                         text)
                     if not x:
                         x = re.search(
-                            "written.* for (\[\[(Fantasy Flight Games|De ?Agostini)\]\]'?s? )?(the )?(magazine )?(?P<t>'*\[\[.*? [0-9]+(\|.*? [0-9]+'*?)?\]\]'*)",
+                            "written.* for (\[\[(Fantasy Flight Games|De ?Agostini)]]'?s? )?(the )?(magazine )?(?P<t>'*\[\[.*? [0-9]+(\|.*? [0-9]+'*?)?]]'*)",
                             text)
                     if x:
                         v = x.groupdict()['t']
@@ -327,4 +328,4 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes):
     new_text = "\n".join([*pre, *new_infobox, *post])
     if new_text.replace("\n}}", "}}") != page.get().replace("\n}}", "}}"):
         print(f"Found changes for {found} infobox")
-    return "\n".join([*pre, *new_infobox, *post]), found
+    return "\n".join([*pre, *new_infobox, *post]), found.lower() if found else None

@@ -3,16 +3,9 @@ import time
 import traceback
 from datetime import datetime, timedelta
 
-from pywikibot import Page, showDiff
-from typing import List, Tuple, Union, Dict, Optional
+from pywikibot import Page
 
-from c4de.sources.determine import extract_item, determine_id_for_item, convert_issue_to_template, swap_parameters, \
-    REFERENCE_MAGAZINES
-from c4de.sources.engine import AUDIOBOOK_MAPPING, GERMAN_MAPPING, SERIES_MAPPING, EXPANSION
-from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, AnalysisResults, SectionComponents, \
-    SectionItemIds, FinishedSection, NewComponents, UnknownItems
 from c4de.sources.infoboxer import handle_infobox_on_page
-from c4de.common import is_redirect, build_redirects, fix_redirects, do_final_replacements, fix_disambigs, prepare_title
 
 
 REPLACEMENTS = [
@@ -115,11 +108,6 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
         before = re.sub(
             "(]]|}})(\{+ ?(1st[A-z]*|[A-z][od]|[Ll]n|[Uu]n\|[Nn]cm?|[Cc]|[Aa]mbig|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Nn]cs?|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene) ?[|}])",
             "\\1 \\2", before)
-    if "{{Facebook" in before or "{{WebCite" in before or "{{Twitter" in before or "{{Instagram" in before:
-        while re.search("\{\{(Facebook|WebCite|Instagram|Twitter)(Cite)?([^}\n]*?)\n([^}\n]+)([\n}])", before):
-            before = re.sub("\{\{(Facebook|WebCite|Instagram|Twitter)(Cite)?([^}\n]*?)\n([^}\n]+)([\n}])", "{{\\1\\3\\4 \\5", before)
-        before = re.sub("(\{\{(Facebook|WebCite|Instagram|Twitter)(Cite)?[^}\n]+)\n}}", "\\1}}", before)
-        before = before.replace("FacebookCite", "Facebook")
 
     x, _, y = target.title().replace("/Legends", "").replace("/Canon", "").partition(" (")
     for z in ["{{PAGENAME}}", x, target.title()]:
@@ -136,10 +124,6 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
         elif f"|title2={y}" in before:
             before = before.replace(f"|title2={y}", "")
 
-    # if "(" in target.title() and "|title=''{{PAGENAME}}''" in before:
-    #     x, _, _ = target.title().partition(" (")
-    #     before = before.replace("|title=''{{PAGENAME}}''", f"|title=''{x}''")
-
     # now = datetime.now()
     infobox = None
     if all_infoboxes and not target.title().startswith("User:") and not target.title().startswith("File:"):
@@ -148,33 +132,36 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
 
     before = re.sub("= ?Non-[Cc]anon [Aa]ppearances ?=", "=Non-canon appearances=", before)
     before = re.sub("= ?([Cc]ollections?|Collected [Ii]n) ?=", "=Collections=", before)
+    before = re.sub("=+'*Non-canonical (appearances|sources)'*=+", "===Non-canon \\1===", before)
+    before = re.sub("\n===(Merchandis(e|ing)(.*?)|Adaptations?|Tie[ -]ins?( media)?)===", "\n==Adaptations==", before)
+    if "<references" in before.lower():
+        before = re.sub("<[Rr]efe?rences ?/ ?>", "{{Reflist}}", before)
 
     # now = datetime.now()
     before = re.sub("(\{\{(Unknown|Series)Listing.*?}})\{\{", "\\1 {{", before)
     before = before.replace("||text=", "|text=")
+    before = before.replace("{{C|non-canon|reprint=1}}", "")
+    before = before.replace("\"/>", "\" />").replace("<nowiki>|</nowiki>", "&#124;")
     before = re.sub("(\{\{1st[A-z]*)\|\n}}", "\\1}}", before)
     before = re.sub("(\{\{1st[A-z]*\|[^|}\n]*?)\n}}", "\\1}}", before)
     before = re.sub("\n=([A-z ]+)==", "\n==\\1==", before)
     before = re.sub("(?<!\[)\[((?!Original)[^\[\]\n]+)]]", "[[\\1]]", before)
-    before = re.sub("({{[Ss]croll[_ ]box\|)\*", "{{Scroll_box|\n*", before)
+    before = re.sub("({{[Ss]croll[_ ]?[Bb]ox\|)\*", "{{ScrollBox|\n*", before)
     before = re.sub("([A-z0-9.>])(\[\[File:.*?]]\n)", "\\1\n\\2", before)
-    before = re.sub("=+'*Non-canonical (appearances|sources)'*=+", "===Non-canon \\1===", before)
     before = re.sub("\{\{(.*?[^\n\]])]}(?!})", "{{\\1}}", before)
     before = re.sub("^(.*?) +\n", "\\1\n", before)
     before = re.sub("\* +([A-z0-9'\[{])", "*\\1", before)
-    if "<references" in before.lower():
-        before = re.sub("<[Rr]efe?rences ?/ ?>", "{{Reflist}}", before)
-    before = re.sub("([A-z'0-9\]]+) [ ]+([A-z'0-9\[]+)", "\\1 \\2", before)
+    before = re.sub("([A-z'0-9\]]+)  +([A-z'0-9\[]+)", "\\1 \\2", before)
     before = re.sub("\|image=(File:)?([A-Z0-9 _]+\..+)\n", "|image=[[File:\\2]]", before)
     before = re.sub("(\|image=\[\[File:[^\n\]]+?)\|.*?]]", "\\1]]", before)
-    before = re.sub("\"/>", "\" />", before).replace("<nowiki>|</nowiki>", "&#124;")
     before = re.sub("<small>\((.*?)\)</small>", "{{C|\\1}}", before)
     before = re.sub("([*#]\{\{[^}\n]+)\n([^{\n]+}})", "\\1\\2", before)
     before = re.sub("\{\{([^\n{}\[]+?)]]", "{{\\1}}", before)
-    before = re.sub("\{\{(Facebook|Twitter|Instagram|Discord)Cite", "{{\\1", before)
     before = re.sub("\*\{\{\{([A-Z])", "*{{\\1", before)
 
     before = re.sub("(\|cardname=[^\n}]+?)\{\{C\|(.*?)}}", "\\1(\\2)", before)
+    before = before.replace("cardname=\n", "cardname=")
+
     # weird multi-link listings, legacy formatting from the 2000s
     before = re.sub("\*('*?)\[\[([^\n\]|{]*?)]]('*?) '*?\[\[(\\2\([^\n\]{]*?)\|(.*?)]]'*", "*[[\\4|\\1\\2\\3 \\5]]", before)
     before = re.sub("\*'*?\[\[([^\n\]{]*?)(\|[^\n\]{]*?)]]'*? '*?\[\[(\\1 \([^\n\]{]*?)\|(.*?)]]'*", "*[[\\3|\\2 \\4]]", before)
@@ -186,18 +173,26 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     before = re.sub("(\|set=.*?)(\|subset=.*?)(\|stext=.*?)(\|.*?)?}}", "\\1\\3\\2\\4}}", before)
     before = re.sub("(\{\{([A-z_ ]+)\|set=[^|\n]+?)(\|link=[^|\n}]+?)(\|cardname=[^|\n}]+?)(\|.*?)?}}", "\\1\\4\\3\\5}}", before)
 
+    before = re.sub("\{\{[Ii]ncomplete[ _]?[Ll]ist.*?}}\n?\{\{(App|Credits)", "{{Incomplete\\1}}\n{{\\1", before)
+    before = re.sub("\{\{[Ii]ncomplete[ _][Ll]ist(.*?)}}", "{{IncompleteList\\1}", before)
+    before = re.sub("\{\{[Ss]ee[ _]also", "{{SeeAlso", before)
+    before = re.sub("\{\{[Mm]ore[ _]sources}}", "{{MoreSources}}", before)
+    before = re.sub("\{\{[Ss](uccession|tart)[ _]box", "{{S\\1Box", before)
+    before = re.sub("\{\{[Ee]nd[ _]box", "{{EndBox", before)
+    before = re.sub("\{\{[Mm]ultiple[ _]issues", "{{MultipleIssues", before)
+    before = re.sub("\{\{[Cc]orrect[ _]title", "{{CorrectTitle", before)
+
+    before = re.sub("( \{\{(C\|Hologram|1st|[MmPpCcVv]o).*?}})\\1+", "\\1", before)
+
     # temp fixes
     before = re.sub("\{\{([A-z _]+)\|(.*?)( \(.*?\))\|\\2\|card", "{{\\1|set=\\2\\3|card", before)
     before = re.sub("(\{\{SWMiniCite\|set=.*?) \(Star Wars Miniatures\)", "\\1", before)
-    before = re.sub("\{\{Topps\|set=Star Wars: Card Trader\|(cardname=)?", "{{SWCT|", before)
     before = re.sub("(\{\{Databank.*?}})( \{\{C\|alternate:.*?}})+", "\\1", before)
     before = before.replace("(Force Pack)", "(Star Wars: The Card Game)")
     before = re.sub("FFGXW2\|set=(.*?) \(Second Edition\)", "FFGXW2|set=\\1", before)
     before = re.sub("(\{\{SWIA\|.*?)}} \{\{C\|[A-z ]*?[Rr]ulebook}}", "\\1|rulebook=1}}", before)
     before = re.sub("(\{\{([A-z _0-9]+)\|.*?}}) (\{\{1st[a-z]*)\|\{\{\\2.*?}}( \{.*?)?\n", "\\1 \\3}}\\4\n", before)
-    # before = re.sub("(\{\{[A-z]+\|)([^\n|=]+?)\|([^\n|]+/[^\n|]+/[^\n|]*?)")
 
-    # Galaxies fixes
     while re.search("\[\[Category:[^\n|\]_]+_", before):
         before = re.sub("(\[\[Category:[^\n|\]_]+)_", "\\1 ", before)
     # print(f"regex-1: {(datetime.now() - now).microseconds / 1000} microseconds")
@@ -237,7 +232,7 @@ def regex_cleanup(before: str) -> str:
     if "web.archive" in before:
         before = re.sub("(?<!\[)\[https?://(.*?) (.*?)] (\(|\{\{C\|)\[http.*?web.archive.org/web/([0-9]+)/https?://.*?\\1.*?][)}]+","{{WebCite|url=https://\\1|text=\\2|archivedate=\\4}}", before)
     if "width=100%" in before:
-        before = re.sub("(\{\{[Ss]croll[ _]box(\n?\|.*?)?)\n?\|width=100%", "\\1", before)
+        before = re.sub("\{\{[Ss]croll[ _]?[Bb]ox(\n?\|.*?)?\n?\|width=100%", "{{ScrollBox\\1", before)
     if "simultaneous with" in before:
         before = re.sub("<small>\(First appeared(, simultaneous with (.*?))?\)</small>", "{{1st|\\2}}", before)
         before = re.sub("<small>\(First mentioned(, simultaneous with (.*?))?\)</small>", "{{1st|\\2}}", before)

@@ -1,9 +1,9 @@
 import codecs
 import re
-from datetime import datetime
 
 from c4de.sources.media import MEDIA_STRUCTURE, prepare_media_infobox_and_intro
-from c4de.sources.parsing import build_initial_components, build_page_components, build_media_page_components
+from c4de.sources.parsing import build_initial_components, build_page_components, clean_archive_usages, \
+    MASTER_STRUCTURE
 from pywikibot import Page, Category, showDiff
 
 from c4de.sources.analysis import analyze_section_results
@@ -29,20 +29,28 @@ def build_section_from_pieces(section: SectionComponents, items: FinishedSection
         pieces.append(media_cat)
         added_media_cat = True
 
+    remove_scroll = False
+    if items.rows <= 20 and any("{{scroll" in i.lower() for i in pieces):
+        pieces = [ln for ln in pieces if not "{{scroll" in ln.lower()]
+        remove_scroll = True
+
     if items.text:
         pieces.append(items.text)
     if section.trailing:
         pieces.append("")
         pieces += section.trailing
     diff = 0
-    for s in pieces:
-        diff += s.count("{{")
-        diff -= s.count("}}")
+    for i in range(len(pieces)):
+        diff += pieces[i].count("{{")
+        diff -= pieces[i].count("}}")
+        if diff == -2 and remove_scroll:
+            pieces[i] = re.sub("^(.*?)}}([^}]*?)$", "\\1\\2", pieces[i])
     if diff > 0:
         pieces.append("}}")
     pieces.append("")
     pieces.append(section.after)
-    return do_final_replacements("\n".join(pieces).strip() + "\n\n", True), added_media_cat
+    # return do_final_replacements("\n".join(pieces).strip() + "\n\n", True), added_media_cat
+    return "\n".join(pieces).strip() + "\n\n", added_media_cat
 
 
 def check_for_media_cat(section: SectionComponents):
@@ -107,62 +115,81 @@ def sort_categories(text, namespace_id):
     return x
 
 
-def build_final_text(page: Page, results: PageComponents, disambigs: list, remap: dict, redirects: dict,
-                     components: NewComponents, log: bool):
-    # now = datetime.now()
-    pieces = [sort_top_template(l) if "{{top" in l.lower() else l for l in results.before.strip().splitlines()]
+def add_parsed_section(pieces: list, component: SectionComponents, finished: FinishedSection, log, mcs_name, media_cat):
+    t, added = build_section_from_pieces(component, finished, log, media_cat if mcs_name == finished.name else None)
+    pieces.append(t)
+    return None if added else media_cat
+
+
+def build_new_final_text(page: Page, results: PageComponents, disambigs: list, remap: dict, redirects: dict,
+                         appearances: FullListData, sources: FullListData, components: NewComponents, log: bool):
+    if results.media:
+        pieces = prepare_media_infobox_and_intro(page, results, appearances, sources)
+    else:
+        pieces = [sort_top_template(ln) if "{{top" in ln.lower() else ln for ln in results.before.strip().splitlines()]
     pieces.append("")
 
-    if "{{mediacat" in results.final.lower() or "{{imagecat" in results.final.lower():
-        media_cat = None
-    elif any(check_for_media_cat(s) for s in [results.apps, results.nca, results.src, results.ncs]):
-        media_cat = None
-    else:
-        ic, ac = find_media_categories(page)
-        media_cat = f"{{{{Mediacat{ic}{ac}}}}}" if (ic or ac) else None
+    # if "{{mediacat" in results.final.lower() or "{{imagecat" in results.final.lower():
+    #     media_cat = None
+    # elif any(check_for_media_cat(s) for s in [results.apps, results.nca, results.src, results.ncs, results.links, results.collections]):
+    #     media_cat = None
+    # else:
+    #     ic, ac = find_media_categories(page)
+    #     media_cat = f"{{{{Mediacat{ic}{ac}}}}}" if (ic or ac) else None
     media_cat = ''
 
-    section = sorted([components.nca, components.apps, components.ncs, components.src], key=lambda a: a.rows)[-1]
+    section = sorted([components.links, components.nca, components.apps, components.ncs, components.src], key=lambda a: a.rows)[-1]
     mc_section_name = section.name if section.rows > 3 else None
 
-    if components.apps.text or results.apps.has_text():
-        t, added_media_cat = build_section_from_pieces(results.apps, components.apps, log, media_cat if mc_section_name == components.apps.name else None)
-        if added_media_cat:
-            media_cat = None
-        pieces.append(t)
-    if components.nca.text or results.nca.has_text():
-        t, added_media_cat = build_section_from_pieces(results.nca, components.nca, log, media_cat if mc_section_name == components.nca.name else None)
-        if added_media_cat:
-            media_cat = None
-        pieces.append(t)
-    if components.src.text or results.src.has_text():
-        t, added_media_cat = build_section_from_pieces(results.src, components.src, log, media_cat if mc_section_name == components.src.name else None)
-        if added_media_cat:
-            media_cat = None
-        pieces.append(t)
-    if components.ncs.text or results.ncs.has_text():
-        t, added_media_cat = build_section_from_pieces(results.ncs, components.ncs, log, media_cat if mc_section_name == components.ncs.name else None)
-        if added_media_cat:
-            media_cat = None
-        pieces.append(t)
-
-    if "<ref" in results.before and "{{reflist" not in results.original.lower():
-        if media_cat:
-            pieces.append("==Notes and references==\n" + media_cat + "\n{{Reflist}}\n\n")
+    otx = page.get()
+    structure = MEDIA_STRUCTURE if results.media else MASTER_STRUCTURE
+    for key, header_line in structure.items():
+        if key == "References":
+            if key in results.sections:
+                pieces.append("\n".join(results.sections[key].build_text()))
+                if "{{mediacat" in pieces[-1].lower():
+                    media_cat = None
+            elif "<ref" in otx and "{{reflist}}" not in otx:
+                if media_cat:
+                    pieces.append("==Notes and references==\n" + media_cat + "\n{{Reflist}}\n\n")
+                else:
+                    pieces.append("==Notes and references==\n{{Reflist}}\n\n")
+        elif key == "Appearances" and not results.real:
+            media_cat = add_parsed_section(pieces, results.apps, components.apps, log, mc_section_name, media_cat)
+        elif key == "Non-Canon Appearances":
+            media_cat = add_parsed_section(pieces, results.nca, components.nca, log, mc_section_name, media_cat)
+        elif key == "Sources":
+            media_cat = add_parsed_section(pieces, results.src, components.src, log, mc_section_name, media_cat)
+        elif key == "Non-Canon Sources":
+            media_cat = add_parsed_section(pieces, results.ncs, components.ncs, log, mc_section_name, media_cat)
+        elif key == "Links":
+            media_cat = add_parsed_section(pieces, results.links, components.links, log, mc_section_name, media_cat)
+        elif key not in results.sections:
+            continue
         else:
-            pieces.append("==Notes and references==\n{{Reflist}}\n\n")
+            # TODO: mediacat
+            section = results.sections[key]
+            if log:
+                print(f"Creating {key} section with {len(section.lines)} lines and {len(section.subsections)} / {len(section.other)} subsections")
 
-    if components.links.text or results.links.has_text():
-        pieces.append("")
-        t, added_media_cat = build_section_from_pieces(results.links, components.links, log, None)
-        if results.final and "Notes and references" in results.final:
-            snip = re.search("(==Notes and references==\n.*?\{\{[Rr]eflist.*?\n\n*)", results.final)
-            if snip:
-                results.final = results.final.replace(snip.group(1), "")
-                pieces.append(f"{snip.group(1)}\n\n")
-        pieces.append(t)
+            lines = section.build_text(header_line)
+            for subheader, subsection in section.subsections.items():
+                lines += subsection.build_text(subheader)
+            for other in section.other:
+                lines += other.build_text()
 
-    return final_steps(page, results, components, pieces, disambigs, remap, redirects, media_cat)
+            lines.append("")
+
+            text = "\n".join(lines)
+            if "onlyinclude" in text:
+                text = re.sub("}}\n\n+</onlyinclude>\n+", "}}\n</onlyinclude>\n\n", text)
+            text = fix_redirects(redirects, text, key, remap, disambigs, overwrite=key == "Appearances")
+
+            # pieces.append(do_final_replacements(text, True))
+            pieces.append(text)
+            pieces.append("")
+
+    return final_steps(page, results, components, pieces, disambigs, remap, {}, media_cat)
 
 
 def final_steps(page: Page, results: PageComponents, components: NewComponents, pieces: list, disambigs: list,
@@ -173,11 +200,12 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
         pieces.append("")
 
     if results.final:
-        pieces.append(build_final(results.final, media_cat, results.real))
+        pieces.append(build_final(results.final, media_cat))
 
     new_txt = sort_categories("\n".join(pieces), page.namespace().id)
-    if results.canon and "/Legends" in new_txt:
+    if results.canon and not results.real and "/Legends" in new_txt:
         new_txt = handle_legends_links(new_txt, page.title())
+    new_txt = clean_archive_usages(page, new_txt)
 
     new_txt = re.sub("(\{\{DEFAULTSORT:.*?}})\n\n+\[\[[Cc]ategory", "\\1\n[[Category", new_txt)
     new_txt = re.sub("(?<![\n=}])\n==", "\n\n==", re.sub("\n\n+", "\n\n", new_txt)).strip()
@@ -201,70 +229,6 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
     return t.replace("\n\n{{RelatedCategories", "\n{{RelatedCategories")
 
 
-def build_media_page(page: Page, results: PageComponents, disambigs: list, remap: dict, redirects: dict,
-                     appearances: FullListData, sources: FullListData, components: NewComponents, log: bool):
-    pieces = prepare_media_infobox_and_intro(page, results, appearances, sources)
-    pieces.append("")
-
-    media_cat = None
-    otx = page.get()
-    for key, header_line in MEDIA_STRUCTURE.items():
-        if key == "References":
-            if key in results.sections:
-                pieces.append("\n".join(results.sections[key].build_text()))
-                if "{{mediacat" in pieces[-1].lower():
-                    media_cat = None
-            elif "<ref" in otx and "{{reflist}}" not in otx:
-                if media_cat:
-                    pieces.append("==Notes and references==\n" + media_cat + "\n{{Reflist}}\n\n")
-                else:
-                    pieces.append("==Notes and references==\n{{Reflist}}\n\n")
-            continue
-        elif key == "Sources":
-            if components.src.text or results.src.has_text():
-                t, added_media_cat = build_section_from_pieces(results.src, components.src, log, media_cat)
-                if "and references" in t:
-                    print(key, t)
-                if added_media_cat:
-                    media_cat = None
-                pieces.append(t)
-            continue
-        elif key == "Links":
-            if components.links.text or results.links.has_text():
-                pieces.append("")
-                t, added_media_cat = build_section_from_pieces(results.links, components.links, log, None)
-                if "and references" in t:
-                    print(key, t)
-                if added_media_cat:
-                    media_cat = None
-                pieces.append(t)
-            continue
-        elif key not in results.sections:
-            continue
-
-        # TODO: mediacat
-        section = results.sections[key]
-        if log:
-            print(f"Creating {key} section with {len(section.lines)} lines and {len(section.subsections)} / {len(section.other)} subsections")
-
-        lines = section.build_text(header_line)
-        for subheader, subsection in section.subsections.items():
-            print(key, subheader, len(subsection.lines))
-            lines += subsection.build_text(subheader)
-        for other in section.other:
-            lines += other.build_text()
-
-        lines.append("")
-
-        text = "\n".join(lines)
-        text = fix_redirects(redirects, text, key, remap, disambigs, overwrite=key == "Appearances")
-
-        pieces.append(do_final_replacements(text, True))
-        pieces.append("")
-
-    return final_steps(page, results, components, pieces, disambigs, remap, {}, media_cat)
-
-
 def handle_legends_links(text, title):
     body, header, bts = text.partition("==Behind the scenes==")
     if "/Legends" in body:
@@ -281,19 +245,19 @@ def handle_legends_links(text, title):
     return f"{body}{header}{bts}"
 
 
-def build_final(final, media_cat, real):
-    if not real and "RelatedCategories" not in final and re.search("\n\[\[[Cc]ategory:.*?\| ]]", final):
+def build_final(final, media_cat):
+    if "RelatedCategories" not in final and re.search("\n\[\[[Cc]ategory:.*?\| ]]", final):
         cats = []
         lines = []
         regular = 0
-        for l in final.splitlines():
-            x = re.search("^(\[\[[Cc]ategory:.*?)\| ]]", l)
+        for ln in final.splitlines():
+            x = re.search("^(\[\[[Cc]ategory:.*?)\| ]]", ln)
             if x:
                 cats.append("|" + x.group(1) + "]]")
             else:
-                if "category:" in l.lower():
+                if "category:" in ln.lower():
                     regular += 1
-                lines.append(l)
+                lines.append(ln)
 
         if cats and regular == 0:
             print("Unable to move categories to RelatedCategories, as no categories would be left")
@@ -316,22 +280,15 @@ def build_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appe
                sources: FullListData, remap: dict, include_date: bool, checked: list, log=True, use_index=True,
                collapse_audiobooks=True, manual: str = None, extra=None):
     text, redirects, results = build_initial_components(target, disambigs, infoboxes, manual)
-    if results.media:
-        unknown = build_media_page_components(target, text, redirects, results, types, disambigs, appearances, sources,
-                                              remap, log)
-    else:
-        unknown = build_page_components(target, text, redirects, results, types, disambigs, appearances, sources, remap,
-                                        log=log, extra=extra)
+    unknown = build_page_components(target, text, redirects, results, types, disambigs, appearances, sources,
+                                    remap, log, extra=extra)
     if results.real and collapse_audiobooks:
         collapse_audiobooks = False
 
-    new_components, dates, unknown_items, analysis = analyze_section_results(
+    components, dates, unknown_items, analysis = analyze_section_results(
         target, results, disambigs, appearances, sources, remap, use_index, include_date, collapse_audiobooks, checked, log)
 
-    if results.media:
-        new_txt = build_media_page(target, results, disambigs, remap, redirects, appearances, sources, new_components, log)
-    else:
-        new_txt = build_final_text(target, results, disambigs, remap, redirects, new_components, log)
+    new_txt = build_new_final_text(target, results, disambigs, remap, redirects, appearances, sources, components, log)
     return new_txt, analysis, dates, unknown, unknown_items
 
 

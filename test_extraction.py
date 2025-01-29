@@ -6,7 +6,7 @@ from datetime import datetime
 from pywikibot import Site, Page, handle_args, pagegenerators, showDiff, input_choice, Timestamp
 
 from c4de.sources.build import build_new_text
-from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, build_template_types
+from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, load_template_types
 from c4de.sources.infoboxer import load_infoboxes
 
 
@@ -59,7 +59,7 @@ def analyze(*args):
         print(f"Starting on {start_on}")
 
     start = datetime.now()
-    types = build_template_types(gen_factory.site)
+    types = load_template_types(gen_factory.site)
     appearances = load_full_appearances(gen_factory.site, types, False, log_match=False)
     sources = load_full_sources(gen_factory.site, types, False)
     remap = load_remap(gen_factory.site)
@@ -174,6 +174,9 @@ def analyze(*args):
             #     continue
 
             # showDiff(old_text, text, context=1)
+            z1 = re.sub("\|stext=.*?(\|.*?)?}}", "\\1}}", z1)
+            z2 = re.sub("\|stext=.*?(\|.*?)?}}", "\\1}}", z2)
+
             showDiff(re.sub("<!--.*?-->", "", z2), re.sub("<!--.*?-->", "", z1), context=1)
             if not override and always:
                 page.put(text, message, botflag=match or bf)

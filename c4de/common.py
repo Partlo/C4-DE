@@ -146,7 +146,8 @@ def fix_disambigs(r, t, text):
     return text
 
 
-def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, remap, file=False, appearances: dict=None, sources: dict=None, overwrite=False) -> str:
+def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, remap, file=False, appearances: dict=None,
+                  sources: dict=None, overwrite=False) -> str:
     for r, t in redirects.items():
         if t in disambigs or "(disambiguation)" in t:
             fix_disambigs(r, t, text)
@@ -198,10 +199,14 @@ def do_final_replacements(new_txt, replace):
                           re.sub("(\[\[(?!File:)[^\[\]|\n]+—[^\[\]|\r\n]+\|[^\[\]|\r\n]+)&mdash;", "\\1—", new_txt2))
         new_txt2 = re.sub("\[\[(.*?)\|\\1((?!( of Bestoon).)*?)]]", "[[\\1]]\\2", new_txt2)
         new_txt2 = re.sub("(\|set=(.*?) \(.*?\))\|(s?text|sformatt?e?d?)=\\2([|}])", "\\1\\4", new_txt2)
+        new_txt2 = re.sub("([^']''[^' ][^']+?'')'s ", "\\1{{'s}} ", new_txt2)
+        new_txt2 = re.sub("([^']''[^' ][^']+?s'')' ", "\\1{{'}} ", new_txt2)
+        new_txt2 = new_txt2.replace("{{'}}s", "{{'s}}")
         new_txt2 = new_txt2.replace("{{'}}\n", "{{'}}")
         new_txt2 = re.sub("(\[\[((.*?) \((.*?)\)).*?]].*?)(\{\{Ab\|.*?)\[\[\\2\|''\\3'' \\4]]", "\\1\\5[[\\2|\\4]]", new_txt2)
         new_txt2 = re.sub("(\{\{[^\n{}]+?)(\|nolive=1)([^\n{}]*?(\|nobackup=1)?[^\n{}]*?)}}", "\\1\\3\\2}}", new_txt2)
         new_txt2 = re.sub("(\{\{[^\n{}]+?)(\|nobackup=1)([^\n{}]+?)}}", "\\1\\3\\2}}", new_txt2)
+        new_txt2 = re.sub("([\n[]File:[^ \n|\]\[]+) ", "\\1_", new_txt2)
         x = re.search("\[\[([A-Z])(.*?)\|(.\\2)(.*?)]]", new_txt2)
         if x and x.group(3).lower().startswith(x.group(1).lower()) and x.group(3).lower() != "ochi of bestoon":
             new_txt2 = new_txt2.replace(x.group(0), f"[[{x.group(3)}]]{x.group(4)}")
@@ -211,18 +216,16 @@ def do_final_replacements(new_txt, replace):
 
         # new_txt2 = re.sub("}} \{\{C\|Reissued in (\[\[.*?)}}", "reissued=\\1}}", new_txt2)
         # new_txt2 = re.sub("(reissused?=.*?\[\[.*?\|)''(.*?)'']]", "\\1\\2]]", new_txt2)
-        new_txt2 = re.sub("(\{\{TOMCite\|100\|Database)\|.*?}}", "\\1}}", new_txt2)
         new_txt2 = re.sub("2012 edition}} \{\{C\|\[*2012]* edition}}", "2012 edition}}", new_txt2)
         new_txt2 = new_txt2.replace(" (SWGTCG)|scenario=", "|scenario=")
         new_txt2 = new_txt2.replace("[[Ochi]] of Bestoon", "[[Ochi|Ochi of Bestoon]]")
         new_txt2 = new_txt2.replace("[[Battle station/Legends|battlestation", "[[Battle station/Legends|battle station")
         new_txt2 = re.sub("(\{\{SWMiniCite\|set=.*?) \(Star Wars Miniatures\)", "\\1", new_txt2)
         new_txt2 = re.sub("\*.*?\{\{FactFile\|1\|Gala.*? [Mm]ap.*?}}", "*<!-- 2001-12-27 -->{{FactFile|1|[[:File:Galaxymap3.jpg|Galaxy Map poster]]}}", new_txt2)
-        new_txt2 = re.sub("(\{\{FFCite\|.*?}})<.*?>", "\\1", new_txt2)
         if "'''s " in new_txt2:
             new_txt2 = re.sub("( ''[^'\n]+'')'s ", "\\1{{'s}} ", new_txt2)
         if "{{more" in new_txt2.lower():
-            new_txt2 = re.sub("(\{\{[Mm]ore[ _]sources}})\n+}}", "}}\n\\1", new_txt2)
+            new_txt2 = re.sub("\{\{[Mm]ore[ _]?[Ss]ources}}\n+}}", "}}\n{{MoreSources}}", new_txt2)
         replace = new_txt != new_txt2
         new_txt = new_txt2
     return new_txt

@@ -28,6 +28,7 @@ def extract_release_date(title, text):
                 d = re.sub("&ndash;[A-z]+ [0-9|]+", "", d)
                 d = re.sub("\([A-Z]+\)", "", d)
                 d = re.sub("([A-z]+ ?[0-9]*) ([0-9]{4})( .*?)$", "\\1 \\2", d)
+                d = d.split("<br")[0]
                 date_strs.append((d.split("-")[0], m.groupdict().get(f"r{i}")))
 
     page_dates = []

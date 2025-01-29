@@ -1,6 +1,7 @@
 import re
 import traceback
 
+from c4de.protocols.cleanup import parse_archive
 from pywikibot import Page
 from typing import List, Tuple, Union, Dict, Optional
 
@@ -8,8 +9,8 @@ from c4de.sources.cleanup import initial_cleanup
 from c4de.sources.determine import extract_item, determine_id_for_item, convert_issue_to_template, swap_parameters
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, SectionComponents, SectionLeaf
 from c4de.sources.external import prepare_basic_url
-from c4de.sources.media import match_header, rearrange_sections, MASTER_STRUCTURE
-from c4de.common import build_redirects, fix_redirects, do_final_replacements, fix_disambigs, prepare_title
+from c4de.sources.media import match_header, rearrange_sections
+from c4de.common import build_redirects, fix_redirects, fix_disambigs, prepare_title
 
 
 BY_INDEX = "Use Master Index"
@@ -24,7 +25,9 @@ SPECIAL = {
 INDEX_AND_CATS = ["{{imagecat", "{{mediacat", "{{indexpage", "{{wq", "{{incomplete", "{{quote", "<div style=",
                   "set in '''bold'''", "{{cleanup", "{{more", "{{coor title", "{{coor_title"]
 
-IU_STRUCTURE = {
+
+MASTER_STRUCTURE = {
+    "Collections": "==Collections==",
     "Appearances": "==Appearances==",
     "Non-Canon Appearances": "===Non-canon appearances===",
     "Sources": "==Sources==",
@@ -71,7 +74,7 @@ def _check_format_text(t, y):
     )
 
 
-def build_initial_components(target: Page, disambigs: list, all_infoboxes, manual: str=None) -> Tuple[str, Dict, PageComponents]:
+def build_initial_components(target: Page, disambigs: list, all_infoboxes, manual: str = None) -> Tuple[str, Dict, PageComponents]:
     # now = datetime.now()
     before, infobox = initial_cleanup(target, all_infoboxes, before=manual)
     # print(f"cleanup: {(datetime.now() - now).microseconds / 1000} microseconds")
@@ -97,7 +100,7 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, manua
             canon = True
         elif "legends articles" in c.title().lower():
             legends = True
-        elif c.title() == "Real-world media":
+        elif c.title(with_ns=False) == "Real-world media":
             real = True
             media = True
             if re.search("\{\{Top\|(.*?\|)?(dotj|tor|thr|fotj|rote|aor|tnr|rofo|cnjo|can|ncc)(\|.*?)?}}", target.get()):
@@ -113,121 +116,43 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, manua
     return before, redirects, PageComponents("", canon, non_canon, unlicensed, real, app_mode, media, infobox)
 
 
-def build_page_components(target: Page, before: str, redirects: dict, results: PageComponents, types: dict,
-                          disambigs: list, appearances: FullListData, sources: FullListData, remap: dict,
-                          log=True, extra=None):
-    unknown = []
-    final = ""
-    ref_section = ""
-    rest = ""
-
-    x = re.split("(\{\{DEFAULTSORT|\{\{[Ii]nterlang|\[\[Category:|\{\{RelatedCategories)", before, 1)
-    if x:
-        before = x[0]
-        final = "".join(x[1:])
-
-    for name, header in IU_STRUCTURE.items():
-        if name == "Appearances" and ("{{app\n" in before.lower() or "{{app|" in before.lower()):
-            continue
-        if header in rest:
-            rest, section_text = rest.rsplit(header, 1)
-        elif header in before:
-            before, section_text = before.rsplit(header, 1)
-        else:
-            continue
-
-        pieces = re.split("(==|\{\{DEFAULTSORT|\{\{[Ii]nterlang|\[\[Category:|\{\{RelatedCategories)", section_text, 1)
-        section = pieces[0]
-        after = ""
-        next_or_last = "".join(pieces[1:])
-        if "{{start_box" in section.lower() or "{{start box" in section.lower():
-            pieces2 = re.split("({{[Ss]tart[_ ]box)", section, 1)
-            if len(pieces2) == 3:
-                section = pieces2[0]
-                after = pieces2[1] + pieces2[2]
-        if "==Behind the scenes==" in next_or_last:
-            before = f"{before}\n{next_or_last}"
-        else:
-            rest = f"{next_or_last}\n{rest}"
-
-        if name == "References":
-            ref_section = f"{header}{section}\n{after}"
-            continue
-        elif name == "Sources" and extra:
-            for i in extra:
-                section += f"\n*''[[{i}]]''"
-
-        # section, after = split_section_pieces(section_text)
-        # before, after, final = move_interlang(before, after, final)
-        section = fix_redirects(redirects, section, name, disambigs, remap)
-        result = parse_section(section, types, "Appearances" in header, unknown, after, log, name)
-
-        if result and result.after.startswith("==Behind the scenes=="):
-            before += f"\n{result.after}"
-            result.after = ""
-        if log:
-            print(f"{name}: {len(result.items)} --> {len(set(i.unique_id() for i in result.items))}")
-
-        if name == "Appearances":
-            results.apps = result
-        elif name == "Non-Canon Appearances":
-            results.nca = result
-        elif name == "Sources":
-            results.src = result
-        elif name == "Non-Canon Sources":
-            results.ncs = result
-        elif name == "Links":
-            results.links = result
-
-    if ref_section and results.links:
-        results.links.before = f"{ref_section}\n{results.links.before}"
-    elif ref_section:
-        final = f"\n{ref_section}\n{final}".strip()
-
-    final = f"{rest}\n{final}".strip()
-    if results.links and results.links.after:
-        final = f"{results.links.after}\n{final}"
-        results.links.after = ""
-    # print(f"parse: {(datetime.now() - now).microseconds / 1000} microseconds")
-
-    results.before = analyze_body(target, before, types, appearances, sources, remap, disambigs, redirects, results.canon, log)
-    results.final = final
-    return unknown
+def match_iu_header(line):
+    for k, v in MASTER_STRUCTURE.items():
+        if line.lower() == v.lower():
+            return k
+    return ""
 
 
-def build_media_page_components(target: Page, text: str, redirects: dict, results: PageComponents, types: dict,
-                                disambigs: list, appearances: FullListData, sources: FullListData, remap: dict, log: bool):
-    text = analyze_body(target, text, types, appearances, sources, remap, disambigs, redirects, results.canon, log)
-    unknown = []
-    final = ""
-    rest = ""
-
-    x = re.split("(\{\{DEFAULTSORT|\[\[[Cc]ategory:|\{\{[Ii]nterlang)", text, 1)
-    if x:
-        text = x[0]
-        final = "".join(x[1:])
-
+def split_by_section(text: str, results: PageComponents) -> Tuple[Dict[str, SectionLeaf], List[str]]:
     by_section = {}
     intro = []
-    current, subheader = None, None
+    current, subheader = "", ""
     section_num, subheader_num = 1, 1
     for line in text.splitlines():
-        if line.strip().startswith("=="):
+        if not results.real and line.strip().startswith("==") and match_iu_header(line.strip()):
+            current = match_iu_header(line)
+            by_section[current] = SectionLeaf(current, line.strip(), 1, int(line.count("=") / 2))
+        elif results.real and line.strip().startswith("===") and not line.strip().startswith("===="):
+            # only process subheaders if it's a real-world article
             x = re.search("^===?([^=]+?)=+ *$", line)
-            if x and int(line.count("=") / 2) == 3:
+            if x:
                 subheader = x.group(1).strip()
                 by_section[current].subsections[subheader] = SectionLeaf(subheader, line.strip(), subheader_num, 3)
                 subheader_num += 1
-            elif x:
+            else:
+                print(f"Unknown header line: {line}")
+        elif results.real and line.strip().startswith("==") and not line.strip().startswith("==="):
+            # store top-level section headers in a dict and store the lines for that section under that key
+            x = re.search("^===?([^=]+?)=+ *$", line)
+            if x:
                 current = x.group(1).strip()
-                if current in by_section:
-                    by_section[current].combine = True
-                    by_section[current].subsections[subheader] = SectionLeaf(current, line.strip(), section_num, 2, combine=True)
-                else:
+                if current not in by_section:
                     by_section[current] = SectionLeaf(current, line.strip(), section_num, 2)
-                section_num += 1
+                    section_num += 1
+                else:
+                    print(f"Unexpected state: duplicate {x.group(1).strip()} header")
                 subheader = None
-                subheader_num = 1
+                subheader_num = len(by_section[current].subsections) + 1
             else:
                 print(f"Unknown header line: {line}")
         elif not current:
@@ -236,40 +161,96 @@ def build_media_page_components(target: Page, text: str, redirects: dict, result
             by_section[current].subsections[subheader].lines.append(line)
         else:
             by_section[current].lines.append(line)
+    return by_section, intro
+
+
+def build_page_components(target: Page, text: str, redirects: dict, results: PageComponents, types: dict,
+                          disambigs: list, appearances: FullListData, sources: FullListData, remap: dict, log: bool,
+                          extra=None):
+    text = analyze_body(target, text, types, appearances, sources, remap, disambigs, redirects, results.canon, log)
+    unknown = []
+    final = ""
+    rest = ""
+
+    x = re.split("(\{\{DEFAULTSORT|\{\{[Ii]nterlang|\[\[Category:|\{\{RelatedCategories)", text, 1)
+    if x:
+        text = x[0]
+        final = "".join(x[1:])
+
+    by_section, intro = split_by_section(text, results)
 
     valid = {}
     other = {}
     valid_nums = {}
     for header, section in by_section.items():
-        master_header = match_header(header, results.infobox)
-        if master_header and master_header in MASTER_STRUCTURE:
+        if results.real:
+            master_header = match_header(header, results.infobox)
+        else:
+            master_header = header if header in MASTER_STRUCTURE else None
+        if master_header == "References":
+            section.name = "Notes and references"
+            section.header_line = MASTER_STRUCTURE[master_header]
+            valid["References"] = [section]
+        # the 6 master sections should be parsed by the Engine, except the Appearances section of a real-world article
+        elif master_header in MASTER_STRUCTURE and not (results.real and master_header == "Appearances"):
             section_text = "\n".join(section.lines)
-            after = ""
-            if master_header == "References":
-                section.name = "Notes and references"
-                section.header_line = MASTER_STRUCTURE[master_header]
-                valid["References"] = [section]
-                continue
+            if master_header == "Sources" and extra and not results.real:
+                for i in extra:
+                    section_text += f"\n*''[[{i}]]''"
+            after = ""  # remove succession boxes from text before parsing
+            if "{{start_box" in section_text.lower() or "{{start box" in section_text.lower():
+                pieces2 = re.split("({{[Ss]tart[_ ]box)", section_text, 1)
+                if len(pieces2) == 3:
+                    section_text = pieces2[0]
+                    after = pieces2[1] + pieces2[2]
+
             section_text = fix_redirects(redirects, section_text, master_header, disambigs, remap)
-            result = parse_section(section_text, types, False, unknown, after, log, master_header)
+            result = parse_section(section_text, types, "Appearances" in master_header, unknown, after, log, master_header)
             if log:
                 print(f"{master_header}: {len(result.items)} --> {len(set(i.unique_id() for i in result.items))}")
             if master_header == "Collections":
                 results.collections = result
+            elif master_header == "Appearances":
+                results.apps = result
+            elif master_header == "Non-Canon Appearances":
+                results.nca = result
             elif master_header == "Sources":
                 results.src = result
+            elif master_header == "Non-Canon Sources":
+                results.ncs = result
             elif master_header == "Links":
                 results.links = result
             continue
         elif master_header:
+            # Identify any master sections that are incorrectly on a subheader level, and move them up
+            skip = []
+            for sx, sk in section.subsections.items():
+                ms_header = match_header(sx, results.infobox)
+                if ms_header and ms_header not in valid and ms_header not in by_section:
+                    valid[ms_header] = [sk]
+                    skip.append(sx)
+            if skip:
+                for x in skip:
+                    section.subsections.pop(x)
+                if not section.subsections and not section.lines:
+                    if master_header == "Plot Summary":
+                        section.lines.append("{{Plot}}")
+                    else:
+                        continue
+            if master_header == "Appearances" and results.infobox == "book":
+                if not any("<onlyinclude>" in ln for ln in section.lines):
+                    section.lines.insert(0, "<onlyinclude>")
+                    section.lines.append("</onlyinclude>")
             if master_header not in valid:
                 valid[master_header] = []
                 valid_nums[section.num] = master_header
-            print(header, master_header, section)
             valid[master_header].append(section)
-        else:
+        elif results.real:
             section.invalid = True
             other[header] = section
+        else:
+            print(f"Unexpected state, header {header} in section map for IU article")
+            continue
 
         if master_header in ["Plot Summary", "Opening Crawl", "Development", "Release/Reception", "Legacy", "Credits", "Appearances"]:
             continue
@@ -281,6 +262,7 @@ def build_media_page_components(target: Page, text: str, redirects: dict, result
 
     for k, v in other.items():
         x = v.num
+        v.flag = True
         found = False
         while x > 1:
             x -= 1
@@ -299,7 +281,13 @@ def build_media_page_components(target: Page, text: str, redirects: dict, result
                 rest += (f"==={sx}===\n" + '\n'.join(sz.lines) + "\n")
 
     results.before = "\n".join(intro)
-    results.sections = rearrange_sections(valid, results.infobox)
+    novel = None
+    if results.infobox:
+        for x in [" (novel)", f" (novelization)", ""]:
+            if f"{target.title()}{x}" in appearances.target:
+                novel = Page(target.site, f"{target.title()}{x}")
+                break
+    results.sections = rearrange_sections(valid, results.real, results.infobox, target.title(), novel)
 
     final = f"{rest}\n{final}".strip()
     if results.links and results.links.after:
@@ -392,7 +380,7 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
         elif "{{start_box" in s.lower() or "{{start box" in s.lower() or "{{interlang" in s.lower():
             succession_box = True
             other2.append(s)
-        elif s == "}}":
+        elif s == "}}":  # don't include the ending }}; it'll be added by build_section_from_pieces()
             if cs > 0:
                 cs = 0
         elif re.match("^<!--.*?-->$", s):
@@ -514,7 +502,29 @@ def analyze_body(page: Page, text, types, appearances: FullListData, sources: Fu
     new_text = text
     for full_ref, ref in references:
         new_text = handle_reference(full_ref, ref, page, new_text, types, appearances, sources, remap, disambigs, redirects, canon, log)
-    return do_final_replacements(new_text, True)
+    # return do_final_replacements(new_text, True)
+    return new_text
+
+
+def clean_archive_usages(page: Page, text):
+    templates_to_check = set()
+    for c in page.categories():
+        if c.title().endswith("same archivedate value") or c.title().endswith("with custom archivedate"):
+            templates_to_check.add(re.search("^(.*?) usages with.*?$", c.title(with_ns=False)).group(1))
+    for t in templates_to_check:
+        archive = parse_archive(page.site, "SWYouTube" if t in ["ThisWeek", "HighRepublic Show"] else t)
+        if archive and "YouTube" in t:
+            for x in re.findall("(\{\{" + t + "\|(video=)?(.*?)(\|.*?)?(\|archive(date|url)=.*?)(\|.*?)?}})", text):
+                if "nolive=" in x[0] or "oldversion" in x[0] or x[2].lower() not in archive:
+                    continue
+                text = text.replace(x[4], "")
+        elif archive:
+            for x in re.findall("(\{\{" + t + "\|(.*?\|)?(url|a?l?t?link)=(.*?)(\|.*?)?(\|archive(date|url)=.*?)(\|.*?)?}})", text):
+                if "nolive=" in x[0] or "oldversion" in x[0] or x[3].lower() not in archive:
+                    continue
+                text = text.replace(x[5], "")
+
+    return text
 
 
 REF_REPLACEMENTS = [("film]] film", "film]]"), ("|reprint=yes", ""), ("|reprint=1", ""), ("|audiobook=yes", ""), ("|audiobook=1", "")]
@@ -662,7 +672,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                 z = found[0].master.target.replace('"', '').replace('(', '').replace(')', '')
                 final_ref = final_ref.replace("<ref>", f"<ref name=\"{z}\">")
             elif len(found) == 1 and found[0].master.template and found[0].master.text:
-                z = found[0].master.text.replace('"', '').replace('(', '').replace(')', '')
+                z = found[0].master.text.replace('"', '').replace('(', '').replace(')', '').replace("'''", "").replace("''", "")
                 final_ref = final_ref.replace("<ref>", f"<ref name=\"{found[0].master.template}-{z}\">")
             elif len(found) == 1:
                 print(f"Cannot fix nameless reference to {found[0].master.target}: {ref}")

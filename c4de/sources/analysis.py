@@ -5,8 +5,8 @@ from c4de.sources.external import is_external_link, prepare_basic_url, prepare_o
 from pywikibot import Page
 from typing import List, Tuple, Union, Dict, Optional
 
-from c4de.sources.parsing import build_page_components, BY_INDEX, BY_DATE, is_number, is_official_link, build_card_text, \
-    UNCHANGED
+from c4de.sources.parsing import BY_INDEX, BY_DATE, UNCHANGED, is_number, is_official_link, build_card_text, \
+    build_initial_components, build_page_components
 from c4de.sources.determine import determine_id_for_item, swap_parameters
 from c4de.sources.engine import AUDIOBOOK_MAPPING, GERMAN_MAPPING, SERIES_MAPPING, EXPANSION
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, AnalysisResults, SectionComponents, \
@@ -198,8 +198,7 @@ def augment_appearances(new_apps: SectionItemIds, appearances: FullListData, col
                     abridged.append(b.target)
             elif "(audio)" in b.target or "(audio drama)" in b.target or (
                     not collapse_audiobooks and (b.parent if b.parent else b.target) not in app_targets):
-                print(
-                    f"Adding missing audiobook: {b.target} at {i}, {a.current.index}, {a.current.canon_index}, {a.current.legends_index}")
+                print(f"Adding missing audiobook: {b.target} at {i}, {a.current.index}, {a.current.canon_index}, {a.current.legends_index}")
                 z = ItemId(b, b, False, False, False)
                 extra = a.current.extra or ''
                 if "1stm" in extra:
@@ -350,10 +349,11 @@ def analyze_section_results(target: Page, results: PageComponents, disambigs: li
     unknown_final = []
     # now = datetime.now()
     targets = [t.current.target for t in [*new_apps.found, *new_src.found, *(new_nca.found if new_nca else []), *(new_ncs.found if new_ncs else [])] if t.current.target and not t.master.reprint]
-    new_apps, final_apps = build_new_section("==Appearances==", new_apps, title, results.app_mode, dates, results.canon, include_date,
-                                             log, use_index, mismatch, both_continuities, unknown_final, targets, results.real, results.unlicensed, collapse_audiobooks)
-    new_nca, final_nca = build_new_section("===Non-canon appearances===", new_nca, title, BY_DATE, dates, results.canon, include_date,
-                                           log, use_index, mismatch, both_continuities, unknown_final, targets, results.real, results.unlicensed, collapse_audiobooks)
+    new_apps, final_apps = build_new_section(
+        "==Appearances==", new_apps, title, results.app_mode, dates, results.canon, include_date, log, use_index,
+        mismatch, both_continuities, unknown_final, targets, results.real, results.unlicensed, collapse_audiobooks)
+    new_nca, final_nca = build_new_section(
+        "===Non-canon appearances===", new_nca, title, BY_DATE, dates, results.canon, include_date, log, use_index, mismatch, both_continuities, unknown_final, targets, results.real, results.unlicensed, collapse_audiobooks)
     new_src, final_sources = build_new_section("==Sources==", new_src, title, BY_DATE, dates, results.canon, True,
                                                log, use_index, mismatch, both_continuities, unknown_final, targets, results.real, results.unlicensed, collapse_audiobooks)
     new_ncs, final_ncs = build_new_section("===Non-canon sources===", new_ncs, title, BY_DATE, dates, results.canon, True,
@@ -453,7 +453,11 @@ def build_item_ids_for_section(page: Page, real, name, original: List[Item], dat
 
         if d and (o.is_card_or_mini() or o.template == "ForceCollection"):
             handle_card_item(d, o, group_items, src.found if (src and "scenario" not in o.original) else found, src.wrong if src else wrong, extra, name, log)
-        elif d and (d.current.ref_magazine or d.current.template == "FactFile"):
+        elif d and d.current.template == "FactFile" and d.master.target:
+            if d.master.target not in group_items:
+                group_items[d.master.target] = []
+            group_items[d.master.target].append(d)
+        elif d and d.current.ref_magazine and d.master.parent:
             if d.master.parent not in group_items:
                 group_items[d.master.parent] = []
             group_items[d.master.parent].append(d)
@@ -548,6 +552,7 @@ def build_item_ids_for_section(page: Page, real, name, original: List[Item], dat
 
 
 def handle_groups(groups: Dict[str, List[ItemId]], data: FullListData, other: FullListData, found: List[ItemId], group_ids: dict, extra: dict, unknown, src: SectionItemIds=None):
+    unknown_sets = {}
     for s, c in groups.items():
         if not c:
             continue
@@ -562,6 +567,12 @@ def handle_groups(groups: Dict[str, List[ItemId]], data: FullListData, other: Fu
             t = data.target.get(s.split(" - ", 1)[-1])
             if not t and other.target:
                 t = other.target.get(s.split(" - ", 1)[-1])
+        if not t and c[0].current.template == "Topps":
+            if s not in unknown_sets:
+                unknown_sets[s] = Item(f"{{{{Topps|set={s}|parent=1}}}}", "Cards", False, template="Topps", target=s, date=c[0].current.date)
+                unknown_sets[s].unknown = True
+            t = [unknown_sets[s]]
+
         if t:
             t[0].index = c[0].current.index
             if c[0].current.subset:
@@ -571,8 +582,6 @@ def handle_groups(groups: Dict[str, List[ItemId]], data: FullListData, other: Fu
             group_ids[t[0].full_id()] = s
             if t[0].target in extra:
                 extra.pop(t[0].target)
-        elif c[0].current.template == "Topps":
-            found += c
         else:
             print(f"ERROR: Cannot find item for parent/target set: [{s}]: {c[0].current.full_id()}")
             for i in c:
@@ -713,7 +722,7 @@ def build_new_external_links(page: Page, original: List[Item], data: FullListDat
                 found.append((o.mode, o, z))
                 done.append(z)
 
-    finished = sorted(found, key=lambda a: determine_link_order(a[0], a[1], a[2].replace("}}", "") if a[2] else a[2]))
+    finished = sorted(found, key=lambda a: determine_link_order(a[0], a[1], a[2].replace("}}", "").replace("|", " |") if a[2] else a[2]))
 
     return FinishedSection("==External links==", 0, "\n".join(f[2].strip() for f in finished)), unknown, wrong
 
@@ -733,7 +742,7 @@ def build_new_section(name, section: SectionItemIds, title: str, mode: str, date
     final_without_extra = []
     final_items = []
     rows = 0
-    sl = "" if canon else "|l=1"
+    sl = "|r=1" if real else ("" if canon else "|l=1")
     nl = "|n=1"
     for o in found:
         if mode == BY_DATE and o.current.index is None:
@@ -748,11 +757,11 @@ def build_new_section(name, section: SectionItemIds, title: str, mode: str, date
                 d2 = n2.master.date if n2 else None
                 t2 = n2.current.original if n2 else None
                 if compare_partial_dates(o.master.date, d1, d2, o.current.mode):
-                    if log and not name.startswith("Non-canon"):
-                        print(f"Partial date {o.master.date} found between {d1} and {d2}: {o.current.original} ({t1} & {t2})")
+                    # if log and not name.startswith("Non-canon"):
+                    #     print(f"Partial date {o.master.date} found between {d1} and {d2}: {o.current.original} ({t1} & {t2})")
                     dates.append((False, o, d1, d2))
         elif mode == BY_DATE and not o.master.has_date():
-            print(f"No date: {o.current.original}, {o.master.original} : {o.current.target}")
+            print(f"No date: {o.current.mode} {o.current.original}, {o.master.original} : {o.current.target} -> {o.current.full_id() in section.group_ids}, {o.current.full_id()}")
             o.unknown = True
             unknown_final.append(o)
 
@@ -772,7 +781,7 @@ def build_new_section(name, section: SectionItemIds, title: str, mode: str, date
             if o.master.template == "ForceCollection":
                 set_items = sorted(set_items, key=lambda a: a.current.original)
             elif o.master.is_card_or_mini():
-                set_items = sorted(set_items, key=lambda a: ("rulebook" not in a.current.original, "mission" not in a.current.original, a.master.index, (a.current.card if a.current.card else a.current.original).replace("''", "")))
+                set_items = sorted(set_items, key=lambda a: ("rulebook" not in a.current.original, "mission" not in a.current.original, a.master.index, a.current.card_sort_text()))
 
             if any(i.master.ref_magazine for i in set_items):
                 parent = f"{{{{{set_items[0].current.template}|{set_items[0].master.issue}|parent=1}}}} {o.current.extra}".strip()
@@ -785,12 +794,21 @@ def build_new_section(name, section: SectionItemIds, title: str, mode: str, date
                 if c.current.card:
                     ot = build_card_text(o, c).replace("|parent=1", "")
                 else:
-                    # ot = re.sub("(\{\{[A-z0-9]+\|[0-9]+\|.*?)(\|.*?)?}}", "\\1}}", c.master.original)
                     ot = c.master.original
                 if (o.master.mode == "Minis" or "mission=" in o.master.original) and o.master.card:
                     ot = re.sub("\|link=.*?(\|.*?)?}}", "\\1}}", ot)
                 if ot not in final_without_extra:
                     items.append((c, ot))
+
+            if len(items) > 1:
+                up = f"{{{{UnknownListing{sl}}}}} " if o.current.unknown else ""
+                if o.master.is_card_or_mini():
+                    block.insert(0, f"{d}{{{{CardGameSet|set={up}{parent}|cards=")
+                else:
+                    block.insert(0, f"{d}{{{{SourceContents|issue={up}{parent}|contents=")
+                ct += 2
+            elif o.current.unknown:
+                d += f"{{{{UnknownListing{sl}}}}} "
 
             for c, ot in items:
                 ex = c.current.extra.strip()
@@ -804,19 +822,12 @@ def build_new_section(name, section: SectionItemIds, title: str, mode: str, date
                             parent = f"{parent} {xid.group(1)}"
                         ex = ex.replace(xid.group(1), "").replace("  ", " ")
                 zt = "*" + d + re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", f"{ot} {ex}").strip()
-                ct += zt.count("{")
-                ct -= zt.count("}")
+                ct += (zt.count("{") - zt.count("}"))
                 if c.master.mode == "Minis" and c.master.card:
                     zt = re.sub(" ?\{\{[Cc]\|[Rr]eissued.*?}}", "", zt)
                 final_items.append(c)
                 final_without_extra.append(ot)
                 block.append(zt)
-            if len(block) > 1:
-                if o.master.is_card_or_mini():
-                    block.insert(0, f"{d}{{{{CardGameSet|set={parent}|cards=")
-                else:
-                    block.insert(0, f"{d}{{{{SourceContents|issue={parent}|contents=")
-                ct += 2
             new_text += block
             if ct:
                 new_text.append("".join("}" for _ in range(ct)))
@@ -1070,8 +1081,8 @@ def compare_partial_dates(o: str, d1: str, d2: str, mode: str):
 
 def get_analysis_from_page(target: Page, infoboxes: dict, types, disambigs, appearances: FullListData,
                            sources: FullListData, remap: dict, log=True, collapse_audiobooks=True):
-    results, unknown, redirects = build_page_components(target, types, disambigs, appearances, sources, remap,
-                                                        infoboxes,False, log)
+    text, redirects, results = build_initial_components(target, disambigs, infoboxes, None)
+    build_page_components(target, text, redirects, results, types, disambigs, appearances, sources, remap, log)
     if results.real and collapse_audiobooks:
         collapse_audiobooks = False
 
