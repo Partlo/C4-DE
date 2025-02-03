@@ -6,7 +6,8 @@ from datetime import datetime
 from pywikibot import Site, Page, handle_args, pagegenerators, showDiff, input_choice, Timestamp
 
 from c4de.sources.build import build_new_text
-from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, load_template_types
+from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, load_template_types, \
+    load_auto_categories
 from c4de.sources.infoboxer import load_infoboxes
 
 
@@ -60,6 +61,7 @@ def analyze(*args):
 
     start = datetime.now()
     types = load_template_types(gen_factory.site)
+    cats = load_auto_categories(gen_factory.site)
     appearances = load_full_appearances(gen_factory.site, types, False, log_match=False)
     sources = load_full_sources(gen_factory.site, types, False)
     remap = load_remap(gen_factory.site)
@@ -71,22 +73,28 @@ def analyze(*args):
 
     gen = pagegenerators.PreloadingGenerator(gen_factory.getCombinedGenerator(), groupsize=50)
 
-    ci = 46540
+    ci = 47919
     li = 116015
-    i = count -1
+    i = count - 1
     if any("Legends articles" in a or "C4-DE traversal" in a for a in args):
         i += ci
     total = ci + li
     checked = []
+    processed = []
     always_comment = False
     found = False
     message = "Source Engine analysis of Appearances, Sources and references"
-    since = Timestamp(2024, 10, 19)
+    media_msg = "Source Engine media page analysis and overhaul"
+    since = Timestamp(2025, 1, 25)
     for page in gen:
         if page.title().startswith("Map:") or page.title() == "Forum:WPWeb:Template icons standardization":
             continue
         elif page.namespace().id == 2:
             continue
+        elif page.title() in processed:
+            continue
+        else:
+            processed.append(page.title())
 
         i += 1
         z = str(i / total * 100).zfill(10)[:6]
@@ -120,17 +128,21 @@ def analyze(*args):
                 continue
         try:
             bf = bot
-            if any(c.title() in STATUS for c in page.categories()):
-                bf = False
-                # continue
+            media = False
+            for c in page.categories():
+                if c.title() in STATUS:
+                    bf = False
+                elif c.title(with_ns=False) == "Real-world media":
+                    media = True
 
+            now = datetime.now()
             before = page.get(force=True)
             old_text = f"{before}"
             old_revision = None
             if redo and redo >= page.title(with_ns=False): #and "audiobook" in old_text:
                 for r in page.revisions(total=10, content=True):
                     old_revision = r['text']
-                    if r['timestamp'] < since or (r['user'] != 'C4-DE Bot' and r['user'] != 'RoboCade'):
+                    if r['timestamp'] < since or (r['user'] != 'C4-DE Bot'):
                         print(f"Reloaded revision {r['revid']} for {page.title()}")
                         break
             extra = []
@@ -140,7 +152,7 @@ def analyze(*args):
                 extra.append("Ultimate Star Wars")
             if page.title() in ultimate2:
                 extra.append("Ultimate Star Wars, New Edition")
-            text = build_new_text(page, infoboxes, types, [], appearances, sources, remap, include_date,
+            text = build_new_text(page, infoboxes, types, [], appearances, sources, cats, remap, include_date,
                                   checked, log=log, collapse_audiobooks=True, manual=old_revision, extra=extra)
             if text is None:
                 continue
@@ -153,20 +165,24 @@ def analyze(*args):
             z2 = re.sub("(\{\{1st.*?\|\[\[(.*?) \(.*?audiobook\)\|)''\\2'' (.*?audiobook)", "\\1\\3", z2)
             z2 = re.sub("\[\[([Cc])redit]](s)?", "[[Galactic Credit Standard|\\1redit\\2]]", z2)
 
-            text = re.sub("(\{\{[A-z0-9]+\|[0-9]+\|.*?)(\|.*?)?}}", "\\1}}", text)
+            for ix in re.findall("((\{\{(BuildFalconCite|BuildR2Cite|BuildXWingCite|BustCollectionCite|DarthVaderCite|FalconCite|FigurineCite|HelmetCollectionCite|ShipsandVehiclesCite|StarshipsVehiclesCite)\|[0-9]+\|[^|\[{}]+?)(\|((?!reprint).)*?)}})", text):
+                text = text.replace(ix[0], ix[1] + "}}")
+                if ix[1] + "}}" in old_text:
+                    z1 = z1.replace(ix[0], ix[1] + "}}")
+
             if text.replace("E -->", " -->") == old_text.replace("E -->", " -->"):
-                print(f"{i} -> {z} -> No changes found for {page.title()}")
+                print(f"{i} -> {z} -> No changes found for {page.title()} -> {(datetime.now() - now).microseconds / 1000} ms")
                 continue
             elif len(text) - len(old_text) == 1 and text.replace("\n", "") == old_text.replace("\n", ""):
-                print(f"Skipping {page.title()}; infobox newline is only change")
+                print(f"Skipping {page.title()}; infobox newline is only change -> {(datetime.now() - now).microseconds / 1000} ms")
                 continue
 
-            match = re.sub("<!--.*?-->", "", z1.replace("–", "&ndash;").replace("—", "&mdash;").replace("{{PageNumber}} ", "").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]")) == \
-                    re.sub("<!--.*?-->", "", z2.replace("–", "&ndash;").replace("—", "&mdash;").replace("{{PageNumber}} ", "").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]"))
+            match = re.sub("\{\{1stID\|.*?}}", "{{1stID}}", re.sub("<!--.*?-->", "", z1.replace("ncomplete list", "ncompleteList").replace("ncomplete_list", "ncompleteList").replace("–", "&ndash;").replace("—", "&mdash;").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]"))) == \
+                    re.sub("\{\{1stID\|.*?}}", "{{1stID}}", re.sub("<!--.*?-->", "", z2.replace("ncomplete list", "ncompleteList").replace("ncomplete_list", "ncompleteList").replace("–", "&ndash;").replace("—", "&mdash;").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]")))
 
             override = old_text.count("nterlang") > text.count("nterlang") or old_text.count("ategory:") > text.count("ategory:")
             if not override and match and always_comment:
-                page.put(text, message, botflag=match or bf)
+                page.put(text, media_msg if media else message, botflag=match or bf)
                 continue
             # if not override:
             #     override = "RelatedCategories" in text and "RelatedCategories" not in old_text
@@ -178,8 +194,9 @@ def analyze(*args):
             z2 = re.sub("\|stext=.*?(\|.*?)?}}", "\\1}}", z2)
 
             showDiff(re.sub("<!--.*?-->", "", z2), re.sub("<!--.*?-->", "", z1), context=1)
+            print(f"{page.title()} -> {(datetime.now() - now).microseconds / 1000} ms")
             if not override and always:
-                page.put(text, message, botflag=match or bf)
+                page.put(text, media_msg if media else message, botflag=match or bf)
                 continue
 
             c = '(comment-only) ' if match else ''
@@ -190,12 +207,12 @@ def analyze(*args):
             if choice == 'q':
                 break
             if choice == 'y':
-                page.put(text, message, botflag=bf, force=True)
+                page.put(text, media_msg if media else message, botflag=bf, force=True)
             if choice == 'b' and match:
-                page.put(text, message, botflag=bf)
+                page.put(text, media_msg if media else message, botflag=bf)
                 always_comment = True
             if choice == 'a':
-                page.put(text, message, botflag=bf)
+                page.put(text, media_msg if media else message, botflag=bf)
                 always = True
             else:
                 continue

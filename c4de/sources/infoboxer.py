@@ -18,8 +18,8 @@ class InfoboxInfo:
         return {"params": self.params, "optional": self.optional, "combo": self.combo, "groups": self.groups}
 
     @staticmethod
-    def from_json(json):
-        return InfoboxInfo(json['params'], json['optional'], json['combo'], json['groups'])
+    def from_json(js):
+        return InfoboxInfo(js['params'], js['optional'], js['combo'], js['groups'])
 
 
 def parse_infobox_category(cat: Category, results):
@@ -40,7 +40,7 @@ def reload_infoboxes(site):
     infoboxes = list_all_infoboxes(site)
     with open("c4de/data/infoboxes.json", "w") as f:
         as_json = {k: v.json() for k, v in infoboxes.items() if v}
-        f.writelines(json.dumps(as_json))
+        f.writelines(json.dumps(as_json).replace('}}, "', '}},\n  "'))
     print(f"Loaded {len(infoboxes)} infoboxes from cache")
     return infoboxes
 
@@ -231,7 +231,7 @@ REMAP = {
 }
 
 
-def handle_infobox_on_page(text, page: Page, all_infoboxes):
+def handle_infobox_on_page(text, page: Page, all_infoboxes, log=True):
     extract = True
 
     data, pre, post, on_own_line, found, scroll_box = parse_infobox(text, all_infoboxes)
@@ -239,14 +239,16 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes):
         print(f"Scroll box found in infobox; cannot parse {page.title()}")
         return text, found
     if not found or found.lower() not in all_infoboxes:
-        print(f"ERROR: no infobox found, or infobox below body text; cannot parse {page.title()}")
+        if log:
+            print(f"ERROR: no infobox found, or infobox below body text; cannot parse {page.title()}")
         return text, None
     elif found.lower().startswith("year"):
         return text, found
 
     infobox = all_infoboxes.get(found.lower())
     if not infobox:
-        print(f"ERROR: no infobox found for {found} on {page.title()}")
+        if log:
+            print(f"ERROR: no infobox found for {found} on {page.title()}")
         return text
     if "pronouns" not in data:
         r = re.search("Category:Individuals with (.*?) pronous", text)
@@ -287,7 +289,7 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes):
                             text)
                     if x:
                         v = x.groupdict()['t']
-            if f in infobox.optional and f not in data and not v:
+            if f in infobox.optional and f not in data and not v and f not in ["reprinted in"]:
                 continue
             elif f in infobox.combo and f not in data and not v and any(i in data for i in infobox.groups[infobox.combo[f]] if i != f):
                 continue

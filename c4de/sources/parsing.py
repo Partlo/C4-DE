@@ -1,14 +1,16 @@
 import re
 import traceback
+from datetime import datetime
 
 from c4de.protocols.cleanup import parse_archive
 from pywikibot import Page
 from typing import List, Tuple, Union, Dict, Optional
 
 from c4de.sources.cleanup import initial_cleanup
-from c4de.sources.determine import extract_item, determine_id_for_item, convert_issue_to_template, swap_parameters
+from c4de.sources.determine import determine_id_for_item
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, SectionComponents, SectionLeaf
 from c4de.sources.external import prepare_basic_url
+from c4de.sources.extract import extract_item, convert_issue_to_template, swap_parameters
 from c4de.sources.media import match_header, rearrange_sections
 from c4de.common import build_redirects, fix_redirects, fix_disambigs, prepare_title
 
@@ -53,6 +55,23 @@ def is_official_link(o: Item):
     return False
 
 
+def is_official_product_page(o: Item, real):
+    if o and real and _is_official_product_page(o):
+        o.mode = "Official"
+        return True
+    return False
+
+
+def _is_official_product_page(o: Item):
+    if o.url and o.url.startswith("games/"):
+        return o.template in ["SW", "EA", "LucasArtsCite"]
+    elif o.url and o.url.startswith("games-apps/"):
+        return o.template in ["SW"]
+    elif o.url and o.template == "LucasArtsCite":
+        return o.url.startswith("static/") or o.url.startswith("products/")
+    return False
+
+
 def is_nav_or_date_template(template, types: dict):
     return template.lower().replace("_", " ") in types["Nav"] or template.lower().replace("_", " ") in types["Dates"]
 
@@ -74,7 +93,8 @@ def _check_format_text(t, y):
     )
 
 
-def build_initial_components(target: Page, disambigs: list, all_infoboxes, manual: str = None) -> Tuple[str, Dict, PageComponents]:
+def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_cats: list, manual: str = None) -> \
+        Tuple[str, Dict, PageComponents]:
     # now = datetime.now()
     before, infobox = initial_cleanup(target, all_infoboxes, before=manual)
     # print(f"cleanup: {(datetime.now() - now).microseconds / 1000} microseconds")
@@ -91,6 +111,7 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, manua
     non_canon = False
     unlicensed = False
     app_mode = BY_INDEX
+    flag = []
     for c in target.categories():
         if "Non-canon Legends articles" in c.title() or "Non-canon articles" in c.title():
             non_canon = True
@@ -110,10 +131,13 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, manua
         elif c.title().startswith("Real-world") and c.title(with_ns=False) not in ["Real-world restaurants", "Real-world stores"]:
             real = True
 
+        if c.title() in bad_cats:
+            flag.append(c.title())
+
     if target.title().startswith("User:") and "{{Top|legends=" in target.get():
         canon = True
         app_mode = BY_INDEX
-    return before, redirects, PageComponents("", canon, non_canon, unlicensed, real, app_mode, media, infobox)
+    return before, redirects, PageComponents(manual or target.get(), canon, non_canon, unlicensed, real, app_mode, media, infobox, flag)
 
 
 def match_iu_header(line):
@@ -129,7 +153,10 @@ def split_by_section(text: str, results: PageComponents) -> Tuple[Dict[str, Sect
     current, subheader = "", ""
     section_num, subheader_num = 1, 1
     for line in text.splitlines():
-        if not results.real and line.strip().startswith("==") and match_iu_header(line.strip()):
+        line = line.replace("{{SectionFlag}}", "")
+        if "===non-canon appearances===" in line.strip().lower() and "Appearances" not in by_section:
+            intro.append(line)
+        elif not results.real and line.strip().startswith("==") and match_iu_header(line.strip()):
             current = match_iu_header(line)
             by_section[current] = SectionLeaf(current, line.strip(), 1, int(line.count("=") / 2))
         elif results.real and line.strip().startswith("===") and not line.strip().startswith("===="):
@@ -164,6 +191,40 @@ def split_by_section(text: str, results: PageComponents) -> Tuple[Dict[str, Sect
     return by_section, intro
 
 
+def parse_data(results: PageComponents, lines: list, master_header, redirects, disambigs, types, remap, extra, unknown, log):
+    section_text = "\n".join(lines)
+    if master_header == "Sources" and extra and not results.real:
+        for i in extra:
+            section_text += f"\n*''[[{i}]]''"
+    after = ""  # remove succession boxes from text before parsing
+    if "{{start_box" in section_text.lower() or "{{start box" in section_text.lower() or "{{startbox" in section_text.lower():
+        pieces2 = re.split("({{[Ss]tart[_ ]?[Bb]ox)", section_text, 1)
+        if len(pieces2) == 3:
+            section_text = pieces2[0]
+            after = pieces2[1] + pieces2[2]
+
+    section_text = fix_redirects(redirects, section_text, master_header, disambigs, remap)
+    result = parse_section(section_text, types, "Appearances" in master_header, unknown, after, log, master_header)
+    if log:
+        print(f"{master_header}: {len(result.items)} --> {len(set(i.unique_id() for i in result.items))}")
+    if master_header == "Collections":
+        results.collections = result
+    elif master_header == "Appearances":
+        results.apps = result
+    elif master_header == "Non-Canon Appearances":
+        results.nca = result
+    elif master_header == "Sources":
+        results.src = result
+    elif master_header == "Non-Canon Sources":
+        results.ncs = result
+    elif master_header == "Links":
+        results.links = result
+
+
+def _valid() -> Dict[str, List[SectionLeaf]]:
+    return {}
+
+
 def build_page_components(target: Page, text: str, redirects: dict, results: PageComponents, types: dict,
                           disambigs: list, appearances: FullListData, sources: FullListData, remap: dict, log: bool,
                           extra=None):
@@ -179,7 +240,7 @@ def build_page_components(target: Page, text: str, redirects: dict, results: Pag
 
     by_section, intro = split_by_section(text, results)
 
-    valid = {}
+    valid = _valid()
     other = {}
     valid_nums = {}
     for header, section in by_section.items():
@@ -193,40 +254,18 @@ def build_page_components(target: Page, text: str, redirects: dict, results: Pag
             valid["References"] = [section]
         # the 6 master sections should be parsed by the Engine, except the Appearances section of a real-world article
         elif master_header in MASTER_STRUCTURE and not (results.real and master_header == "Appearances"):
-            section_text = "\n".join(section.lines)
-            if master_header == "Sources" and extra and not results.real:
-                for i in extra:
-                    section_text += f"\n*''[[{i}]]''"
-            after = ""  # remove succession boxes from text before parsing
-            if "{{start_box" in section_text.lower() or "{{start box" in section_text.lower():
-                pieces2 = re.split("({{[Ss]tart[_ ]box)", section_text, 1)
-                if len(pieces2) == 3:
-                    section_text = pieces2[0]
-                    after = pieces2[1] + pieces2[2]
-
-            section_text = fix_redirects(redirects, section_text, master_header, disambigs, remap)
-            result = parse_section(section_text, types, "Appearances" in master_header, unknown, after, log, master_header)
-            if log:
-                print(f"{master_header}: {len(result.items)} --> {len(set(i.unique_id() for i in result.items))}")
-            if master_header == "Collections":
-                results.collections = result
-            elif master_header == "Appearances":
-                results.apps = result
-            elif master_header == "Non-Canon Appearances":
-                results.nca = result
-            elif master_header == "Sources":
-                results.src = result
-            elif master_header == "Non-Canon Sources":
-                results.ncs = result
-            elif master_header == "Links":
-                results.links = result
+            parse_data(results, section.lines, master_header, redirects, disambigs, types, remap, extra, unknown, log)
             continue
         elif master_header:
             # Identify any master sections that are incorrectly on a subheader level, and move them up
             skip = []
             for sx, sk in section.subsections.items():
+                if master_header == "Media" and sx == "Collections":
+                    parse_data(results, sk.lines, sx, redirects, disambigs, types, remap, extra, unknown, log)
+                    continue
+
                 ms_header = match_header(sx, results.infobox)
-                if ms_header and ms_header not in valid and ms_header not in by_section:
+                if ms_header is not None and ms_header not in valid and ms_header not in by_section:
                     valid[ms_header] = [sk]
                     skip.append(sx)
             if skip:
@@ -287,7 +326,7 @@ def build_page_components(target: Page, text: str, redirects: dict, results: Pag
             if f"{target.title()}{x}" in appearances.target:
                 novel = Page(target.site, f"{target.title()}{x}")
                 break
-    results.sections = rearrange_sections(valid, results.real, results.infobox, target.title(), novel)
+    results.sections = rearrange_sections(target, results, valid, appearances, sources, novel)
 
     final = f"{rest}\n{final}".strip()
     if results.links and results.links.after:
@@ -301,8 +340,8 @@ def split_section_pieces(section):
     pieces = re.split("(==|\{\{DEFAULTSORT|\{\{[Ii]nterlang|\[\[Category:|\{\{RelatedCategories)", section, 1)
     section = pieces[0]
     after = "".join(pieces[1:])
-    if "{{start_box" in section.lower() or "{{start box" in section.lower():
-        pieces2 = re.split("({{[Ss]tart[_ ]box)", section, 1)
+    if "{{start_box" in section.lower() or "{{start box" in section.lower() or "{{startbox" in section.lower():
+        pieces2 = re.split("({{[Ss]tart[_ ]?[Bb]ox)", section, 1)
         if len(pieces2) == 3:
             section = pieces2[0]
             after = pieces2[1] + pieces2[2]
@@ -342,12 +381,14 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
             other2.append(s)
             continue
         if "CardGameSet" in s:
-            s = re.sub("^.*?{{CardGameSet\|(set=)?(\{\{.*?}})( \{\{.*?}}.*?)\|cards=", "*\\2\\3", s)
+            s = re.sub("^.*?{{CardGameSet\|(set=)?(\{\{.*?)}}( \{\{.*?}}.*?)\|cards=", "*\\2|parent=1}}\\3", s)
             s = re.sub("^.*?{{CardGameSet\|(set=)?(.*?)\|cards=", "", s)
+            s = re.sub("\|parent=1(.*?)\|parent=1", "|parent=1\\1", s)
             cs += 1
         if "SourceContents" in s:
-            s = re.sub("^.*?{{SourceContents\|(issue=)?(\{\{.*?}})( \{\{.*?}}.*?)\|contents=", "*\\2\\3", s)
-            s = re.sub("^.*?{{SourceContents\|(issue=)?(.*?)\|contents=", "", s)
+            s = re.sub("^.*?{{SourceContents\|(parent=|issue=)?(\{\{.*?)}}( \{\{.*?}}.*?)\|contents=", "*\\2|parent=1}}\\3", s)
+            s = re.sub("^.*?{{SourceContents\|(parent=|issue=)?(.*?)\|contents=", "", s)
+            s = re.sub("\|parent=1(.*?)\|parent=1", "|parent=1\\1", s)
             cs += 1
 
         if name.startswith("File:"):
@@ -365,19 +406,20 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
 
         if s.strip().startswith("*"):
             start = False
-            x = handle_valid_line(s, is_appearances, log, types, data, [] if external else other2, unknown, unique_ids, False, name)
+            x = handle_valid_line(s, is_appearances, log, types, data, [] if external else other2, unknown,
+                                  unique_ids, False, name)
             if not x and external:
                 z = Item(s.strip(), "Basic", False)
                 if is_official_link(z):
                     z.mode = "Official"
                 data.append(z)
 
-        elif "{{scroll_box" in s.lower() or "{{scroll box" in s.lower():
+        elif "{{scroll_box" in s.lower() or "{{scroll box" in s.lower() or "{{scrollbox" in s.lower():
             scroll_box = True
             other1.append(s)
         elif scroll_box and (s.startswith("|height=") or s.startswith("|content=")):
             other1.append(s)
-        elif "{{start_box" in s.lower() or "{{start box" in s.lower() or "{{interlang" in s.lower():
+        elif "{{start_box" in s.lower() or "{{start box" in s.lower() or "{{startbox" in s.lower() or "{{interlang" in s.lower():
             succession_box = True
             other2.append(s)
         elif s == "}}":  # don't include the ending }}; it'll be added by build_section_from_pieces()
@@ -387,7 +429,8 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
             continue
         elif s.strip():
             if not data and not re.search("^[{\[]+([Ii]ncomplete|[Cc]leanup|[Ss]croll|[Mm]ore[_ ]|[Ff]ile:)", s.strip()):
-                x = handle_valid_line(f"*{s}", is_appearances, log, types, data, [] if external else other2, unknown, unique_ids, True, name)
+                x = handle_valid_line(f"*{s}", is_appearances, log, types, data, [] if external else other2,
+                                      unknown, unique_ids, True, name)
                 if x:
                     start = False
                     continue
@@ -411,6 +454,13 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
         s = s[:-2]
     z = re.sub("<!--.*?-->", "", s.replace("&ndash;", '–').replace('&mdash;', '—').strip())
     z = re.sub("<sup>(.*?)</sup>", "{{C|\\1}}", z)
+    extra = ''
+    if name == "Collections":
+        zx = re.search("(\*[^\n\[{]*[\[{]+.*?[}\]]+['\"]*)(.*?)$", z)
+        if zx:
+            z = zx.group(1)
+            extra = zx.group(2)
+
     while z.startswith("*"):
         z = z[1:].strip()
     z = re.sub("(\{\{InsiderCite\|[0-9]{2}\|)Ask Lobot.*?}}", "\\1Star Wars Q&A}}", z)
@@ -429,12 +479,14 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
     ab = x2.group(0) if x2 else ''
     if ab:
         z = z.replace(ab, "").replace("  ", " ").strip()
-    x1 = re.search(
-        '( ?(<ref.*?>)?(<small>)? ?\{+ ?(1st[A-z]*|V?[A-z][od]|[Ff]act|DLC|[Ll]n|[Cc]rp|[Uu]n|[Nn]cm?|[Cc]|[Aa]mbig|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Uu]nborn|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Nn]cs?|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene|[Cc]rawl) ?[|}].*?$)',
-        z)
-    extra = x1.group(1) if x1 else ''
-    if extra:
-        z = z.replace(extra, '').strip()
+
+    if not extra:
+        x1 = re.search(
+            '( ?(<ref.*?>)?(<small>)? ?\{+ ?(1st[A-z]*|V?[A-z][od]|[Ff]act|DLC|[Ll]n|[Cc]rp|[Uu]n|[Nn]cm?|[Cc]|[Aa]mbig|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Uu]nborn|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Nn]cs?|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene|[Cc]rawl) ?[|}].*?$)',
+            z)
+        extra = x1.group(1) if x1 else ''
+        if extra:
+            z = z.replace(extra, '').strip()
 
     if name.startswith("File:"):
         x = re.search("(]]|}})['\"]* ((image )?mirrored|promotional image|cover|via TORhead|\(.*?\))", z)
@@ -506,13 +558,19 @@ def analyze_body(page: Page, text, types, appearances: FullListData, sources: Fu
     return new_text
 
 
-def clean_archive_usages(page: Page, text):
+def clean_archive_usages(page: Page, text, data: FullListData = None):
     templates_to_check = set()
     for c in page.categories():
         if c.title().endswith("same archivedate value") or c.title().endswith("with custom archivedate"):
             templates_to_check.add(re.search("^(.*?) usages with.*?$", c.title(with_ns=False)).group(1))
     for t in templates_to_check:
-        archive = parse_archive(page.site, "SWYouTube" if t in ["ThisWeek", "HighRepublic Show"] else t)
+        tx = "SWYouTube" if t in ["ThisWeek", "HighRepublic Show"] else t
+        archive = data.archive_data.get(tx) if data else None
+        if not archive:
+            archive = parse_archive(page.site, tx)
+            if data:
+                data.archive_data[tx] = archive
+
         if archive and "YouTube" in t:
             for x in re.findall("(\{\{" + t + "\|(video=)?(.*?)(\|.*?)?(\|archive(date|url)=.*?)(\|.*?)?}})", text):
                 if "nolive=" in x[0] or "oldversion" in x[0] or x[2].lower() not in archive:
@@ -591,7 +649,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                     if o.master.template and not x.template and x.target and not re.search("^['\"]*\[\[" + prepare_title(x.target) + "(\|.*?)?]]['\"]*$", new_ref):
                         if o.master.template != "Film" and f'"[[{x.target}]]"' not in new_ref:
                             print(f"Skipping {link[0]} due to extraneous text")
-                    elif link[0].startswith('"') and link[0].startswith('"') and (len(ref) - len(link[0])) > 5:
+                    elif link[0].startswith('"') and link[0].endswith('"') and (len(ref) - len(link[0])) > 5:
                         print(f"Skipping quote-enclosed link {link[0]} (likely an episode name)")
                     elif "{{" in o.master.original and len(templates) > 0:
                         print(f"Skipping {link[0]} due to presence of other templates in ref note")

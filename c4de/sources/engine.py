@@ -5,7 +5,7 @@ from datetime import datetime
 
 from pywikibot import Page, Category
 from c4de.sources.domain import Item, FullListData
-from c4de.sources.determine import extract_item, TEMPLATE_MAPPING
+from c4de.sources.extract import extract_item, TEMPLATE_MAPPING
 from c4de.common import build_redirects, fix_redirects
 
 
@@ -557,22 +557,26 @@ SERIES_INDEX = {
 }
 
 
-def list_templates(site, cat, data, template_type, recurse=False):
+def list_templates(site, cat, data, template_type, recurse=False, web=False):
     for p in Category(site, cat).articles(recurse=recurse):
         if "/" not in p.title() and p.title(with_ns=False).lower() not in data:
             data[p.title(with_ns=False).lower()] = template_type
+            # if web:
+            #     x = re.search("on \[\[(.*?)(\|.*?)?]].*?\[.*?official w?e?b?site",  p.get())
+            #     if x:
+            #         data["WebsiteNames"][p.title(with_ns=False).lower()] = x.group(1)
 
 
 def build_template_types(site):
     now = datetime.now()
-    results = {"db": "DB", "databank": "DB", "swe": "DB", "External": []}
+    results = {"db": "DB", "databank": "DB", "swe": "DB", "External": [], "WebsiteNames": {}}
 
     list_templates(site, "Category:StarWars.com citation templates", results, "Web")
-    list_templates(site, "Category:Internet citation templates", results, "Web")
+    list_templates(site, "Category:Internet citation templates", results, "Web", web=True)
+    list_templates(site, "Category:Publisher internet citation templates", results, "Publisher", web=True)
+    list_templates(site, "Category:Commercial and product listing internet citation templates", results, "Commercial")
     list_templates(site, "Category:Internet citation templates for use in External Links", results, "External")
     list_templates(site, "Category:Social media citation templates", results, "Social")
-    list_templates(site, "Category:Publisher internet citation templates", results, "Publisher")
-    list_templates(site, "Category:Commercial and product listing internet citation templates", results, "Commercial")
 
     list_templates(site, "Category:YouTube citation templates", results, "YT")
     list_templates(site, "Category:Card game citation templates", results, "Cards")
@@ -607,7 +611,7 @@ def reload_templates(site):
     templates = build_template_types(site)
     with open("c4de/data/templates.json", "w") as f:
         f.writelines(json.dumps(templates))
-    print(f"Loaded {len(templates)} infoboxes from cache")
+    print(f"Loaded {len(templates)} templates from cache")
     return templates
 
 
@@ -621,6 +625,37 @@ def load_template_types(site):
     except Exception as e:
         print(f"Encountered {type(e)} while loading infobox JSON", e)
         return reload_templates(site)
+
+
+def build_auto_categories(site):
+    cats = []
+    for c in Category(site, "Auto-generated category roots").subcategories():
+        if c.title() not in cats:
+            cats.append(c.title())
+        for x in c.subcategories():
+            if x.title() not in cats:
+                cats.append(x.title())
+    return cats
+
+
+def reload_auto_categories(site):
+    cats = build_auto_categories(site)
+    with open("c4de/data/categories.json", "w") as f:
+        f.writelines(json.dumps(cats))
+    print(f"Loaded {len(cats)} categories from cache")
+    return cats
+
+
+def load_auto_categories(site):
+    try:
+        with open("c4de/data/categories.json", "r") as f:
+            results = json.loads("\n".join(f.readlines()))
+        if not results:
+            results = build_auto_categories(site)
+        return results
+    except Exception as e:
+        print(f"Encountered {type(e)} while loading categories JSON", e)
+        return reload_auto_categories(site)
 
 
 # TODO: Split Appearances category by type
@@ -657,7 +692,7 @@ def load_appearances(site, log, canon_only=False, legends_only=False):
                                  "canon": "Canon" in sp, "extra": sp in other, "audiobook": "Audiobook" in sp,
                                  "collectionType": collection_type})
                 else:
-                    print(f"Cannot parse line: {line}")
+                    print(f"{p.title()}: Cannot parse line: {line}")
         if log:
             print(f"Loaded {i} appearances from Wookieepedia:Appearances/{sp}")
 
@@ -692,35 +727,25 @@ def load_source_lists(site, log):
                     data.append({"index": i, "page": sp, "date": x.group("d"), "item": x.group("t"),
                                  "canon": None if "/" not in sp else "Canon" in sp, "ref": x.group("r")})
                 else:
-                    print(f"Cannot parse line: {line}")
+                    print(f"{p.title()}: Cannot parse line: {line}")
         if log:
             print(f"Loaded {i} sources from Wookieepedia:Sources/{sp}")
 
-    for y in range(1990, datetime.now().year + 1):
+    for y in [*range(1990, datetime.now().year + 1), "Special", "Repost"]:
         i = 0
         p = Page(site, f"Wookieepedia:Sources/Web/{y}")
         if p.exists():
-            skip = False
             lines = p.get().splitlines()
-            bad = []
             for o, line in enumerate(lines):
                 if "/Header}}" in line or line.startswith("----"):
                     continue
-                # elif skip:
-                #     skip = False
-                #     continue
-                # if line.count("{{") > line.count("}}"):
-                #     if o + 1 != len(lines) and lines[o + 1].count("}}") > lines[o + 1].count("{{"):
-                #         line = f"{line}{lines[o + 1]}"
-                #         skip = True
-                #         bad.append(o)
-                x = re.search("\*(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?) ?†?( {{C\|(original|alternate): (?P<a>.*?)}})?( {{C\|int: (?P<i>.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
+                x = re.search("\*(R: )?(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?) ?†?( {{C\|(original|alternate): (?P<a>.*?)}})?( {{C\|int: (?P<i>.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
                 if x:
                     i += 1
                     data.append({"index": i, "page": f"Web/{y}", "date": x.group("d"), "item": x.group("t"),
                                  "alternate": x.group("a"), "int": x.group("i"), "ref": x.group("r")})
                 else:
-                    print(f"Cannot parse line: {line}")
+                    print(f"{p.title()}: Cannot parse line: {line}")
             if log:
                 print(f"Loaded {i} sources from Wookieepedia:Sources/Web/{y}")
 
@@ -735,7 +760,7 @@ def load_source_lists(site, log):
             data.append({"index": i, "page": "Web/Current", "date": "Current", "item": x.group("t"),
                          "alternate": x.group("a"), "ref": x.group("r")})
         else:
-            print(f"Cannot parse line: {line}")
+            print(f"{p.title()}: Cannot parse line: {line}")
     if log:
         print(f"Loaded {i} sources from Wookieepedia:Sources/Current")
 
@@ -749,21 +774,21 @@ def load_source_lists(site, log):
             i += 1
             data.append({"index": i, "page": "Web/Unknown", "date": "Unknown", "item": x.group(2), "alternate": x.group(6)})
         else:
-            print(f"Cannot parse line: {line}")
+            print(f"{p.title()}: Cannot parse line: {line}")
     if log:
         print(f"Loaded {i} sources from Wookieepedia:Sources/Unknown")
 
     p = Page(site, f"Wookieepedia:Sources/Web/External")
     i = 0
     for line in p.get().splitlines():
-        if "/Header}}" in line:
+        if "/Header}}" in line or not line.strip():
             continue
         x = re.search("[#*](?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?) ?†?( {{C\|(original|alternate): (?P<a>.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
         if x:
             i += 1
             data.append({"index": i, "page": "Web/External", "date": x.group('d'), "item": x.group('t'), "alternate": x.group('a')})
         else:
-            print(f"Cannot parse line: {line}")
+            print(f"{p.title()}: Cannot parse line: {line}")
     if log:
         print(f"Loaded {i} sources from Wookieepedia:Sources/External")
 
@@ -780,7 +805,7 @@ def load_source_lists(site, log):
                 data.append({"index": 0, "page": f"Web/{template}", "date": date, "item": x.group("t"),
                              "extraDate": x.group("d"), "ref": x.group("r"), "alternate": x.group('a')})
             else:
-                print(f"Cannot parse line: {line}")
+                print(f"{p.title()}: Cannot parse line: {line}")
         if log:
             print(f"Loaded {i} sources from Wookieepedia:Sources/Web/{template}")
 
@@ -850,6 +875,9 @@ def load_full_sources(site, types, log) -> FullListData:
                     x.target = x.card
                 if i['page'] == "Web/External":
                     x.external = True
+                elif i["page"].startswith("Web/1") or i["page"].startswith("Web/2"):
+                    if x.mode == "Publisher" or x.mode == "Commercial":
+                        x.mode = "Web"
                 x.master_page = i['page']
                 x.canon = i.get('canon')
                 x.date = i['date']
@@ -993,7 +1021,6 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 if pr:
                     parenthetical = pr.group(1)
                     i['item'] = i['item'].replace(f"|p={parenthetical}", "").strip()
-
             x = extract_item(i['item'], True, i['page'], types, master=True)
             if x and x.unique_id() in unique_appearances:
                 if x.template == "Film" or x.template == "TCW" or x.target == "Star Wars: The Clone Wars (film)":

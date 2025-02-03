@@ -23,11 +23,12 @@ class Item:
     """
     :type date: str
     :type target: str
+    :type text: str
     """
     def __init__(self, original: str, mode: str, is_app: bool, *, invalid=False, target: str = None, text: str = None,
                  parent: str = None, template: str = None, url: str = None, issue: str = None, subset: str=None,
                  card: str = None, special=None, collapsed=False, format_text: str = None, no_issue=False, ref_magazine=False,
-                 full_url: str=None, check_both=False, date="", archivedate=""):
+                 full_url: str=None, publisher_listing=False, check_both=False, date="", archivedate=""):
         self.master_page = None
         self.is_appearance = is_app
         self.tv = mode == "TV"
@@ -71,6 +72,7 @@ class Item:
         self.german_ad = False
         self.reprint = False
         self.has_content = False
+        self.publisher_listing = publisher_listing
         self.collection_type = None
         self.expanded = False
         self.original_printing = None
@@ -204,6 +206,9 @@ class ItemId:
         return self.master.date
 
     def sort_text(self):
+        if self.current.template == "ForceCollection":
+            return self.current.original
+
         if self.current.ref_magazine or self.current.template in REF_MAGAZINE_ORDERING:
             z = REF_MAGAZINE_ORDERING.get(self.current.template) or []
             x = z.index(self.current.target) if self.current.target in z else 9
@@ -228,16 +233,19 @@ class FullListData:
         self.both_continuities = both_continuities
         self.no_canon_index = no_canon_index
         self.no_legends_index = no_legends_index
+        self.archive_data = {}
 
 
 class PageComponents:
     """
+    :type collections: SectionComponents
     :type sections: dict[str, SectionLeaf]
     """
-    def __init__(self, before: str, canon: bool, non_canon: bool, unlicensed: bool, real: bool, mode, media, infobox):
-        self.before = before
+    def __init__(self, original: str, canon: bool, non_canon: bool, unlicensed: bool, real: bool, mode, media, infobox,
+                 flag: list):
+        self.before = ""
         self.final = ""
-        self.original = before
+        self.original = original
         self.canon = canon
         self.non_canon = non_canon
         self.unlicensed = unlicensed
@@ -245,6 +253,7 @@ class PageComponents:
         self.app_mode = mode
         self.media = media
         self.infobox = infobox
+        self.flag = flag
 
         self.ncs = SectionComponents([], [], [], '')
         self.src = SectionComponents([], [], [], '')
@@ -260,7 +269,7 @@ class PageComponents:
 
 
 class AnalysisResults:
-    def __init__(self, apps: List[ItemId], nca: List[ItemId], src: List[ItemId], ncs: List[ItemId], canon: bool, abridged: list, mismatch: List[ItemId], disambig_links: list, reprints: Dict[str, List[Item]]):
+    def __init__(self, apps: List[ItemId], nca: List[ItemId], src: List[ItemId], ncs: List[ItemId], canon: bool, abridged: list, mismatch: List[ItemId], reprints: Dict[str, List[Item]]):
         self.apps = apps
         self.nca = nca
         self.src = src
@@ -268,7 +277,6 @@ class AnalysisResults:
         self.canon = canon
         self.abridged = abridged
         self.mismatch = mismatch
-        self.disambig_links = disambig_links
         self.reprints = reprints
 
 
@@ -314,35 +322,65 @@ class SectionLeaf:
     :type subsections: dict[str, SectionLeaf]
     :type other: list[SectionLeaf]
     """
-    def __init__(self, name, header: str, num: int, level: int, combine=False, lines=None):
+    def __init__(self, name, header: str, num: int, level: int, lines=None):
         self.name = name
         self.header_line = header
         self.num = num
+        self.master_num = 100
         self.level = level
         self.lines = lines or []
         self.subsections = {}
         self.invalid = False
+        self.remove = False
         self.flag = False
-        self.combine = combine
         self.other = []
 
-    def build_text(self, header=None):
+    def build_text(self, header=None, image=None, media_cat=None):
         header_line = header or self.name
+        added_media_cat = False
         if "=" not in header_line:
             header_line = f"{'='*self.level}{header_line}{'='*self.level}"
         if self.flag:
             header_line = re.sub("(===?.*?)(===?)", "\\1 {{SectionFlag}}\\2", header_line)
-        if not self.lines:
-            return [header_line]
+        if not any(ln.strip() for ln in self.lines):
+            return [header_line], added_media_cat
 
         lines = [header_line]
-        for ln in self.lines:
-            lines.append(ln)
+        if media_cat:
+            lines.append(media_cat)
+            added_media_cat = True
+        if "cover gallery" in header_line.lower():
+            lines += self.build_gallery(image)
+        else:
+            lines += self.lines
         lines.append("")
-        return lines
+        return lines, added_media_cat
+
+    def build_gallery(self, image=None):
+        before, images, after = [], [], []
+        gallery_start = False
+        add_image = image is not None
+        for ln in self.lines:
+            if "<gallery" in ln:
+                before.append(ln)
+                gallery_start = True
+            elif "file:" in ln.lower():
+                images.append(ln)
+                if image and image.lower() in ln.lower().replace(" ", "_"):
+                    add_image = False
+            elif gallery_start:
+                after.append(ln)
+            else:
+                before.append(ln)
+        if add_image:
+            images.insert(0, f"{image}|Cover")
+        return [*before, *images, *after]
 
 
 class SectionComponents:
+    """
+    :type items: list[Item]
+    """
     def __init__(self, items: list[Item], pre: list[str], suf: list[str], after: str, nav=None):
         self.items = items
         self.preceding = pre
@@ -364,12 +402,13 @@ class FinishedSection:
 
 class NewComponents:
     def __init__(self, apps: FinishedSection, nca: FinishedSection, src: FinishedSection, ncs: FinishedSection,
-                 links: FinishedSection, navs: list):
+                 links: FinishedSection, collections: FinishedSection, navs: list):
         self.apps = apps
         self.nca = nca
         self.src = src
         self.ncs = ncs
         self.links = links
+        self.collections = collections
         self.navs = navs
 
 

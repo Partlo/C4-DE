@@ -198,3 +198,10 @@
 **Fixed bug preventing certain toy listings with URLs from being standardized
 **Added SourceContents support for Template:FactFile
 **Further OOU media page analysis features
+*'''4.3.2''': February 3, 2025
+**Beta build of OOU media page analysis; still many improvements to be made
+**Index generation now attempts to preserve any page numbers or timestamps it finds in existing index pages, though preservation is not guaranteed.
+**Auto-generated categories are now flagged with the InvalidCategory templatey
+**Template redirect fixing
+**Disabled DVD flagging in Sources
+**Other bug fixes

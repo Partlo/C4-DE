@@ -1,11 +1,12 @@
-from pywikibot import Site, Page, Category
+from c4de.common import fix_redirects, build_redirects
+from pywikibot import Site, Page, Category, showDiff
 from datetime import datetime
 from typing import Tuple, List
 import codecs
 import re
 
 from c4de.sources.domain import Item, ItemId, AnalysisResults
-from c4de.sources.updates import extract_release_date
+from c4de.sources.updates import extract_release_date, parse_date_string, build_date
 
 
 def build_alternate(i: ItemId):
@@ -45,7 +46,6 @@ def prepare_results(results: AnalysisResults) -> Tuple[List[ItemId], List[ItemId
             else:
                 missing.append(ItemId(i, i, False))
 
-    found = sorted(found, key=lambda a: (a.master.date, a.master.mode == "DB", a.master.sort_index(results.canon), a.sort_text()))
     return found, missing
 
 
@@ -57,6 +57,9 @@ def add_link(d, links: set):
 
 
 def convert_date_str(date, links: set):
+    if date and date.endswith("E"):
+        date = date[:-1]
+
     if not (date and date[0].isnumeric()):
         return date, None
     elif date.endswith("-XX-XX"):
@@ -66,14 +69,14 @@ def convert_date_str(date, links: set):
             d = datetime.strptime(date, "%Y-%m-XX")
             m = add_link(d.strftime("%B"), links)
             y = add_link(d.strftime("%Y"), links)
-            return f"{m}, {y}", d
+            return f"{m} {y}", d
         except Exception as e:
             print(f"Encountered {type(e)} while parsing {date}: {e}")
         return date, None
     else:
         try:
             d = datetime.strptime(re.sub("[A-Z]", "", date), "%Y-%m-%d")
-            m = add_link(d.strftime("%B %d"), links)
+            m = add_link(d.strftime("%B %d").replace(" 0", " "), links)
             y = add_link(d.strftime("%Y"), links)
             return f"{m}, {y}", d
         except Exception as e:
@@ -92,7 +95,7 @@ def get_reference_for_release_date(site, target, date, refs: dict, contents: dic
 
         ref_text, other_date = extract_release_date_reference(site, target, date)
         if ref_text and ref_text in contents:
-            return f'<ref name="{contents[ref_text]} />'
+            return f'<ref name="{contents[ref_text]}" />'
         elif ref_text:
             if other_date:
                 print(f"Could not find exact match for {date}; using closest date match: {other_date}")
@@ -147,34 +150,88 @@ def extract_reference(line, text):
     return None
 
 
-def create_index(site, page: Page, results: AnalysisResults, save: bool):
+def build_date_and_ref(i: Item, site, links: set, refs: dict, contents: dict, ref_name=None, existing: dict=None):
+    date_str, parsed_date = convert_date_str(re.sub("XX[A-Z]", "XX", i.date), links)
+    date_ref = ''
+    if date_str:
+        if i.target:
+            date_ref = get_reference_for_release_date(site, i.target, parsed_date, refs, contents)
+        if i.parent and not date_ref:
+            date_ref = get_reference_for_release_date(site, i.parent, parsed_date, refs, contents)
+        if not date_ref and existing and i.original in existing:
+            _, date_ref = existing[i.original]
+        if not date_ref and i.url and i.can_self_cite():
+            if not ref_name:
+                ref_name = f"{i.template}: {i.text}".replace('"', '')
+            if ref_name in refs:
+                date_ref = f'<ref name="{ref_name}" />'
+            else:
+                refs[ref_name] = i.original
+                date_ref = f'<ref name="{ref_name}">{refs[ref_name]}</ref>'
+    if not (date_str and date_ref) and existing and i.original in existing:
+        exd, exr = existing[i.original]
+        date_str = date_str if date_str else exd
+        date_ref = date_ref if date_ref else exr
+    return date_str, date_ref
+
+
+def create_index(site, page: Page, results: AnalysisResults, appearances: dict, sources: dict, save: bool):
     found, missing = prepare_results(results)
+
+    current_page = Page(site, f"Index:{page.title()}")
+    current = {}
+    references = {}
+    if current_page.exists():
+        text = current_page.get().split("==Media index==")[-1].split("==Notes")[0].strip() + "\n"
+        if "(Star Wars Encyclopedia)" in text:
+            text = re.sub("\(Star Wars Encyclopedia\)(\|.*?)?}}", "(booklet)}}", text)
+        if re.search("\*([\[\]A-z 0-9,]*\[*[12][0-9]{3}]*.*?):(<ref name.*?( />|</ref>)) (.*?[]}]+'*)( \{\{[A-z0-9]+.*?}})?( (–|—|&.dash;).*?)\n", text):
+            redirects = build_redirects(current_page, manual=text)
+            text = fix_redirects(redirects, text, "Index", {}, {}, appearances, sources)
+            for x in re.findall("\*([\[\]A-z 0-9,]*\[*[12][0-9]{3}]*.*?):(<ref name.*?( />|</ref>)) (.*?[]}]+'*)( \{\{[A-z0-9]+.*?}})?( (–|—|&.dash;).*?)\n", text):
+                current[x[3]] = (x[0], x[1], x[5])
+
+    add_by = []
+    for t, (date, ref, nt) in current.items():
+        u = re.search("(\|(video|url)=|(You[Tt]ube|StarWarsShow|ThisWeek|HighRepublicShow)\|)(?P<u>.*?)\|", t)
+        match = False
+        for i in found:
+            if i.master.original == t:
+                match = True
+            elif t.count("|") > 1 and t.rsplit("|", 1)[0] + "}}" == i.master.original:
+                match = True
+            elif i.master.original.replace("}}", "").split(" \(")[0].startswith(t.replace("}}", "").split(" \(")[0]):
+                match = True
+            elif u and i.master.url and u.group('u').replace("video=", "") == i.master.url.replace("video=", ""):
+                match = True
+            if match:
+                i.current.extra += nt
+                references[i.master.original] = (date, ref)
+                if i.master.date == "Current" and "20" in date:
+                    x, y = parse_date_string(date.replace("By ", "").replace("[", "").replace("]", "").replace(",", ""), "Index")
+                    if x:
+                        d = build_date([(x, y)])
+                        if d:
+                            i.master.date = d
+                if date.startswith("By ") and date.replace("By ", "") == i.master.date:
+                    add_by.append(i.master.original)
+                break
+        if not match:
+            print(t, nt)
+
+    found = sorted(found, key=lambda a: (a.master.date, a.master.mode == "DB", a.master.sort_index(results.canon), a.sort_text()))
 
     lines = ["This is the media index page for [[{{PAGENAME}}]].", "", "==Media index=="]
     refs = {}
     contents = {}
     links = set()
     for i in found:
-        date_str, parsed_date = convert_date_str(i.master.date, links)
-        date_ref = ''
-        if date_str:
-            date_str = re.sub("XX[A-Z]", "XX", date_str.replace(" 0", " "))
-
-            if i.master.target:
-                date_ref = get_reference_for_release_date(site, i.master.target, parsed_date, refs, contents)
-            if i.master.parent and not date_ref:
-                date_ref = get_reference_for_release_date(site, i.master.parent, parsed_date, refs, contents)
-            if not date_ref and i.master.url and i.master.can_self_cite():
-                t = f"{i.master.template}: {i.master.text}".replace('"', '')
-                if t in refs:
-                    date_ref = f'<ref name="{t}" />'
-                else:
-                    refs[t] = i.master.original
-                    date_ref = f'<ref name="{t}">{refs[t]}</ref>'
-
+        date_str, date_ref = build_date_and_ref(i.master, site, links, refs, contents, existing=references)
+        if i.master.original in add_by:
+            date_str = f"By: {date_str}"
         zt = i.current.original if i.use_original_text else i.master.original
-        xt = f"*{date_str}:{date_ref} {zt} {i.current.extra.strip()}".strip()
-        xt = re.sub("\|audiobook=1", "", re.sub(" ?\{\{Ab\|.*?}}", "", xt))
+        xt = f"*{date_str}:{date_ref} {zt} {i.current.extra.strip()}".strip().replace("|reprint=1", "")
+        xt = re.sub(" ?\{\{Ab\|.*?}}", "", xt).replace("|audiobook=1", "")
         if xt.count("{{") < xt.count("}}") and xt.endswith("}}}}"):
             xt = xt[:-2]
         lines.append(xt)
@@ -182,7 +239,7 @@ def create_index(site, page: Page, results: AnalysisResults, save: bool):
     if refs:
         lines.append("\n==Notes and references==")
         if len(refs) > 20:
-            lines.append("{{Scroll_box|content=")
+            lines.append("{{ScrollBox|content=")
         lines.append("{{Reflist}}")
         if len(refs) > 20:
             lines.append("}}")
@@ -197,13 +254,22 @@ def create_index(site, page: Page, results: AnalysisResults, save: bool):
     else:
         lines.append("\n[[Category:Legends index pages]]")
 
-    index = None
+    index = Page(site, f"Index:{page.title()}")
     if save:
-        index = Page(site, f"Index:{page.title()}")
         index.put("\n".join(lines), "Source Engine: Generating Index page", botflag=False)
     else:
+        t1 = re.sub(">.*?</ref>", " />", re.sub("name=\".*?\"", "name=\"name\"", index.get()))
+        t2 = re.sub(">.*?</ref>", " />", re.sub("name=\".*?\"", "name=\"name\"", "\n".join(lines)))
+
+        showDiff(clean_date_strings(t1), clean_date_strings(t2))
         with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/test_text.txt", mode="w",
                          encoding="utf-8") as f:
             f.writelines("\n".join(lines))
 
     return index
+
+
+def clean_date_strings(t):
+    for x in re.findall("\*([^\n:{]*?\[[^\n:{]*):", t):
+        t = t.replace(x, x.replace("[", "").replace("]", ""))
+    return t

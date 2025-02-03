@@ -313,15 +313,39 @@ def clean_up_archive_dates(site, t=None):
         page.put(text, "Clearing stored archivedates")
 
 
+MAINTENANCE_CATS = ["High-priority template and page issues", "Low-priority template and page issues",
+                    "Tracking maintenance categories"]
+
+
 def clean_up_archive_categories(site):
+    done = []
     for mc in Category(site, "Archivedate usages").subcategories():
         for c in mc.subcategories():
+            done.append(c.title())
             if c.title().endswith("/Empty"):
                 for cx in c.subcategories():
                     if not cx.isEmptyCategory():
-                        text = cx.get().replace(f"{mc.title()}/Empty]]", f"{mc.title()}]]")
+                        text = cx.get()
+                        for t in [mc.title(), *MAINTENANCE_CATS]:
+                            text = text.replace(f"[[Category:{t}/Empty|", f"[[Category:{t}|").replace(f"[[Category:{t}/Empty]]", f"[[Category:{t}]]")
                         cx.put(text, "Marking as non-empty")
-
-            if c.isEmptyCategory():
-                text = c.get().replace(f"{mc.title()}]]", f"{mc.title()}/Empty]]")
+            elif c.isEmptyCategory():
+                text = c.get()
+                for t in [mc.title(), *MAINTENANCE_CATS]:
+                    text = text.replace(f"[[Category:{t}|", f"[[Category:{t}/Empty|").replace(f"[[Category:{t}]]", f"[[Category:{t}/Empty]]")
                 c.put(text, "Marking as empty")
+
+    for tx in MAINTENANCE_CATS:
+        for c in Category(site, tx).subcategories():
+            if c.title() in done:
+                continue
+            done.append(c.title())
+            if c.isEmptyCategory():
+                text = c.get().replace(f"[[Category:{tx}|", f"[[Category:{tx}/Empty|").replace(f"[[Category:{tx}]]", f"[[Category:{tx}/Empty]]")
+                c.put(text, "Marking as empty")
+        for c in Category(site, f"{tx}/Empty").subcategories():
+            if c.title() in done:
+                continue
+            if not c.isEmptyCategory():
+                text = c.get().replace(f"[[Category:{tx}/Empty|", f"[[Category:{tx}|").replace(f"[[Category:{tx}/Empty]]", f"[[Category:{tx}]]")
+                c.put(text, "Marking as non-empty")

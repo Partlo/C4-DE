@@ -36,7 +36,7 @@ def check_new_pages_rss_feed(site, url, cache: Dict[str, List[str]]):
     entries_to_report = []
     for e in d.entries:
         try:
-            pt, ch, message, d = None, None, None, None
+            pt, ch, message, z = None, None, None, None
             if is_new:
                 if e.title.startswith("Forum:SH:"):
                     pt, ch, message = "Senate Hall", ANNOUNCEMENTS, f"📣 **New Senate Hall thread**: [{fix_title(e.title)}](<{e.link}>)"
@@ -55,12 +55,12 @@ def check_new_pages_rss_feed(site, url, cache: Dict[str, List[str]]):
                 continue
             elif e.title.startswith("Forum:TC:") and re.match("^<p>.*?delete.*?</p>", e.description.lower()):
                 continue
-            elif did_edit_add_deletion_template(site, e.title, e.description) or "<p>CSD</p>" in e.description or "<p>delete</p>" in e.description.lower():
-                pt, ch, message = "CSD", ADMIN_REQUESTS, f"❗ **{e.author}** requested deletion of [**{e.title}**](<{e.link}>)"
-                d = e.title
-            elif re.match("^<p>.*?CSD.*?</p>", e.description) or re.match("^<p>.*?delete[^d].*?</p>", e.description.lower()):
-                pt, ch, message = "CSD", ADMIN_REQUESTS, f"❓ **{e.author}** used 'delete' or 'CSD' in edit summary on [**{e.title}**](<{e.link}>); may be false positive"
-                d = e.title
+            # elif did_edit_add_deletion_template(site, e.title, e.description) or "<p>CSD</p>" in e.description or "<p>delete</p>" in e.description.lower():
+            #     pt, ch, message = "CSD", ADMIN_REQUESTS, f"❗ **{e.author}** requested deletion of [**{e.title}**](<{e.link}>)"
+            #     d = e.title
+            # elif re.match("^<p>.*?CSD.*?</p>", e.description) or re.match("^<p>.*?delete[^d].*?</p>", e.description.lower()):
+            #     pt, ch, message = "CSD", ADMIN_REQUESTS, f"❓ **{e.author}** used 'delete' or 'CSD' in edit summary on [**{e.title}**](<{e.link}>); may be false positive"
+            #     d = e.title
             else:
                 continue
 
@@ -69,10 +69,8 @@ def check_new_pages_rss_feed(site, url, cache: Dict[str, List[str]]):
                     cache[pt] = []
                 if e.link in cache[pt]:
                     continue
-                entries_to_report.append((ch, message, d))
+                entries_to_report.append((ch, message, z))
                 cache[pt].append(e.link)
-                if d:
-                    cache[pt].append(d)
         except Exception as x:
             error_log(f"Encountered {type(x)} while parsing RSS feed entry for {e.title}", e)
 
@@ -119,24 +117,27 @@ def parse_history_rss_feed(feed_url, cache: Dict[str, List[str]], feed_type):
 def check_wookieepedia_feeds(site: Site, cache: Dict[str, List[str]]):
     messages = []
 
-    to_delete = {}
+    to_delete = []
     for p in Category(site, "Candidates for speedy deletion").articles():
-        if p.title() not in cache["CSD"] and p.full_url() not in cache["CSD"]:
-            to_delete[p.title()] = f"https://starwars.fandom.com/wiki/{p.title().replace(' ', '_')}"
-            print(p.title())
+        if p.title() not in cache["CSD"]:
+            messages.append((ADMIN_REQUESTS, f"❗ [**{p.title()}**](<{p.full_url()}>) has been flagged for speedy deletion", p.title()))
+        to_delete.append(p.title())
+    cache["CSD"] = to_delete
+
+    protect = []
+    for p in Category(site, "Requests for protection").articles():
+        if p.title() not in cache["Protect"]:
+            messages.append((ADMIN_REQUESTS, f"❗ Protection has been requested in [**{p.title()}**](<{p.full_url()}>)", p.title()))
+        protect.append(p.title())
+    cache["Protect"] = protect
 
     for url in FEED_URLS:
         try:
             entries = check_new_pages_rss_feed(site, url, cache)
             for cm in entries:
-                if cm[2] in to_delete:
-                    to_delete.pop(cm[2])
                 messages.append(cm)
         except Exception as e:
             error_log(type(e), e.args)
-
-    for p, u in to_delete.items():
-        cache["CSD"] += [p, u]
 
     entries = parse_history_rss_feed("https://starwars.fandom.com/wiki/Wookieepedia:Bot_requests?action=history&feed=rss", cache, "Bot Requests")
     for e in entries:

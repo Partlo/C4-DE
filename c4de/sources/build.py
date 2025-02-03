@@ -1,15 +1,16 @@
 import codecs
 import re
+from datetime import datetime
 
-from c4de.sources.media import MEDIA_STRUCTURE, prepare_media_infobox_and_intro
-from c4de.sources.parsing import build_initial_components, build_page_components, clean_archive_usages, \
-    MASTER_STRUCTURE
 from pywikibot import Page, Category, showDiff
 
+from c4de.common import error_log, fix_redirects, do_final_replacements, sort_top_template
 from c4de.sources.analysis import analyze_section_results
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, SectionComponents, FinishedSection, \
     NewComponents
-from c4de.common import error_log, fix_redirects, do_final_replacements, sort_top_template
+from c4de.sources.media import MEDIA_STRUCTURE, prepare_media_infobox_and_intro
+from c4de.sources.parsing import build_initial_components, build_page_components, clean_archive_usages, \
+    MASTER_STRUCTURE
 
 
 def build_section_from_pieces(section: SectionComponents, items: FinishedSection, log, media_cat):
@@ -21,7 +22,7 @@ def build_section_from_pieces(section: SectionComponents, items: FinishedSection
         pieces.insert(0, "")
         pieces.insert(0, section.before)
     if items.rows >= 20 and not any("{{scroll" in i.lower() for i in section.preceding):
-        pieces.append("{{Scroll_box|content=")
+        pieces.append("{{ScrollBox|content=")
 
     pieces += section.preceding
     added_media_cat = False
@@ -85,14 +86,18 @@ def find_media_categories(page: Page):
     return image_cat, audio_cat
 
 
-def sort_categories(text, namespace_id):
+def matches_category(ln, categories):
+    return any(f"[[{c.lower()}|" in ln or f"[[{c.lower()}]]" in ln for c in categories)
+
+
+def sort_categories(pieces, namespace_id, bad_categories):
     if namespace_id == 6:
-        return text
+        return "\n".join(pieces)
     final = []
     categories = []
     related_cats = []
     rc_count = 0
-    for line in text.splitlines():
+    for line in pieces:
         if "{{relatedcategories" in line.lower():
             rc_count += line.count("{")
             related_cats.append(line)
@@ -101,7 +106,10 @@ def sort_categories(text, namespace_id):
             rc_count += line.count("{")
             rc_count -= line.count("}")
         elif line.strip().lower().startswith("[[category:"):
-            categories.append(line)
+            if bad_categories and matches_category(line.strip().lower(), bad_categories):
+                categories.append(f"{line}{{{{InvalidCategory}}}}")
+            else:
+                categories.append(line)
         else:
             final.append(line)
 
@@ -109,7 +117,7 @@ def sort_categories(text, namespace_id):
     if related_cats:
         final.append("")
         final += related_cats
-    x = "\n".join(final).replace("|\n[[Category:", "|[[Category:q")
+    x = "\n".join(final).replace("|\n[[Category:", "|[[Category:")
     x = re.sub("(\[\[Category:.*?)(\|.*?]])\n\\1]]", "\\1\\2", x)
     x = re.sub("(\[\[Category:.*?)]]\n\\1(\|.*?]])", "\\1\\2", x)
     return x
@@ -121,32 +129,34 @@ def add_parsed_section(pieces: list, component: SectionComponents, finished: Fin
     return None if added else media_cat
 
 
-def build_new_final_text(page: Page, results: PageComponents, disambigs: list, remap: dict, redirects: dict,
-                         appearances: FullListData, sources: FullListData, components: NewComponents, log: bool):
+def build_final_text(page: Page, results: PageComponents, disambigs: list, remap: dict, redirects: dict,
+                     appearances: FullListData, sources: FullListData, components: NewComponents, log: bool):
+    image = None
     if results.media:
-        pieces = prepare_media_infobox_and_intro(page, results, appearances, sources)
+        pieces, image = prepare_media_infobox_and_intro(page, results, components, redirects, disambigs, remap,
+                                                        appearances, sources)
     else:
         pieces = [sort_top_template(ln) if "{{top" in ln.lower() else ln for ln in results.before.strip().splitlines()]
     pieces.append("")
 
-    # if "{{mediacat" in results.final.lower() or "{{imagecat" in results.final.lower():
-    #     media_cat = None
-    # elif any(check_for_media_cat(s) for s in [results.apps, results.nca, results.src, results.ncs, results.links, results.collections]):
-    #     media_cat = None
-    # else:
-    #     ic, ac = find_media_categories(page)
-    #     media_cat = f"{{{{Mediacat{ic}{ac}}}}}" if (ic or ac) else None
-    media_cat = ''
+    otx = page.get()
+    if "{{mediacat" in otx.lower() or "{{imagecat" in otx.lower():
+        media_cat = None
+    else:
+        ic, ac = find_media_categories(page)
+        media_cat = f"{{{{Mediacat{ic}{ac}}}}}" if (ic or ac) else None
+        if not results.real and results.canon:
+            media_cat = None
 
     section = sorted([components.links, components.nca, components.apps, components.ncs, components.src], key=lambda a: a.rows)[-1]
     mc_section_name = section.name if section.rows > 3 else None
 
-    otx = page.get()
     structure = MEDIA_STRUCTURE if results.media else MASTER_STRUCTURE
     for key, header_line in structure.items():
         if key == "References":
             if key in results.sections:
-                pieces.append("\n".join(results.sections[key].build_text()))
+                txt, _ = results.sections[key].build_text(media_cat=media_cat)
+                pieces.append("\n".join(txt))
                 if "{{mediacat" in pieces[-1].lower():
                     media_cat = None
             elif "<ref" in otx and "{{reflist}}" not in otx:
@@ -172,40 +182,61 @@ def build_new_final_text(page: Page, results: PageComponents, disambigs: list, r
             if log:
                 print(f"Creating {key} section with {len(section.lines)} lines and {len(section.subsections)} / {len(section.other)} subsections")
 
-            lines = section.build_text(header_line)
-            for subheader, subsection in section.subsections.items():
-                lines += subsection.build_text(subheader)
+            lines, _ = section.build_text(header_line)
+            subsections = sorted([(k, v) for k, v in section.subsections.items()], key=lambda a: (a[1].master_num, a[1].num))
+            for subheader, subsection in subsections:
+                if subheader == "Collections":
+                    tx, added_cat = build_section_from_pieces(results.collections, components.collections, log,
+                                                              media_cat if components.collections.rows > 0 else None)
+                    txt = [tx]
+                elif subheader == "Cover gallery":
+                    txt, added_cat = subsection.build_text(subheader, image=image, media_cat=media_cat)
+                elif subheader == "Editions":
+                    txt, added_cat = subsection.build_text(subheader, media_cat=media_cat)
+                else:
+                    txt, added_cat = subsection.build_text(subheader)
+                lines += txt
+                if added_cat:
+                    media_cat = None
             for other in section.other:
-                lines += other.build_text()
+                txt, _ = other.build_text()
+                lines += txt
 
             lines.append("")
 
             text = "\n".join(lines)
+            if key == "Appearances" and "{{incomplete" in text:
+                text = re.sub("\{\{[Ii]ncomplete[ _]?List.*?}}", "{{IncompleteApp}}", text)
+            elif key == "Credits" and "{{incomplete" in text:
+                text = re.sub("\{\{[Ii]ncomplete[ _]?List.*?}}", "{{IncompleteCredits}}", text)
+
             if "onlyinclude" in text:
                 text = re.sub("}}\n\n+</onlyinclude>\n+", "}}\n</onlyinclude>\n\n", text)
-            text = fix_redirects(redirects, text, key, remap, disambigs, overwrite=key == "Appearances")
+            text = fix_redirects(redirects, text, key, remap, disambigs, overwrite=key == "Appearances", canon=results.canon)
 
             # pieces.append(do_final_replacements(text, True))
             pieces.append(text)
             pieces.append("")
 
-    return final_steps(page, results, components, pieces, disambigs, remap, {}, media_cat)
+    return final_steps(page, results, components, pieces, disambigs, remap, redirects, media_cat, sources)
 
 
 def final_steps(page: Page, results: PageComponents, components: NewComponents, pieces: list, disambigs: list,
-                remap: dict, redirects: dict, media_cat):
+                remap: dict, redirects: dict, media_cat, sources: FullListData):
     for i in components.navs:
         pieces.append(i)
     if components.navs:
         pieces.append("")
 
     if results.final:
-        pieces.append(build_final(results.final, media_cat))
+        pieces.append(build_final(results.final, media_cat, redirects))
 
-    new_txt = sort_categories("\n".join(pieces), page.namespace().id)
+    # now = datetime.now()
+    new_txt = sort_categories(pieces, page.namespace().id, results.flag)
     if results.canon and not results.real and "/Legends" in new_txt:
         new_txt = handle_legends_links(new_txt, page.title())
-    new_txt = clean_archive_usages(page, new_txt)
+    new_txt = clean_archive_usages(page, new_txt, sources.archive_data)
+    # print(f"archive: {(datetime.now() - now).microseconds / 1000} microseconds")
 
     new_txt = re.sub("(\{\{DEFAULTSORT:.*?}})\n\n+\[\[[Cc]ategory", "\\1\n[[Category", new_txt)
     new_txt = re.sub("(?<![\n=}])\n==", "\n\n==", re.sub("\n\n+", "\n\n", new_txt)).strip()
@@ -245,7 +276,11 @@ def handle_legends_links(text, title):
     return f"{body}{header}{bts}"
 
 
-def build_final(final, media_cat):
+def build_final(final, media_cat, redirects):
+    templates = {k: v for k, v in redirects.items() if k.startswith("Template:")}
+    if templates:
+        final = fix_redirects(templates, final, "Ending Text", {}, {})
+
     if "RelatedCategories" not in final and re.search("\n\[\[[Cc]ategory:.*?\| ]]", final):
         cats = []
         lines = []
@@ -277,51 +312,51 @@ def build_final(final, media_cat):
 
 
 def build_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appearances: FullListData,
-               sources: FullListData, remap: dict, include_date: bool, checked: list, log=True, use_index=True,
-               collapse_audiobooks=True, manual: str = None, extra=None):
-    text, redirects, results = build_initial_components(target, disambigs, infoboxes, manual)
+               sources: FullListData, bad_cats: list, remap: dict, include_date: bool, checked: list, log=True,
+               use_index=True, collapse_audiobooks=True, manual: str = None, extra=None):
+    text, redirects, results = build_initial_components(target, disambigs, infoboxes, bad_cats, manual)
     unknown = build_page_components(target, text, redirects, results, types, disambigs, appearances, sources,
                                     remap, log, extra=extra)
     if results.real and collapse_audiobooks:
         collapse_audiobooks = False
 
-    components, dates, unknown_items, analysis = analyze_section_results(
-        target, results, disambigs, appearances, sources, remap, use_index, include_date, collapse_audiobooks, checked, log)
+    components, unknown_items, analysis = analyze_section_results(
+        target, results, appearances, sources, remap, use_index, include_date, collapse_audiobooks, checked, log)
 
-    new_txt = build_new_final_text(target, results, disambigs, remap, redirects, appearances, sources, components, log)
-    return new_txt, analysis, dates, unknown, unknown_items
+    new_txt = build_final_text(target, results, disambigs, remap, redirects, appearances, sources, components, log)
+    return new_txt, analysis, unknown, unknown_items
 
 
 def build_new_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appearances: FullListData,
-                   sources: FullListData, remap: dict, include_date: bool, checked: list, log=True, use_index=True,
-                   collapse_audiobooks=True, manual: str = None, extra=None):
-    new_txt, analysis, dates, unknown, unknown_items = build_text(
-        target, infoboxes, types, disambigs, appearances, sources, remap, include_date, checked, log, use_index,
-        collapse_audiobooks, manual, extra)
+                   sources: FullListData, bad_cats: list, remap: dict, include_date: bool, checked: list, log=True,
+                   use_index=True, collapse_audiobooks=True, manual: str = None, extra=None):
+    new_txt, analysis, unknown, unknown_items = build_text(
+        target, infoboxes, types, disambigs, appearances, sources, bad_cats, remap, include_date, checked, log,
+        use_index, collapse_audiobooks, manual, extra)
 
     record_local_unknown(unknown, unknown_items, target)
     return new_txt
 
 
 def analyze_target_page(target: Page, infoboxes: dict, types: dict, disambigs: list, appearances: FullListData,
-                        sources: FullListData, remap: dict, save: bool, include_date: bool,
+                        sources: FullListData, bad_cats: list, remap: dict, save: bool, include_date: bool,
                         log=True, use_index=True, collapse_audiobooks=True):
-    new_txt, analysis, dates, unknown, unknown_items = build_text(
-        target, infoboxes, types, disambigs, appearances, sources, remap, include_date, [], log, use_index,
-        collapse_audiobooks)
+    new_txt, analysis, unknown, unknown_items = build_text(
+        target, infoboxes, types, disambigs, appearances, sources, bad_cats, remap, include_date, [], log,
+        use_index, collapse_audiobooks)
 
     with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/test_text.txt", mode="w", encoding="utf-8") as f:
         f.writelines(new_txt)
 
-    if dates:
-        with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/new_dates.txt", mode="a", encoding="utf-8") as f:
-            date_txt = []
-            for d in dates:
-                if d[2] == d[3]:
-                    date_txt.append(f"{d[1].master.date} --> {d[0]}: #{d[2]}: -> {d[1].master.original}")
-                else:
-                    date_txt.append(f"{d[1].master.date} --> {d[0]}: #{d[2]} {d[3]}: -> {d[1].master.original}")
-            f.writelines("\n" + "\n".join(date_txt))
+    # if dates:
+    #     with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/new_dates.txt", mode="a", encoding="utf-8") as f:
+    #         date_txt = []
+    #         for d in dates:
+    #             if d[2] == d[3]:
+    #                 date_txt.append(f"{d[1].master.date} --> {d[0]}: #{d[2]}: -> {d[1].master.original}")
+    #             else:
+    #                 date_txt.append(f"{d[1].master.date} --> {d[0]}: #{d[2]} {d[3]}: -> {d[1].master.original}")
+    #         f.writelines("\n" + "\n".join(date_txt))
 
     if save and new_txt != target.get(force=True):
         if "�" in new_txt:

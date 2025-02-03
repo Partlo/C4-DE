@@ -1,5 +1,6 @@
 import codecs
 import re
+import emoji
 import json
 import subprocess
 import sys
@@ -38,7 +39,8 @@ from c4de.protocols.rss import check_rss_feed, check_latest_url, check_wookieepe
 from c4de.sources.analysis import get_analysis_from_page
 from c4de.sources.build import analyze_target_page
 from c4de.sources.domain import FullListData
-from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, build_template_types
+from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, reload_auto_categories, \
+    load_auto_categories, load_template_types, reload_templates
 from c4de.sources.index import create_index
 from c4de.sources.infoboxer import reload_infoboxes, load_infoboxes
 from c4de.sources.updates import get_future_products_list, handle_results, search_for_missing
@@ -153,6 +155,7 @@ class C4DE_Bot(commands.Bot):
         self.appearances = None
         self.sources = None
         self.remap = None
+        self.bad_cats = []
 
         self.last_ran = {}
 
@@ -514,11 +517,13 @@ class C4DE_Bot(commands.Bot):
     async def save_web_sources(self, message):
         log("Loading web sources file")
         try:
-            by_year = {"Unknown": [], "Current": []}
+            by_year = {"Unknown": [], "Current": [], "Special": []}
             with codecs.open("C:/Users/cadec/Documents/projects/C4DE/web.txt", mode="r", encoding="utf-8") as f:
                 for i in f.readlines():
                     d, c = i.split("\t", 1)
-                    if d.startswith("1") or d.startswith("2"):
+                    if "®" not in i and "™" not in i and emoji.emoji_count(i) > 0:
+                        by_year["Special"].append(f"{d} {c}")
+                    elif d.startswith("1") or d.startswith("2"):
                         y = d[:4]
                         if y not in by_year:
                             by_year[y] = []
@@ -583,7 +588,7 @@ class C4DE_Bot(commands.Bot):
         data = {}
         for rev in page.revisions(content=True, total=5):
             try:
-                data = json.loads(rev.text)
+                data = json.loads(rev.text.replace("<pre>", "").replace("</pre>", ""))
             except Exception as e:
                 await self.report_error("RSS Reload", type(e), e)
             if data:
@@ -612,6 +617,12 @@ class C4DE_Bot(commands.Bot):
     def reload_infoboxes(self):
         log("Loading infoboxes")
         self.infoboxes = reload_infoboxes(self.site)
+
+    def reload_templates(self):
+        self.templates = reload_templates(self.site)
+
+    def reload_auto_categories(self):
+        self.bad_cats = reload_auto_categories(self.site)
 
     async def handle_initial_redirect_request(self, message: Message, command: dict):
         redirect_name = command['redirect']
@@ -780,7 +791,8 @@ class C4DE_Bot(commands.Bot):
         try:
             for p in Category(self.site, "Category:Wookieepedia Sources Project").articles():
                 self.source_rev_ids[p.title()] = p.latest_revision_id
-            self.templates = build_template_types(self.site)
+            self.templates = load_template_types(self.site)
+            self.bad_cats = load_auto_categories(self.site)
             self.infoboxes = load_infoboxes(self.site)
             self.disambigs = [p.title() for p in Category(self.site, "Disambiguation pages").articles() if "(disambiguation)" not in p.title()]
             self.appearances = load_full_appearances(self.site, self.templates, False)
@@ -905,7 +917,7 @@ class C4DE_Bot(commands.Bot):
             old_text = target.get()
 
             await message.add_reaction(TIMER)
-            results = analyze_target_page(target, self.infoboxes, self.templates, self.disambigs, self.appearances, self.sources, self.remap,
+            results = analyze_target_page(target, self.infoboxes, self.templates, self.disambigs, self.appearances, self.sources, self.bad_cats, self.remap,
                                           save=True, include_date=False, use_index=True)
             await message.remove_reaction(TIMER, self.user)
             await message.add_reaction(self.emoji_by_name("bb8thumbsup"))
@@ -948,7 +960,8 @@ class C4DE_Bot(commands.Bot):
             use_index = command.get('text') is None
 
             await message.add_reaction(TIMER)
-            results = analyze_target_page(target, self.infoboxes, self.templates, self.disambigs, self.appearances, self.sources, self.remap,
+            results = analyze_target_page(target, self.infoboxes, self.templates, self.disambigs, self.appearances,
+                                          self.sources, self.bad_cats, self.remap,
                                           save=True, include_date=use_date, use_index=use_index)
             await message.remove_reaction(TIMER, self.user)
 
@@ -981,8 +994,9 @@ class C4DE_Bot(commands.Bot):
                 target = target.getRedirectTarget()
 
             await message.add_reaction(TIMER)
-            analysis = get_analysis_from_page(target, self.infoboxes, self.templates, self.disambigs, self.appearances, self.sources, self.remap, False, False)
-            result = create_index(self.site, target, analysis, True)
+            analysis = get_analysis_from_page(target, self.infoboxes, self.templates, self.disambigs, self.appearances,
+                                              self.sources, self.bad_cats, self.remap, False, False)
+            result = create_index(self.site, target, analysis, self.appearances.target, self.sources.target, True)
             await message.remove_reaction(TIMER, self.user)
 
             if result.exists():
@@ -1029,25 +1043,29 @@ class C4DE_Bot(commands.Bot):
             await self.report_error("Future products", type(e), e)
 
     def update_unused_files(self):
+        exception_page = Page(self.site, "Wookieepedia:WookieeProject Images/Unused images/Not unused")
+        exceptions = [x.replace("_", " ") for x in re.findall("(File:.*?)\n", exception_page.get())]
+
         page = Page(self.site, "Wookieepedia:WookieeProject Images/Unused images")
         text = page.get()
         unused = []
         for x in self.site.unusedfiles(total=250):
-            unused.append(x.title())
+            if x.title() not in exceptions:
+                unused.append(x.title())
 
         if unused:
             files, new_lines = [], []
-            for l in text.splitlines():
-                if l.startswith("File:"):
-                    x = l.split("|")[0]
+            for ln in text.splitlines():
+                if ln.startswith("File:"):
+                    x = ln.split("|")[0]
                     pf = FilePage(self.site, x)
                     if not pf.exists():
                         continue
                     elif any(up.title() != "Wookieepedia:WookieeProject Images/Unused images" for up in pf.using_pages(total=5)):
                         continue
-                    files.append(l)
-                elif l != "</gallery>":
-                    new_lines.append(l)
+                    files.append(ln)
+                elif ln != "</gallery>":
+                    new_lines.append(ln)
 
             d = datetime.now().strftime("%Y-%m-%d")
             for i in unused:
@@ -1112,6 +1130,8 @@ class C4DE_Bot(commands.Bot):
         log("Scheduled Operation: Calculating ISBNs")
         calculate_isbns_for_all_pages(self.site)
         self.reload_infoboxes()
+        self.reload_auto_categories()
+        self.reload_templates()
 
     @tasks.loop(hours=1)
     async def check_edelweiss(self):
@@ -1393,13 +1413,6 @@ class C4DE_Bot(commands.Bot):
             except Exception as e:
                 await self.report_error(f"RSS: {message}", type(e), e)
 
-        for title, url in to_delete.items():
-            try:
-                m = await self.text_channel(ADMIN_REQUESTS).send(f"❗ [**{title}**](<{url}>) has been flagged for deletion\n")
-                self.admin_messages[m.id] = title
-            except Exception as e:
-                await self.report_error(f"RSS: Deletion: {title}", type(e), e)
-
         with open(ADMIN_CACHE, "w") as f:
             f.writelines(json.dumps(self.admin_messages, indent=4))
         with open(INTERNAL_RSS_CACHE, "w") as f:
@@ -1641,7 +1654,10 @@ class C4DE_Bot(commands.Bot):
         nd = datetime.now().strftime("%Y-%m-%d")
         by_year = {}
         for d, t in templates:
-            dy = (d or nd).split("-")[0]
+            if "®" not in t and "™" not in t and emoji.emoji_count(t) > 0:
+                dy = "Special"
+            else:
+                dy = (d or nd).split("-")[0]
             if dy not in by_year:
                 by_year[dy] = []
             by_year[dy].append((d, t))
@@ -1740,7 +1756,7 @@ class C4DE_Bot(commands.Bot):
         else:
             s = (m['site'].split('.com:')[0] + '.com') if '.com:' in m['site'] else m['site']
             t = f"New Article on {s}"
-        f = m["title"].replace("''", "*").replace("’", "'")
+        f = m["title"].replace("''", "*").replace("’", "'").replace("“", '"').replace('“', '"')
         f = re.sub("^(''[^'\n]+'')'s ", "\\1{{'s}} ", f)
         f = re.sub("( ''[^'\n]+'')'s ", "\\1{{'s}} ", f)
         msg = "{0} **{1}:**    {2}\n- <{3}>".format(self.emoji_by_name(site_data["emoji"]), t, f, m["url"])

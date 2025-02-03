@@ -17,6 +17,21 @@ def list_all_infoboxes(site):
     return results
 
 
+def parse_date_string(d, title):
+    if d and d.lower() != "none" and d.lower() != "future" and d.lower() != "canceled":
+        t, z = None, None
+        for x, df in {"day": "%B %d %Y", "month": "%B %Y", "year": "%Y"}.items():
+            try:
+                z = datetime.strptime(d, df)
+                t = x
+                return t, z
+            except Exception:
+                pass
+        if not z:
+            print(f"Unrecognized date string on {title}: {d}")
+    return None, None
+
+
 def extract_release_date(title, text):
     date_strs = []
     m = re.search("\|(publish date|publication date|first aired|airdate|start date|first date|release date|released|published)=(?P<d1>.*?)(?P<r1><ref.*?)?\n(\*(?P<d2>.*?)(?P<r2><ref.*?)?\n)?(\*(?P<d3>.*?)(?P<r3><ref.*?)?\n)?", text)
@@ -34,17 +49,9 @@ def extract_release_date(title, text):
     page_dates = []
     for d, r in date_strs:
         if d and d.lower() != "none" and d.lower() != "future" and d.lower() != "canceled":
-            t, z = None, None
-            for x, df in {"day": "%B %d %Y", "month": "%B %Y", "year": "%Y"}.items():
-                try:
-                    z = datetime.strptime(d, df)
-                    t = x
-                    page_dates.append((t, z, r))
-                    break
-                except Exception:
-                    pass
-            if not z:
-                print(f"Unrecognized date string on {title}: {d}")
+            t, z = parse_date_string(d, title)
+            if t and z:
+                page_dates.append((t, z, r))
     return page_dates
 
 

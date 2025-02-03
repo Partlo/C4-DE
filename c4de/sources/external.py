@@ -42,9 +42,13 @@ def prepare_basic_url(o: Item):
 
 
 def is_product_page(u: str):
-    return ("/product/" in u or "/products/" in u or "/previews" in u or "/preview.php" in u or
-            u.startswith("profile/profile.php") or "/themes/star-wars" in u or
-            u.startswith("book/") or u.startswith("books/") or u.startswith("comics/")) and "subdomain=news" not in u
+    return ("/product/" in u or "/products/" in u or "/previews" in u or "/preview.php" in u or "/themes/star-wars" in u or
+            u.startswith("profile/profile.php") or
+            u.startswith("book/") or
+            u.startswith("books/") or
+            u.startswith("product/") or
+            u.startswith("products/") or
+            u.startswith("comics/")) and "subdomain=news" not in u
 
 
 def is_publisher(d: ItemId, o: Item):
@@ -79,6 +83,8 @@ def is_commercial(d: ItemId, o: Item):
 def determine_link_order(mode, o: Item, x):
     if not o:
         return -1, None, x
+    elif o.publisher_listing:
+        return 0, o.date, x
     elif o.template == "SW" and o.url and o.url.startswith("series/"):
         return 0, o.date, x
     elif mode == "Official":
@@ -88,9 +94,9 @@ def determine_link_order(mode, o: Item, x):
     elif mode == "Profile":
         return 2, o.date, x
     elif mode == "Publisher":
-        return 3, o.date, x
+        return 3.1 if o.template in ["Disney"] else 3, o.date, x
     elif mode == "Commercial":
-        return 3.1, o.date, x
+        return 3.2, o.date, x
     elif o.template == "WP":
         return 4.1, o.date, x
     elif mode == "Interwiki" or o.template in ["MobyGames", "BFICite", "BGG", "LCCN", "EndorExpress"]:
@@ -103,8 +109,13 @@ def determine_link_order(mode, o: Item, x):
         return 5.3, o.date, x
 
 
+DOMAINS = ["paninishop.de", "prhcomics.com", "music.apple.com", "audible.com", "shop.deagostini", "penguin.com"]
+
+
 def is_external_link(d: ItemId, o: Item, unknown):
     if not d and o.mode == "Basic":
+        if any(o.url and u in o.url for u in DOMAINS):
+            o.publisher_listing = True
         unknown.append(o)
         return True
     elif d and d.master.template and "ToyCite" in d.master.template:
