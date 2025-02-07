@@ -1,5 +1,7 @@
 import re
 from datetime import datetime, timedelta
+
+from c4de.sources.domain import FullListData
 from pywikibot import Category, Page, showDiff
 from pywikibot.exceptions import LockedPageError
 
@@ -290,6 +292,32 @@ def parse_archive(site, template):
     return archive
 
 
+def clean_archive_usages(page: Page, text, data: FullListData = None):
+    templates_to_check = set()
+    for c in page.categories():
+        if c.title().endswith("same archivedate value") or c.title().endswith("with custom archivedate"):
+            templates_to_check.add(re.search("^(.*?) usages with.*?$", c.title(with_ns=False)).group(1))
+    for t in templates_to_check:
+        tx = "SWYouTube" if t in ["ThisWeek", "HighRepublic Show"] else t
+        archive = data.archive_data.get(tx) if data else None
+        if not archive:
+            archive = parse_archive(page.site, tx)
+            if data:
+                data.archive_data[tx] = archive
+
+        if archive and "YouTube" in t:
+            for x in re.findall("(\{\{" + t + "\|(video=)?(.*?)(\|.*?)?(\|archive(date|url)=.*?)(\|.*?)?}})", text):
+                if "nolive=" in x[0] or "oldversion" in x[0] or x[2].lower() not in archive:
+                    continue
+                text = text.replace(x[4], "")
+        elif archive:
+            for x in re.findall("(\{\{" + t + "\|(.*?\|)?(url|a?l?t?link)=(.*?)(\|.*?)?(\|archive(date|url)=.*?)(\|.*?)?}})", text):
+                if "nolive=" in x[0] or "oldversion" in x[0] or x[3].lower() not in archive:
+                    continue
+                text = text.replace(x[5], "")
+    return text
+
+
 def clean_up_archive_dates(site, t=None):
     mapping = {}
     pages = set()
@@ -328,12 +356,14 @@ def clean_up_archive_categories(site):
                         text = cx.get()
                         for t in [mc.title(), *MAINTENANCE_CATS]:
                             text = text.replace(f"[[Category:{t}/Empty|", f"[[Category:{t}|").replace(f"[[Category:{t}/Empty]]", f"[[Category:{t}]]")
-                        cx.put(text, "Marking as non-empty")
+                        if text != cx.get():
+                            cx.put(text, "Marking as non-empty")
             elif c.isEmptyCategory():
                 text = c.get()
                 for t in [mc.title(), *MAINTENANCE_CATS]:
                     text = text.replace(f"[[Category:{t}|", f"[[Category:{t}/Empty|").replace(f"[[Category:{t}]]", f"[[Category:{t}/Empty]]")
-                c.put(text, "Marking as empty")
+                if text != c.get():
+                    c.put(text, "Marking as empty")
 
     for tx in MAINTENANCE_CATS:
         for c in Category(site, tx).subcategories():

@@ -112,20 +112,33 @@ def determine_id_for_item(o: Item, page: Page, data: Dict[str, Item], by_target:
     # Template-specific matching
     for other, d in data_sets.items():
         if o.template == "SWCT" and o.card:  # TODO: remove once converted
-            convert, matches = [], []
+            convert1, convert2, convert3, matches = [], [], [], []
+            o.card = o.card.replace("–", "-").replace("—", "-").replace("&mdash;", "-").replace("&ndash;", "-")
             for s, x in d.items():
-                if x.template == "SWCT" and x.target and (x.target == o.parent or x.target in o.card):
+                if x.template == "SWCT" and x.target and (x.target == o.parent or x.target in o.card or x.target.replace(" - ", " ") in o.card.replace(" - ", " ")):
                     zx = x.card if x.card else x.target
                     if o.card.startswith(f"{zx} -"):
-                        convert.append((x, f"{zx} -", 1))
-                    elif f"- {zx}" in o.card:
-                        convert.append((x, f"- {zx}", 0))
+                        convert1.append((x, o.card.split(f"{zx} -", 1)[1]))
+                    elif o.card.endswith(f"- {zx}"):
+                        convert1.append((x, o.card.split(f"- {zx}", 1)[0]))
+                    elif o.card.replace(" - ", " ").startswith(f"{zx} -"):
+                        convert2.append((x, o.card.replace(" - ", " ").split(f"{zx} -", 1)[1]))
+                    elif o.card.startswith(f"{zx} -".replace(" - ", " ")):
+                        convert2.append((x, o.card.split(f"{zx} -".replace(" - ", " "), 1)[1]))
+                    elif o.card.replace(" - ", " ").endswith(f"- {zx}"):
+                        convert2.append((x, o.card.replace(" - ", " ").split(f"- {zx}", 1)[0]))
+                    elif o.card.endswith(f"- {zx}".replace(" - ", " ")):
+                        convert2.append((x, o.card.split(f"- {zx}".replace(" - ", " "), 1)[0]))
+                    elif f"{zx} -".replace(" - ", " ") in o.card:
+                        convert3.append((x, o.card.split(f"{zx} -".replace(" - ", " "), 1)[1]))
+                    elif f"- {zx}".replace(" - ", " ") in o.card:
+                        convert3.append((x, o.card.split(f"- {zx}".replace(" - ", " "), 1)[0]))
                     else:
                         matches.append(x)
-            if convert:
-                x, z, w = sorted(convert, key=lambda a: len(a[0].card))[-1]
-                y = o.card.replace("&mdash;", "-").replace("&ndash;", "-").split(z, 1)[w].strip()
-                o.original = f"{{{{SWCT|set={x.card if x.card else x.target}|cardname={y}}}}}"
+            if convert1 or convert2 or convert3:
+                convert = convert1 if convert1 else (convert2 if convert2 else convert3)
+                x, y = convert[-1]
+                o.original = f"{{{{SWCT|set={x.card if x.card else x.target}|cardname={y.strip()}}}}}"
                 return ItemId(o, x, True, other)
             if matches:
                 x = sorted(matches, key=lambda a: len(a.card))[-1]
@@ -792,18 +805,20 @@ def match_by_url(o: Item, url: str, data: Dict[str, Item], replace_page: bool):
     new_versions = []
     possible = []
     y = re.search("(archive(date|url)=.*?)(\|.*?)?}}", o.original)
+    is_old = "oldversion=" in o.original
+    if is_old and not y and "|oldversion=1" not in o.original:
+        y = re.search("(oldversion=.*?)(\|.*?)?}}", o.original)
     ad = y.group(1) if y else None
-    is_old = "oldversion=1" in o.original
     for k, d in data.items():
         x = do_urls_match(url, o.template, d, replace_page)
         if x == 2:
             if o.mode == "Toys" and o.card and d.card and o.card != d.card:
                 possible.append(d)
-            elif d.original and "oldversion=1" in d.original and ad and ad in d.original:
+            elif d.original and "oldversion=" in d.original and ad and ad in d.original:
                 return ItemId(o, d, False, False)
-            elif d.original and "oldversion=1" in d.original and not ad:
+            elif d.original and "oldversion=" in d.original and not ad:
                 old_versions.append(d)
-            elif old_versions and d.original and "oldversion=1" not in d.original:
+            elif old_versions and d.original and "oldversion=" not in d.original:
                 new_versions.append(d)
             elif ad and is_old and ((o.mode == d.mode and o.mode != "Toys" and o.mode != "Cards") or (o.mode in valid and d.mode in valid)):
                 possible.append(d)

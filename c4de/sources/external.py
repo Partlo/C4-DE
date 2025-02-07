@@ -10,7 +10,7 @@ PRODUCT_DOMAINS = ["phrcomics", "advancedgraphics", "advancedgraphics.com", "bla
                    "comiccollectorlive", "comics\.org", "phrcomics", "the616comics", "thecomiccornerstore", "thecomicmint",
                    "universal-music.de", "unknowncomicbooks", "frankiescomics", "geekgusher", "hachettebookgroup",
                    "jedi-bibliothek", "kiddinx-shop", "lizzie.audio", "luxor.cz", "midtowncomics", "mikemayhewstudio"]
-PRODUCTS = ["LEGOWebCite", "Marvel", "DarkHorse", "IDW", "Penguin", "FFGweb", "AMGweb", "Unlimitedweb"]
+PRODUCTS = ["LEGOWebCite", "Marvel", "DarkHorse", "IDW", "Penguin", "FFGweb", "AMGweb", "SWUweb"]
 PRODUCT_CHECKS = {
     "AMGweb": {"S": ["character/"], "E": []},
     "FFGweb": {"S": [], "E": ["-showcase"]}

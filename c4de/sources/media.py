@@ -1,12 +1,12 @@
 from itertools import chain
 import re
-
-from c4de.sources.index import build_date_and_ref, convert_date_str
 from pywikibot import Page
 from typing import List, Tuple, Union, Dict, Optional, Set
 
-from c4de.sources.domain import FullListData, PageComponents, SectionLeaf, Item, NewComponents, SectionComponents
+
 from c4de.common import sort_top_template, fix_redirects
+from c4de.sources.domain import FullListData, PageComponents, SectionLeaf, Item, NewComponents, SectionComponents
+from c4de.sources.index import build_date_and_ref, convert_date_str
 
 MEDIA_STRUCTURE = {
     "Publisher Summary": "==Publisher's summary==",
@@ -91,7 +91,7 @@ def match_header(header: str, infobox):
         return "Sources"
     elif h == "external links":
         return "Links"
-    elif h in ["notes and references", "references"]:
+    elif h == "references" or h.startswith("notes and ref") or h.startswith("notes an ref"):
         return "References"
     elif h == "collections":
         return "Collections"

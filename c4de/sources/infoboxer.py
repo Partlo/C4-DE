@@ -170,7 +170,7 @@ def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List
                 else:
                     n = None
         else:
-            m = re.search("^[ ]*(\{\{.*?}})?(\{\{.*?}})?(\{\{.*?}})?(\{\{([A-Za-z _]+).*)$", line)
+            m = re.search("^[ ]*(\{\{.*?}})?(\{\{.*?}})?(\{\{.*?}})?(\{\{([A-Za-z _]+).*)(\|[a-z]+=.*?[^}])?$", line)
             if m:
                 if m.group(1):
                     pre.append(m.group(1))

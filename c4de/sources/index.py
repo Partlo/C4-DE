@@ -1,10 +1,11 @@
-from c4de.common import fix_redirects, build_redirects
 from pywikibot import Site, Page, Category, showDiff
 from datetime import datetime
 from typing import Tuple, List
 import codecs
 import re
 
+from c4de.common import fix_redirects, build_redirects
+from c4de.protocols.cleanup import clean_archive_usages
 from c4de.sources.domain import Item, ItemId, AnalysisResults
 from c4de.sources.updates import extract_release_date, parse_date_string, build_date
 
@@ -185,38 +186,48 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
         text = current_page.get().split("==Media index==")[-1].split("==Notes")[0].strip() + "\n"
         if "(Star Wars Encyclopedia)" in text:
             text = re.sub("\(Star Wars Encyclopedia\)(\|.*?)?}}", "(booklet)}}", text)
-        if re.search("\*([\[\]A-z 0-9,]*\[*[12][0-9]{3}]*.*?):(<ref name.*?( />|</ref>)) (.*?[]}]+'*)( \{\{[A-z0-9]+.*?}})?( (–|—|&.dash;).*?)\n", text):
-            redirects = build_redirects(current_page, manual=text)
-            text = fix_redirects(redirects, text, "Index", {}, {}, appearances, sources)
-            for x in re.findall("\*([\[\]A-z 0-9,]*\[*[12][0-9]{3}]*.*?):(<ref name.*?( />|</ref>)) (.*?[]}]+'*)( \{\{[A-z0-9]+.*?}})?( (–|—|&.dash;).*?)\n", text):
-                current[x[3]] = (x[0], x[1], x[5])
+        redirects = build_redirects(current_page, manual=text)
+        text = fix_redirects(redirects, text, "Index", {}, {}, appearances, sources)
+        if "  " in text:
+            text = re.sub("  +", " ", text)
+        for x in re.findall("\*([\[\]A-z. 0-9,]*\[*[12][0-9]{3}]*.*?):(<ref name.*?( />|</ref>))? ?(.*?[]}]+'*)( \{\{[A-z0-9]+.*?}})?( *(–|—|&.dash;).*?)?\n", text):
+            current[x[3]] = (x[0], x[1], x[5] or '')
 
-    add_by = []
+    add_by = {}
     for t, (date, ref, nt) in current.items():
-        u = re.search("(\|(video|url)=|(You[Tt]ube|StarWarsShow|ThisWeek|HighRepublicShow)\|)(?P<u>.*?)\|", t)
+        u = re.search("(\|(video|url|link)=|(You[Tt]ube|StarWarsShow|ThisWeek|HighRepublicShow|Databank)\|)(?P<u>.*?)\|", t)
         match = False
+        z = t.replace("&ndash;", "–").replace("&mdash;", "—")
         for i in found:
-            if i.master.original == t:
-                match = True
-            elif t.count("|") > 1 and t.rsplit("|", 1)[0] + "}}" == i.master.original:
-                match = True
-            elif i.master.original.replace("}}", "").split(" \(")[0].startswith(t.replace("}}", "").split(" \(")[0]):
-                match = True
-            elif u and i.master.url and u.group('u').replace("video=", "") == i.master.url.replace("video=", ""):
-                match = True
+            match = False
+            for o in [i.master, i.current]:
+                if o.original.replace("&ndash;", "–").replace("&mdash;", "—") == z:
+                    match = True
+                elif z.count("|") > 1 and z.rsplit("|", 1)[0] + "}}" == o.original.replace("&ndash;", "–").replace("&mdash;", "—"):
+                    match = True
+                elif o.original.replace("}}", "").split(" \(")[0].startswith(z.replace("}}", "").split(" \(")[0]):
+                    match = True
+                elif o.target and (f"[[{o.target}|" in t or f"[[{o.target}]]" in t):
+                    match = True
+                elif u and o.url and u.group('u').replace("video=", "") == o.url.replace("video=", ""):
+                    match = True
+                if match:
+                    break
             if match:
-                i.current.extra += nt
-                references[i.master.original] = (date, ref)
-                if i.master.date == "Current" and "20" in date:
-                    x, y = parse_date_string(date.replace("By ", "").replace("[", "").replace("]", "").replace(",", ""), "Index")
+                if (i.master.date == "Current" and "20" in date) or "{{DLC}}" in i.current.extra:
+                    x, y = parse_date_string(date.replace("By ", "").replace("c. ", "").replace("[", "").replace("]", "").replace(",", ""), "Index")
                     if x:
                         d = build_date([(x, y)])
                         if d:
                             i.master.date = d
+                i.current.extra += nt
+                references[i.master.original] = (date, ref)
                 if date.startswith("By ") and date.replace("By ", "") == i.master.date:
-                    add_by.append(i.master.original)
+                    add_by[i.master.original] = "By"
+                elif date.startswith("c. ") and date.replace("c. ", "") == i.master.date:
+                    add_by[i.master.original] = "c."
                 break
-        if not match:
+        if nt and not match:
             print(t, nt)
 
     found = sorted(found, key=lambda a: (a.master.date, a.master.mode == "DB", a.master.sort_index(results.canon), a.sort_text()))
@@ -228,8 +239,10 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
     for i in found:
         date_str, date_ref = build_date_and_ref(i.master, site, links, refs, contents, existing=references)
         if i.master.original in add_by:
-            date_str = f"By: {date_str}"
+            date_str = f"{add_by[i.master.original]} {date_str}"
         zt = i.current.original if i.use_original_text else i.master.original
+        if i.master.mode == "Minis" and i.master.card:
+            zt = re.sub("\|link=.*?(\|.*?)?}}", "\\1}}", re.sub(" ?\{\{[Cc]\|[Rr]eissued.*?}}", "", zt))
         xt = f"*{date_str}:{date_ref} {zt} {i.current.extra.strip()}".strip().replace("|reprint=1", "")
         xt = re.sub(" ?\{\{Ab\|.*?}}", "", xt).replace("|audiobook=1", "")
         if xt.count("{{") < xt.count("}}") and xt.endswith("}}}}"):
@@ -255,18 +268,20 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
         lines.append("\n[[Category:Legends index pages]]")
 
     index = Page(site, f"Index:{page.title()}")
+    old_id = index.latest_revision_id if index.exists() else None
+    new_txt = clean_archive_usages(index, "\n".join(lines), None)
     if save:
-        index.put("\n".join(lines), "Source Engine: Generating Index page", botflag=False)
+        index.put(new_txt, "Source Engine: Generating Index page", botflag=False)
     else:
-        t1 = re.sub(">.*?</ref>", " />", re.sub("name=\".*?\"", "name=\"name\"", index.get()))
-        t2 = re.sub(">.*?</ref>", " />", re.sub("name=\".*?\"", "name=\"name\"", "\n".join(lines)))
+        t1 = re.sub(">.*?</ref>", " />", re.sub("name=\".*?\"", "name=\"name\"", index.get() if index.exists() else ""))
+        t2 = re.sub(">.*?</ref>", " />", re.sub("name=\".*?\"", "name=\"name\"", new_txt))
 
         showDiff(clean_date_strings(t1), clean_date_strings(t2))
         with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/test_text.txt", mode="w",
                          encoding="utf-8") as f:
             f.writelines("\n".join(lines))
 
-    return index
+    return index, old_id
 
 
 def clean_date_strings(t):

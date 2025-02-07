@@ -10,11 +10,13 @@ from c4de.sources.infoboxer import handle_infobox_on_page
 
 REPLACEMENTS = [
     ("==Work==", "==Works=="), ("referene", "reference"), ("Note and references", "Notes and references"),
-    ("Notes and reference=", "Notes and references="), ("==References==", "==Notes and references=="),
+    ("Notes and reference=", "Notes and references="), ("==References==", "==Notes and references=="), (" an references", " and references"),
     ("Apearance", "Appearance"), ("Appearence", "Appearance"), ("&#40;&#63;&#41;", "(?)"), ("{{MO}}", "{{Mo}}"),
     ("{{mO}}", "{{Mo}}"), ("*{{Indexpage", "{{Indexpage"), ("DisneyPlusYT", "DisneyPlusYouTube"), ("<br>", "<br />"),
-    ("Youtube", "YouTube"), ("{{Shortstory", "{{StoryCite"), ("{{Scrollbox", "{{ScrollBox"),
+    ("Youtube", "YouTube"), ("{{Shortstory", "{{StoryCite"), ("{{Scrollbox", "{{ScrollBox"), ("referneces", "references"),
     ("{{scrollbox", "{{ScrollBox"), ("FFCite", "FactFile"), ("</reF>", "</ref>"), ("\n</ref>", "</ref>"),
+    ("Star Wars A&ndash;Z", "Star Wars A–Z"),
+
     ("[[B1-Series battle droid]]", "[[B1-series battle droid/Legends|B1-series battle droid]]"),
     ("[[Variable Geometry Self-Propelled Battle Droid, Mark I/Legends|Variable Geometry Self-Propelled Battle Droid, Mark I]]", "[[Vulture-class starfighter/Legends|''Vulture''-class starfighter]]"),
     ("[[Variable Geometry Self-Propelled Battle Droid, Mark I]]", "[[Vulture-class starfighter|''Vulture''-class starfighter]]"),
@@ -130,7 +132,6 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
         before, infobox = handle_infobox_on_page(before, target, all_infoboxes, False)
     # print(f"infobox: {(datetime.now() - now).microseconds / 1000} microseconds")
 
-    before = before.replace(" an references", " and references")
     before = re.sub("= ?Non-[Cc]anon [Aa]ppearances ?=", "=Non-canon appearances=", before)
     before = re.sub("= ?([Cc]ollections?|Collected [Ii]n) ?=", "=Collections=", before)
     before = re.sub("=+'*Non-canonical (appearances|sources)'*=+", "===Non-canon \\1===", before)
@@ -193,6 +194,9 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
 
     before = re.sub("(\{\{TOMCite\|[0-9]+\|Database)\|.*?}}", "\\1}}", before)
     before = re.sub("\{\{(Legion|Armada|FFGXW2?|SWIA|Shatterpoint|Destiny)\|([^\n|{}=]+)}}", "{{\\1|set=\\2}}", before)
+
+    if "{{StarshipsVehiclesCite" in before:
+        before = re.sub("(\{\{StarshipsVehiclesCite\|[0-9]+)\|'*\[\[(.*?)]].*?}}", "\\1|\\2}}", before)
 
     while re.search("\[\[Category:[^\n|\]_]+_", before):
         before = re.sub("(\[\[Category:[^\n|\]_]+)_", "\\1 ", before)
@@ -262,6 +266,10 @@ def regex_cleanup(before: str) -> str:
         before = re.sub("\*'*\[\[:?([Ww]|Wikia):c:([^\n|]]*?):([^\n|]]*?)\|([^\n]]*?)]] (on|at) (the )?[^\n]*?([Ww]|Wikia):c:[^\n|]]*?\|(.*?)]](,.*?$)?","*{{Interwiki|\\2|\\8|\\3|\\4}}", before)
     if "memoryalpha:" in before.lower():
         before = re.sub("\[\[([Mm]emory[Aa]lpha|w:c:memory-alpha):(.*?)\|(.*?)]] (on|at) (the )?.*?([Mm]emory[Aa]lpha:|Wikipedia:Memory Alpha).*?\|.*?]](,.*?$)?", "{{MA|\\2|\\3}}", before)
+
+    if "oldversion=1" in before:
+        before = re.sub("(\|archive(date|url)=([^|\n}{]+))(\|[^\n}{]*?)?\|oldversion=1", "|oldversion=\\3\\4", before)
+        before = re.sub("\|oldversion=1(\|[^\n}{]*?)?(\|archive(date|url)=([^|\n}{]+))", "|oldversion=\\4\\1", before)
 
     before = re.sub("(\{\{[A-z0-9 _]+\|.*?\|(.*?) \(.*?\))\|\\2}}", "\\1}}", before)
     if "Star Wars Galaxies" in before or "GalaxiesAED" in before:

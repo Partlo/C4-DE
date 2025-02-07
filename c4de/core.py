@@ -996,11 +996,14 @@ class C4DE_Bot(commands.Bot):
             await message.add_reaction(TIMER)
             analysis = get_analysis_from_page(target, self.infoboxes, self.templates, self.disambigs, self.appearances,
                                               self.sources, self.bad_cats, self.remap, False, False)
-            result = create_index(self.site, target, analysis, self.appearances.target, self.sources.target, True)
+            result, old_id = create_index(self.site, target, analysis, self.appearances.target, self.sources.target, True)
             await message.remove_reaction(TIMER, self.user)
 
-            if result.exists():
-                await message.channel.send(f"Completed: [{result.title()}](<{result.full_url().replace('%2F', '/').replace('%3A', ':')}>)")
+            ux = result.full_url().replace('%2F', '/').replace('%3A', ':')
+            if old_id:
+                await message.channel.send(f"Updated: [{result.title()}](<{ux}?diff=next&oldid={old_id}>)")
+            else:
+                await message.channel.send(f"Completed: [{result.title()}](<{ux}>)")
                 text = target.get()
                 if "{{Indexpage}}" not in text:
                     if "==Appearances==" in text:
@@ -1009,8 +1012,6 @@ class C4DE_Bot(commands.Bot):
                         target.put(text.replace("==Sources==", "==Sources==\n{{Indexpage}}"), "Adding Index", botflag=False)
                     else:
                         await message.channel.send("Could not locate Appearances or Sources header in target article, so {Indexpage} has not been added")
-            else:
-                await message.channel.send(f"Could not create index page")
         except Exception as e:
             print(traceback.format_exc())
             await self.report_error("Create index", type(e), e)
@@ -1050,7 +1051,7 @@ class C4DE_Bot(commands.Bot):
         text = page.get()
         unused = []
         for x in self.site.unusedfiles(total=250):
-            if x.title() not in exceptions:
+            if x.title() not in exceptions and not x.title().startswith(":Video:"):
                 unused.append(x.title())
 
         if unused:
@@ -1567,7 +1568,7 @@ class C4DE_Bot(commands.Bot):
             other, db = compare_site_map(self.site, ["Star Wars: Skeleton Crew"], messages,
                                          self.external_rss_cache["sites"]["StarWars.com"])
             messages += other
-        elif site_data["template"] == "Unlimitedweb":
+        elif site_data["template"] == "SWUweb":
             messages = check_unlimited(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
         elif site_data["template"] == "AMGweb":
             messages = check_blog_list(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])

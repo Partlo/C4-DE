@@ -589,7 +589,7 @@ def build_template_types(site):
     results["Magazine"] = {}
     for p in Category(site, "Category:Magazine citation templates").articles(recurse=True):
         txt = p.get()
-        if "BaseCitation" in txt and "mode=magazine" in txt:
+        if "BaseCitation" in txt and ("mode=magazine" in txt or "mode=ref" in txt):
             x = re.search("\|series=([A-z0-9:()\-&/ ]+)[|\n]", txt)
             if x:
                 results["Magazine"][p.title(with_ns=False)] = x.group(1)

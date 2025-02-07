@@ -1,16 +1,17 @@
 import codecs
 import re
 from datetime import datetime
-
 from pywikibot import Page, Category, showDiff
 
 from c4de.common import error_log, fix_redirects, do_final_replacements, sort_top_template
+from c4de.protocols.cleanup import clean_archive_usages
 from c4de.sources.analysis import analyze_section_results
+from c4de.sources.determine import determine_id_for_item
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, SectionComponents, FinishedSection, \
     NewComponents
+from c4de.sources.extract import extract_item
 from c4de.sources.media import MEDIA_STRUCTURE, prepare_media_infobox_and_intro
-from c4de.sources.parsing import build_initial_components, build_page_components, clean_archive_usages, \
-    MASTER_STRUCTURE
+from c4de.sources.parsing import build_initial_components, build_page_components, MASTER_STRUCTURE, build_card_text
 
 
 def build_section_from_pieces(section: SectionComponents, items: FinishedSection, log, media_cat):
@@ -129,14 +130,92 @@ def add_parsed_section(pieces: list, component: SectionComponents, finished: Fin
     return None if added else media_cat
 
 
-def build_final_text(page: Page, results: PageComponents, disambigs: list, remap: dict, redirects: dict,
+MAINTENANCE = ["catneeded", "citation", "cleanup", "cleanup-context", "confirm", "contradict", "disputed", "expand",
+               "image", "moresources", "npov", "oou", "plot", "redlink", "split", "stayontarget", "tense", "tone", "update"]
+
+
+def format_update_contents(ln, page: Page, results: PageComponents, appearances: FullListData, sources: FullListData, types):
+    ln = ln.replace("|hide=1", "")
+    new_items = []
+    for i in re.findall(",? ?('*(\[\[|\{\{)+[^\n\[\]}{]+(}}|]])'*)}?}?", ln):
+        if "{{" in i[0]:
+            x = extract_item(i[0], False, page.title(), types)
+            if x:
+                d = determine_id_for_item(x, page, appearances.unique, appearances.target, sources.unique,
+                                          sources.target, {}, results.canon, False)
+                if d and x.is_card_or_mini() and d.current.card:
+                    new_items.append(build_card_text(d, d).replace("|parent=1", ""))
+                    continue
+                elif d:
+                    new_items.append(d.master.original)
+                    continue
+        new_items.append(i[0])
+    return ", ".join(new_items)
+
+
+def build_iu_intro(page: Page, results: PageComponents, appearances: FullListData, sources: FullListData, types: dict):
+    pieces = []
+    content = results.before.strip().splitlines()
+    maintenance_tags = {}
+    update_content = None
+    expand_content = None
+    for ln in content:
+        for x in MAINTENANCE:
+            if "{{update|" in ln.lower():
+                update_content = format_update_contents(ln, page, results, appearances, sources, types)
+                maintenance_tags[ln] = "updatecontent"
+                break
+            elif "{{expand|" in ln.lower():
+                x = re.search("expand\|(.*?)}}", ln)
+                if x:
+                    expand_content = x.group(1)
+                    maintenance_tags[ln] = "expand"
+                break
+            elif f"{{{{{x}|" in ln.lower() or f"{{{{{x}}}}}" in ln.lower():
+                maintenance_tags[ln] = x
+                break
+    if len(maintenance_tags) > 1:
+        maintenance_params = sorted(v for v in maintenance_tags.values() if "content" not in v)
+        if expand_content:
+            maintenance_params.append(f"expandcontent={expand_content}")
+        if update_content:
+            maintenance_params.append(f"updatecontent={update_content}")
+    else:
+        maintenance_tags = {}
+        maintenance_params = []
+
+    add_multiple_issues = True
+    for ln in content:
+        if "{{top" in ln.lower():
+            pieces.append(sort_top_template(ln))
+        elif "|updatecontent=" in ln.lower():
+            x = re.search("updatecontent=(.*?)(\|[a-z0-9=|]*)?}}$", ln)
+            if x:
+                lx = format_update_contents(x.group(1), page, results, appearances, sources, types)
+                pieces.append(ln.replace(x.group(1), lx))
+            else:
+                pieces.append(ln)
+        elif ln in maintenance_tags and add_multiple_issues:
+            pieces.append("{{MultipleIssues|" + "|".join(maintenance_params) + "}}")
+            add_multiple_issues = False
+        elif ln in maintenance_tags:
+            pass
+        elif "{{update|" in ln.lower() and update_content is not None:
+            pieces.append("{{Update|" + update_content + "}}")
+        else:
+            pieces.append(ln)
+
+    return pieces
+
+
+def build_final_text(page: Page, results: PageComponents, types, disambigs: list, remap: dict, redirects: dict,
                      appearances: FullListData, sources: FullListData, components: NewComponents, log: bool):
     image = None
     if results.media:
         pieces, image = prepare_media_infobox_and_intro(page, results, components, redirects, disambigs, remap,
                                                         appearances, sources)
     else:
-        pieces = [sort_top_template(ln) if "{{top" in ln.lower() else ln for ln in results.before.strip().splitlines()]
+        pieces = build_iu_intro(page, results, appearances, sources, types)
     pieces.append("")
 
     otx = page.get()
@@ -323,7 +402,7 @@ def build_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appe
     components, unknown_items, analysis = analyze_section_results(
         target, results, appearances, sources, remap, use_index, include_date, collapse_audiobooks, checked, log)
 
-    new_txt = build_final_text(target, results, disambigs, remap, redirects, appearances, sources, components, log)
+    new_txt = build_final_text(target, results, types, disambigs, remap, redirects, appearances, sources, components, log)
     return new_txt, analysis, unknown, unknown_items
 
 

@@ -205,3 +205,6 @@
 **Template redirect fixing
 **Disabled DVD flagging in Sources
 **Other bug fixes
+*'''4.3.3''': February 6, 2025
+**Index generation bug fixes
+**Other Source Engine bugs

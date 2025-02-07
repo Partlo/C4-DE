@@ -177,7 +177,7 @@ def find_matching_parent_audiobook(a: ItemId, existing: list, appearances: FullL
     return results
 
 
-def augment_appearances(new_apps: SectionItemIds, appearances: FullListData, collapse_audiobooks: bool):
+def augment_appearances(new_apps: SectionItemIds, appearances: FullListData, collapse_audiobooks: bool, index=False):
     app_targets = [a.master.target for a in new_apps.found if a.master.target]
     app_targets += [f"{a.master.target}|{a.master.parent}" for a in new_apps.found if
                     a.master.target and a.master.parent]
@@ -201,7 +201,8 @@ def augment_appearances(new_apps: SectionItemIds, appearances: FullListData, col
                     abridged.append(b.target)
             elif "(audio)" in b.target or "(audio drama)" in b.target or (
                     not collapse_audiobooks and (b.parent if b.parent else b.target) not in app_targets):
-                print(f"Adding missing audiobook: {b.target} at {i}, {a.current.index}, {a.current.canon_index}, {a.current.legends_index}")
+                if not index:
+                    print(f"Adding missing audiobook: {b.target} at {i}, {a.current.index}, {a.current.canon_index}, {a.current.legends_index}")
                 z = ItemId(b, b, False, False, False)
                 extra = a.current.extra or ''
                 if "1stm" in extra:
@@ -289,7 +290,7 @@ def handle_non_canon_items(results: PageComponents, new_apps: SectionItemIds, ne
 
 def analyze_section_results(target: Page, results: PageComponents, appearances: FullListData,
                             sources: FullListData, remap: dict, use_index: bool, include_date: bool,
-                            collapse_audiobooks: bool, checked: list, log) \
+                            collapse_audiobooks: bool, checked: list, log, index=False) \
         -> Tuple[NewComponents, UnknownItems, AnalysisResults]:
     title = calculate_title_if_necessary(target)
     both_continuities = appearances.both_continuities.union(sources.both_continuities)
@@ -333,7 +334,7 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
         new_ncs = None
 
     # now = datetime.now()
-    abridged = augment_appearances(new_apps, appearances, collapse_audiobooks)
+    abridged = augment_appearances(new_apps, appearances, collapse_audiobooks, index=index)
 
     # print(f"prep: {(datetime.now() - now).microseconds / 1000} microseconds")
 
@@ -933,6 +934,8 @@ def is_extra(o: ItemId):
 
 
 def build_flags(o: ItemId, nl, sl, section_name, is_file=False):
+    if is_file and "[[File:" in o.current.original:
+        return ""
     if o.master.from_extra and "{{co}}" not in (o.current.extra or '').lower() \
             and "cover only" not in (o.current.extra or '').lower() and o.current.template != "HomeVideoCite":
         if o.master.future or is_file or o.master.has_content or section_name == "Collections":
@@ -974,7 +977,7 @@ def build_item_text(o: ItemId, d: str, nl: str, sl: str, final_without_extra: li
         zt = re.sub("(\{\{(?!FactFile)[A-z0-9]+\|[0-9]+\|.*?)(\|.*?(\{\{'s?}})?.*?)?}}", "\\1}}", zt)
 
     if o.current.subset:
-        zt = re.sub("({{[^|}]*?\|(set=)?[^|}]*?\|(stext=.*?\|)?)", f"\\1subset={o.current.subset}|", zt)
+        zt = re.sub("({{[^|}]*?\|(set=)?[^|}]*?\|)(stext=.*?\|)?", f"\\1subset={o.current.subset}|", zt)
     while zt.count("|subset=") > 1:
         zt = re.sub("(\|subset=.*?)\\1", "\\1", zt)
     zt = re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", zt)
@@ -1073,8 +1076,8 @@ def compile_found(section: SectionItemIds, mode, canon):
             source_names[t].append(o)
         if o.current.url:
             u = f"{o.current.template}|{o.current.url}"
-            if "|oldversion=1" in o.current.original:
-                u += "|oldversion=1"
+            if "|oldversion=" in o.current.original:
+                u += re.search("(\|oldversion=.*?)(\||}|$)", o.current.original).group(1)
             if u in urls:
                 print(f"Skipping duplicate entry: {u}")
             else:
@@ -1194,12 +1197,13 @@ def compare_partial_dates(o: str, d1: str, d2: str, mode: str):
 
 
 def get_analysis_from_page(target: Page, infoboxes: dict, types, disambigs, appearances: FullListData,
-                           sources: FullListData, bad_cats: list, remap: dict, log=True, collapse_audiobooks=True):
+                           sources: FullListData, bad_cats: list, remap: dict, log=True, collapse_audiobooks=True,
+                           index=False):
     text, redirects, results = build_initial_components(target, disambigs, infoboxes, bad_cats, None)
     build_page_components(target, text, redirects, results, types, disambigs, appearances, sources, remap, log)
     if results.real and collapse_audiobooks:
         collapse_audiobooks = False
 
     _, _, analysis = analyze_section_results(target, results, appearances, sources, remap, True,
-                                             False, collapse_audiobooks, [], log)
+                                             False, collapse_audiobooks, [], log, index=index)
     return analysis

@@ -1,18 +1,17 @@
 import re
-from json import JSONDecodeError
-
 import requests
 import traceback
+from json import JSONDecodeError
+from pywikibot import Page, Category, pagegenerators
+from datetime import datetime
 from typing import Dict, List
 
 import urllib3.exceptions
 import waybackpy
 from waybackpy.exceptions import WaybackError, TooManyRequestsError
 
-from c4de.sources.domain import FullListData, Item
-from pywikibot import Page, Category, pagegenerators
-from datetime import datetime
 
+from c4de.sources.domain import Item
 from c4de.data.nom_data import NOM_TYPES
 
 USER_AGENT = 'Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Mobile Safari/537.36'
@@ -231,8 +230,7 @@ def do_final_replacements(new_txt, replace):
             new_txt2 = re.sub("( ''[^'\n]+'')'s ", "\\1{{'s}} ", new_txt2)
 
         new_txt2 = new_txt2.replace("\n\n*{{ISBN", "\n*{{ISBN")
-        new_txt2 = new_txt2.replace("set=Topps Star Wars Living Set|stext=Topps ''Star Wars Living Set''|",
-                                    "set=Topps Star Wars Living Set|")
+        new_txt2 = new_txt2.replace("|stext=Topps ''Star Wars Living Set''", "")
 
         new_txt2 = re.sub("(\[\[((.*?) \((.*?)\)).*?]].*?)(\{\{Ab\|.*?)\[\[\\2\|''\\3'' \\4]]", "\\1\\5[[\\2|\\4]]", new_txt2)
         new_txt2 = re.sub("(\{\{[^\n{}]+?)(\|nolive=1)([^\n{}]*?(\|nobackup=1)?[^\n{}]*?)}}", "\\1\\3\\2}}", new_txt2)
@@ -244,6 +242,14 @@ def do_final_replacements(new_txt, replace):
 
         new_txt2 = re.sub("(\{\{Top.*?)(\|italics=1)(.*?)(\|italics2=1)?(.*?)}}", "\\1\\3\\5\\2\\4}}", new_txt2)
         new_txt2 = re.sub("(\{\{Top.*?)(\|italics2=1)(.+?)}}", "\\1\\3\\2}}", new_txt2)
+
+        if "''{{Film|" in new_txt2:
+            new_txt2 = re.sub("(?<!')''(\{\{Film\|.*?}})'*", "\\1", new_txt2)
+        new_txt2 = re.sub("(\{\{Quote\|[^{}\n]*)\[\[([^{}\[\]\n]*?\|)?([^{}\[\]\n]*?)]]([^{}\n]*?)(\|[^|{}\n]+\|<ref.*?}})", "\\1\\3\\4\\5", new_txt2)
+        for ix in re.findall(
+                "((\{\{(BuildFalconCite|BuildR2Cite|BuildXWingCite|BustCollectionCite|DarthVaderCite|FalconCite|FigurineCite|HelmetCollectionCite|ShipsandVehiclesCite|StarshipsVehiclesCite)\|[0-9]+\|[^|\[{}]+?)(\|((?!reprint).)*?)}})",
+                new_txt2):
+            new_txt2 = new_txt2.replace(ix[0], ix[1] + "}}")
 
         # new_txt2 = re.sub("}} \{\{C\|Reissued in (\[\[.*?)}}", "reissued=\\1}}", new_txt2)
         # new_txt2 = re.sub("(reissus?ed?=.*?\[\[.*?\|)''(.*?)'']]", "\\1\\2]]", new_txt2)

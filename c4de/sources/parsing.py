@@ -2,17 +2,16 @@ import re
 import traceback
 from datetime import datetime
 
-from c4de.protocols.cleanup import parse_archive
 from pywikibot import Page
 from typing import List, Tuple, Union, Dict, Optional
 
+from c4de.common import build_redirects, fix_redirects, fix_disambigs, prepare_title
 from c4de.sources.cleanup import initial_cleanup
 from c4de.sources.determine import determine_id_for_item
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, SectionComponents, SectionLeaf
 from c4de.sources.external import prepare_basic_url
 from c4de.sources.extract import extract_item, convert_issue_to_template, swap_parameters
 from c4de.sources.media import match_header, rearrange_sections
-from c4de.common import build_redirects, fix_redirects, fix_disambigs, prepare_title
 
 
 BY_INDEX = "Use Master Index"
@@ -193,15 +192,15 @@ def split_by_section(text: str, results: PageComponents) -> Tuple[Dict[str, Sect
 
 def parse_data(results: PageComponents, lines: list, master_header, redirects, disambigs, types, remap, extra, unknown, log):
     section_text = "\n".join(lines)
-    if master_header == "Sources" and extra and not results.real:
-        for i in extra:
-            section_text += f"\n*''[[{i}]]''"
     after = ""  # remove succession boxes from text before parsing
     if "{{start_box" in section_text.lower() or "{{start box" in section_text.lower() or "{{startbox" in section_text.lower():
         pieces2 = re.split("({{[Ss]tart[_ ]?[Bb]ox)", section_text, 1)
         if len(pieces2) == 3:
             section_text = pieces2[0]
             after = pieces2[1] + pieces2[2]
+    if master_header == "Sources" and extra and not results.real:
+        for i in extra:
+            section_text += f"\n*''[[{i}]]''"
 
     section_text = fix_redirects(redirects, section_text, master_header, disambigs, remap)
     result = parse_section(section_text, types, "Appearances" in master_header, unknown, after, log, master_header)
@@ -556,33 +555,6 @@ def analyze_body(page: Page, text, types, appearances: FullListData, sources: Fu
         new_text = handle_reference(full_ref, ref, page, new_text, types, appearances, sources, remap, disambigs, redirects, canon, log)
     # return do_final_replacements(new_text, True)
     return new_text
-
-
-def clean_archive_usages(page: Page, text, data: FullListData = None):
-    templates_to_check = set()
-    for c in page.categories():
-        if c.title().endswith("same archivedate value") or c.title().endswith("with custom archivedate"):
-            templates_to_check.add(re.search("^(.*?) usages with.*?$", c.title(with_ns=False)).group(1))
-    for t in templates_to_check:
-        tx = "SWYouTube" if t in ["ThisWeek", "HighRepublic Show"] else t
-        archive = data.archive_data.get(tx) if data else None
-        if not archive:
-            archive = parse_archive(page.site, tx)
-            if data:
-                data.archive_data[tx] = archive
-
-        if archive and "YouTube" in t:
-            for x in re.findall("(\{\{" + t + "\|(video=)?(.*?)(\|.*?)?(\|archive(date|url)=.*?)(\|.*?)?}})", text):
-                if "nolive=" in x[0] or "oldversion" in x[0] or x[2].lower() not in archive:
-                    continue
-                text = text.replace(x[4], "")
-        elif archive:
-            for x in re.findall("(\{\{" + t + "\|(.*?\|)?(url|a?l?t?link)=(.*?)(\|.*?)?(\|archive(date|url)=.*?)(\|.*?)?}})", text):
-                if "nolive=" in x[0] or "oldversion" in x[0] or x[3].lower() not in archive:
-                    continue
-                text = text.replace(x[5], "")
-
-    return text
 
 
 REF_REPLACEMENTS = [("film]] film", "film]]"), ("|reprint=yes", ""), ("|reprint=1", ""), ("|audiobook=yes", ""), ("|audiobook=1", "")]

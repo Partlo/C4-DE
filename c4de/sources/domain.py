@@ -176,10 +176,14 @@ REF_MAGAZINE_ORDERING = {
     "BuildR2Cite": ["Building the Galaxy", "Droid Directory", "Understanding Robotics", "Build R2-D2"],
     "BuildXWingCite": ["Creating a Starship Fleet", "Starfighter Aces", "Rocket Science", "Build the X-Wing"],
     "BustCollectionCite": ["Character", "Star Wars Universe", "Behind the Cameras"],
-    "FalconCite": ["Starship Fact File", "Secrets of Spaceflight", "Guide to the Galaxy", "Build the Falcon"],
+    "DarthVaderCite": ["The Dark Side", "Planets (department)", "Villains of the Galaxy"],
+    "FalconCite": ["Starship Fact File", "Secrets of Spaceflight", "Build the Falcon"],
     "HelmetCollectionCite": ["Databank A-Z", "Helmets", "Weapons & Uniforms", "Highlights of the Saga"],
     "ShipsandVehiclesCite": ["History of the Ship", "Pilots and Crew Members", "Starships and Vehicles"],
-    "DarthVaderCite": ["The Dark Side", "Villains of the Galaxy"],
+    "StarshipsVehiclesCite": ["Legendary Craft", "Action Stations", "Welcome On Board", "Starship & Vehicle Directory",
+                              "In Command", "Droids, Aliens & Creatures", "In A Galaxy Far, Far Away",
+                              "A Revolution In Film", "Movie Magic", "Did You Know?", "Star Wars A&ndash;Z",
+                              "Star Wars Planet Index"]
 }
 
 

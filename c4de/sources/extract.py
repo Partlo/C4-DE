@@ -23,12 +23,10 @@ COLLAPSE = {
 }
 
 COLLAPSED_MAGAZINES = {
-    "FalconCite": ("Star Wars: Millennium Falcon", ""),
     "FactFile": ("The Official Star Wars Fact File", ""),
     "FactFile\|y=2013": ("The Official Star Wars Fact File Part", "2013"),
     "FactFile\|y=2014": ("The Official Star Wars Fact File Part", "2014"),
     "FigurineCite": ("Star Wars: The Official Figurine Collection", ""),
-    "StarshipsVehiclesCite": ("Star Wars: The Official Starships & Vehicles Collection", "")
 }
 
 REFERENCE_MAGAZINES = {
@@ -37,8 +35,10 @@ REFERENCE_MAGAZINES = {
     "BuildXWingCite": "Star Wars: Build Your Own X-Wing <x>",
     "BustCollectionCite": "Star Wars Bust Collection <x>",
     "DarthVaderCite": "Star Wars: Darth Vader <x> (magazine)",
+    "FalconCite": "Star Wars: Millennium Falcon <x>",
     "HelmetCollectionCite": "Star Wars Helmet Collection <x>",
-    "ShipsandVehiclesCite": "Star Wars Starships & Vehicles <x>"
+    "ShipsandVehiclesCite": "Star Wars Starships & Vehicles <x>",
+    "StarshipsVehiclesCite": "Star Wars: The Official Starships & Vehicles Collection <x>",
 }
 
 TEMPLATE_MAPPING = {
