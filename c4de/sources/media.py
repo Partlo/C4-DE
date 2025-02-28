@@ -110,9 +110,9 @@ def match_header(header: str, infobox):
         return "Development"
     elif h in ["continuity"]:
         return "Continuity"
-    elif h in ["release", "reception", "release and reception", "release & reception"]:
+    elif h in ["release", "reception", "release and reception", "release & reception", "critical reception", "critical reaction"]:
         return "Release/Reception"
-    elif h in ["legacy"]:
+    elif h in ["legacy", "metaseries"]:
         return "Legacy"
     elif h in ["credits", "cast"]:
         return "Credits"
@@ -267,8 +267,8 @@ def rearrange_sections(target: Page, results: PageComponents, valid: Dict[str, L
             sections["Media"] = SectionLeaf("Media", "==Media==", 0, 2)
         if "Cover gallery" not in sections["Media"].subsections:
             sections["Media"].subsections["Cover gallery"] = SectionLeaf("Cover gallery", "===Cover gallery===", 0, 2)
-            sections["Media"].subsections["Collections"].master_num = SUBSECTIONS["Media"].index("Cover gallery")
-        sections["Media"].lines += images
+            sections["Media"].subsections["Cover gallery"].master_num = SUBSECTIONS["Media"].index("Cover gallery")
+        sections["Media"].subsections["Cover gallery"].lines += images
 
     return sections
 
@@ -505,6 +505,7 @@ def get_redlink_count(page: Page):
 # TODO: flag pages with both Contents and Plot Summary
 # TODO: flag Media sections with no subcats
 # TODO: flag articles with multiple sections for the same master header for review (Star Wars Gamer 7)
+# TODO: flag book collections/etc. with missing Contents sections
 
 # TODO: use Masterlist formatting for Contents sections
 # TODO: Fix redirects in the Contents section without preserving the original pipelink, UNLESS it's a department

@@ -13,80 +13,8 @@ SUBPAGES = [
     # "Canon/General", "Legends/General/1977-2000", "Legends/General/2000s", "Legends/General/2010s",
     "Canon/General", "Legends/General",
     "Canon/Toys", "Legends/Toys", "Canon/RefMagazine", "Legends/RefMagazine", "Canon/CardSets", "Legends/CardSets",
-    "Canon/Miniatures", "Legends/Miniatures", "Reprint", "Soundtracks",
+    "Canon/Miniatures", "Legends/Miniatures", "Reprint", "Soundtracks", "CardTrader"
 ]
-
-HYPERSPACE = {
-    "hyperspace/fiction/fiction20090920/index.html": "The Longest Fall",
-    "hyperspace/fiction/n20090923fiction/index.html": "Betrayal by Knight",
-    "hyperspace/member/fiction/f20040206/index.html": "First Contact",
-    "hyperspace/member/fiction/f20040211/index.html": "Day of the Sepulchral Night (short story)",
-    "hyperspace/member/fiction/f20040319/index.html": "Bane of the Sith",
-    "hyperspace/member/fiction/f20040416/index.html": "Murder in Slushtime",
-    "hyperspace/member/fiction/f20040430/index.html": "Tinian on Trial",
-    "hyperspace/member/fiction/f20040507/index.html": "Mist Encounter",
-    "hyperspace/member/fiction/f20040521/index.html": "Missed Chance",
-    "hyperspace/member/fiction/f20040604/index.html": "The Crystal",
-    "hyperspace/member/fiction/f20040618/index.html": "Whispers in the Dark",
-    "hyperspace/member/fiction/f20040702/index.html": "Handoff",
-    "hyperspace/member/fiction/f20040719/index.html": "The Monster",
-    "hyperspace/member/fiction/f20040720/index.html": "Changing Seasons",
-    "hyperspace/member/fiction/f20040730/index.html": "Out of the Cradle",
-    "hyperspace/member/fiction/f20040809/index.html": "The Emperor's Trophy",
-    "hyperspace/member/fiction/f20040903/index.html": "Mission to Zila",
-    "hyperspace/member/fiction/f20040924/index.html": "Dark Vendetta (short story)",
-    "hyperspace/member/fiction/f20041001/index.html": "The Final Exit",
-    "hyperspace/member/fiction/f20041015/index.html": "Double Cross on Ord Mantell",
-    "hyperspace/member/fiction/f20041029/index.html": "Darkness Shared",
-    "hyperspace/member/fiction/f20041105/index.html": "Changing Seasons",
-    "hyperspace/member/fiction/f20041117/index.html": "Escape from Balis-Baurgh",
-    "hyperspace/member/fiction/f20041217/index.html": "One of a Kind (short story)",
-    "hyperspace/member/fiction/f20041222/index.html": "The Apprentice (short story)",
-    "hyperspace/member/fiction/f20050107/index.html": "The Breath of Gelgelar",
-    "hyperspace/member/fiction/f20050121/index.html": "Shadows of Darkness",
-    "hyperspace/member/fiction/f20050218/index.html": "Or Die Trying",
-    "hyperspace/member/fiction/f20050304/index.html": "When the Domino Falls",
-    "hyperspace/member/fiction/f20050325/index.html": "Spare Parts (short story)",
-    "hyperspace/member/fiction/f20050401/index.html": "Hunting the Hunters",
-    "hyperspace/member/fiction/f20050415/index.html": "A Bitter Winter",
-    "hyperspace/member/fiction/f20050429/index.html": "Pearls in the Sand",
-    "hyperspace/member/fiction/f20050513/index.html": "Side Trip",
-    "hyperspace/member/fiction/f20050520/index.html": "Side Trip",
-    "hyperspace/member/fiction/f20050603/index.html": "Side Trip",
-    "hyperspace/member/fiction/f20050617/index.html": "Side Trip",
-    "hyperspace/member/fiction/f20050701/index.html": "Elusion Illusion",
-    "hyperspace/member/fiction/f20050722/index.html": "Droid Trouble",
-    "hyperspace/member/fiction/f20050805/index.html": "Turning Point (Charlene Newcomb)",
-    "hyperspace/member/fiction/f20050819/index.html": "Changing the Odds: The Adventures of Dannen Lifehold",
-    "hyperspace/member/fiction/f20050902/index.html": "Command Decision",
-    "hyperspace/member/fiction/f20050923/index.html": "To Fight Another Day",
-    "hyperspace/member/fiction/f20051007/index.html": "Finder's Fee",
-    "hyperspace/member/fiction/f20051028/index.html": "The Trouble with Squibs",
-    "hyperspace/member/fiction/f20051104/index.html": "Ringers",
-    "hyperspace/member/fiction/f20051118/index.html": "Rendezvous with Destiny",
-    "hyperspace/member/fiction/f20051202/index.html": "Kella Rand, Reporting...",
-    "hyperspace/member/fiction/f20051216/index.html": "Uhl Eharl Khoehng (short story)",
-    "hyperspace/member/fiction/f20060106/index.html": "Blaze of Glory (short story)",
-    "hyperspace/member/fiction/f20060127/index.html": "The Clone Wars: The Pengalan Tradeoff",
-    "hyperspace/member/fiction/f20060317/index.html": "Slaying Dragons",
-    "hyperspace/member/fiction/f20060328/index.html": "Combat Moon (short story)",
-    "hyperspace/member/fiction/f20060331/index.html": "Emissary of the Void",
-    "hyperspace/member/fiction/f20060403/index.html": "Emissary of the Void",
-    "hyperspace/member/fiction/f20060405/index.html": "Emissary of the Void",
-    "hyperspace/member/fiction/f20060407/index.html": "Emissary of the Void",
-    "hyperspace/member/fiction/f20060410/index.html": "Emissary of the Void",
-    "hyperspace/member/fiction/f20060412/index.html": "Emissary of the Void",
-    "hyperspace/member/fiction/f20060428/index.html": "A Certain Point of View (short story)",
-    "hyperspace/member/fiction/f20060512/index.html": "Firepower",
-    "hyperspace/member/fiction/f20060526/index.html": "Deep Spoilers",
-    "hyperspace/member/fiction/f20060911/index.html": "Do No Harm",
-    "hyperspace/member/fiction/f20060918/index.html": "The Most Dangerous Foe",
-    "hyperspace/member/fiction/f20070111/index.html": "Only Droids Serve the Maker",
-    "hyperspace/member/fiction/f20070709/index.html": "The Capture of Imperial Hazard",
-    "hyperspace/member/fiction/f20080310/index.html": "Retreat from Coruscant",
-    "hyperspace/member/fiction/f20080311/index.html": "MedStar: Intermezzo",
-    "hyperspace/member/fiction/f20080313/index.html": "League of Spies",
-}
 
 SERIES_MAPPING = {
     "Star Wars (1977)": ["Star Wars (1977)", 1, 108],
@@ -270,10 +198,6 @@ SERIES_MAPPING = {
 }
 
 EXPANSION = {
-    "Tales from Jabba's Palace": ["A Bad Feeling: The Tale of EV-9D9", "A Barve Like That: The Tale of Boba Fett", "A Boy and His Monster: The Rancor Keeper's Tale", "A Free Quarren in the Palace: Tessek's Tale", "A Time to Mourn, a Time to Dance: Oola's Tale", "And Then There Were Some: The Gamorrean Guard's Tale", "And the Band Played On: The Band's Tale", "Epilogue: Whatever Became Of...?", "Goatgrass: The Tale of Ree-Yees", "Let Us Prey: The Whiphid's Tale", "Of the Day's Annoyances: Bib Fortuna's Tale", "Old Friends: Ephant Mon's Tale", "Out of the Closet: The Assassin's Tale", "Shaara and the Sarlacc: The Skiff Guard's Tale", "Skin Deep: The Fat Dancer's Tale", "Sleight of Hand: The Tale of Mara Jade", "Taster's Choice: The Tale of Jabba's Chef", "That's Entertainment: The Tale of Salacious Crumb", "The Great God Quay: The Tale of Barada and the Weequays", "Tongue-tied: Bubo's Tale"],
-    "Tales from the Mos Eisley Cantina": ["A Hunter's Fate: Greedo's Tale", "At the Crossroads: The Spacer's Tale", "Be Still My Heart: The Bartender's Tale", "Doctor Death: The Tale of Dr. Evazan and Ponda Baba", "Drawing the Maps of Peace: The Moisture Farmer's Tale", "Empire Blues: The Devaronian's Tale", "Hammertong: The Tale of the \"Tonnika Sisters\"", "Nightlily: The Lovers' Tale", "One Last Night in the Mos Eisley Cantina: The Tale of the Wolfman and the Lamproid", "Play It Again, Figrin D'an: The Tale of Muftak and Kabe", "Soup's On: The Pipe Smoker's Tale", "Swap Meet: The Jawa's Tale", "The Sand Tender: The Hammerhead's Tale", "Trade Wins: The Ranat's Tale", "We Don't Do Weddings: The Band's Tale", "When the Desert Wind Turns: The Stormtrooper's Tale"],
-    "Tales from the New Republic": ["Conflict of Interest", "Day of the Sepulchral Night (short story)", "Gathering Shadows", "Hutt and Seek", "Interlude at Darkknell", "Jade Solitaire", "The Last Hand (short story)", "The Longest Fall", "No Disintegrations, Please", "Simple Tricks", "Uhl Eharl Khoehng (short story)"],
-    "Tales of the Bounty Hunters": ["The Last One Standing: The Tale of Boba Fett", "Of Possible Futures: The Tale of Zuckuss and 4-LOM", "Payback: The Tale of Dengar", "The Prize Pelt: The Tale of Bossk", "Therefore I Am: The Tale of IG-88"],
     "Canto Bight (novella collection)": ["Hear Nothing, See Nothing, Say Nothing", "The Ride", "Rules of the Game", "The Wine in Dreams"],
     "The Clone Wars: Stories of Light and Dark": ["Almost a Jedi", "Bane's Story", "Bug (short story)", "Dark Vengeance: The True Story of Darth Maul and His Revenge Against the Jedi Known as Obi-Wan Kenobi", "Dooku Captured (short story)", "Hostage Crisis (short story)", "Kenobi's Shadow", "The Lost Nightsister", "Pursuit of Peace (short story)", "The Shadow of Umbara", "Sharing the Same Face"],
     "Dark Legends": ["Bakurat (short story)", "A Bitter Harvest", "Blood Moon", "Buyer Beware", "The Dark Mirror", "The Gilded Cage", "A Life Immortal", "The Orphanage", "The Predecessor", "The Sleep of Ages"],
@@ -569,7 +493,7 @@ def list_templates(site, cat, data, template_type, recurse=False, web=False):
 
 def build_template_types(site):
     now = datetime.now()
-    results = {"db": "DB", "databank": "DB", "swe": "DB", "External": [], "WebsiteNames": {}}
+    results = {"db": "DB", "databank": "DB", "swe": "DB", "swboards": "External", "WebsiteNames": {}}
 
     list_templates(site, "Category:StarWars.com citation templates", results, "Web")
     list_templates(site, "Category:Internet citation templates", results, "Web", web=True)
@@ -713,10 +637,11 @@ def load_source_lists(site, log):
             #     continue
             if line and not line.startswith("==") and "/Header}}" not in line and not line.startswith("----"):
                 line = line.replace(" |reprint=", "|reprint=")
-                if "Miniatures" in sp or "RefMagazine" in sp or "CardSets" in sp:
+                if "Miniatures" in sp or "RefMagazine" in sp or "CardSets" in sp or "CardTrader" in sp:
                     line = re.sub("(\{\{SWMiniCite.*?)\|num=[0-9-]+", "\\1", line)
                     line = re.sub("(\{\{SWIA.*?)\|page=[0-9]+", "\\1", line)
                     line = re.sub("<!-- .*? -->", "", line)
+                    line = re.sub("}}<[0-9 A-z]+>", "", line)
 
                 if "Toys" in sp:
                     line = re.sub("(\|text=.*?)(\|set=.*?)\|", "\\2\\1|", line)
@@ -739,7 +664,7 @@ def load_source_lists(site, log):
             for o, line in enumerate(lines):
                 if "/Header}}" in line or line.startswith("----"):
                     continue
-                x = re.search("\*(R: )?(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?) ?†?( {{C\|(original|alternate): (?P<a>.*?)}})?( {{C\|int: (?P<i>.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
+                x = re.search("\*(R: )?(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? *(?P<t>.*?) ?†?( {{C\|(original|alternate): (?P<a>.*?)}})?( {{C\|int: (?P<i>.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
                 if x:
                     i += 1
                     data.append({"index": i, "page": f"Web/{y}", "date": x.group("d"), "item": x.group("t"),
@@ -871,8 +796,6 @@ def load_full_sources(site, types, log) -> FullListData:
                     i['item'] = i['item'].replace(f"|p={parenthetical}", "").strip()
             x = extract_item(i['item'], False, i['page'], types, master=True)
             if x and not x.invalid:
-                if x.template == "SWCT" and not x.target:
-                    x.target = x.card
                 if i['page'] == "Web/External":
                     x.external = True
                 elif i["page"].startswith("Web/1") or i["page"].startswith("Web/2"):
@@ -899,9 +822,6 @@ def load_full_sources(site, types, log) -> FullListData:
                 x.unlicensed = unlicensed
                 x.non_canon = non_canon
                 x.reprint = reprint
-                if x.template == "Hyperspace" and x.url in HYPERSPACE:
-                    x.reprint = True
-                    x.target = HYPERSPACE[x.url]
                 x.alternate_url = i.get('alternate')
                 x.date_ref = i.get('ref')
                 x.extra_date = i.get('extraDate')
@@ -1283,13 +1203,6 @@ def match_audiobook(x: Item, target, data, log, page):
     return None
 
 
-ERAS = {
-    "Rise of the Empire era": "32 BBY",
-    "Rebellion era": "0 ABY",
-    "New Republic era": "10 ABY"
-}
-
-
 def parse_new_timeline(page: Page, types):
     text = page.get()
     redirects = build_redirects(page)
@@ -1298,14 +1211,14 @@ def parse_new_timeline(page: Page, types):
     unique = {}
     index = 0
     unknown = None
-    text = re.sub("(\| ?[A-Z]+ ?)\n\|", "\\1|", text).replace("|simple=1", "")
+    text = re.sub("(\| ?[A-Z]+ ?)\n\|", "\\1|", text).replace("|simple=1", "").replace("(comic)", "(comic story)")
     for line in text.splitlines():
         if "==Unknown placement==" in line:
             unknown = {}
             continue
         line = re.sub("<!--.*?-->", "", line).replace("†", "").strip()
 
-        m = re.search("^\|(data-sort-value=.*?\|)?(?P<date>.*?)\|(\|?style.*?\||\|- ?class.*?\|)?[ ]*?[A-Z]+[ ]*?\n?\|.*?\|+[* ]*?(?P<full>['\"]*[\[{]+.*?[]}]+['\"]*) *?(†|‡|Ω)?$", line)
+        m = re.search("^\|(data-sort-value=.*?\|)?(?P<date>.*?)\|(\|?style.*?\||\|- ?class.*?\|)?[ ]*?[A-Z]+[ ]*?\n?\|.*?\|+[* ]*?(?P<full>['\"]*[\[{]+.*?[]}]+['\"]*)( *?(†|‡|Ω|&dagger;))*?$", line)
         if m:
             x = extract_item(m.group('full'), True, "Timeline", types, master=False)
             if x and x.target:

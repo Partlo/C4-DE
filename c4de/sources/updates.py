@@ -22,13 +22,13 @@ def parse_date_string(d, title):
         t, z = None, None
         for x, df in {"day": "%B %d %Y", "month": "%B %Y", "year": "%Y"}.items():
             try:
-                z = datetime.strptime(d, df)
+                z = datetime.strptime(d.strip(), df)
                 t = x
                 return t, z
             except Exception:
                 pass
         if not z:
-            print(f"Unrecognized date string on {title}: {d}")
+            print(f"Unrecognized date string on {title}: [{d}]")
     return None, None
 
 
@@ -38,11 +38,18 @@ def extract_release_date(title, text):
     if m:
         for i in range(1, 4):
             if m.groupdict()[f"d{i}"]:
-                d = m.groupdict()[f"d{i}"].replace("[", "").replace("]", "").replace("*", "").strip().replace(',', '')
+                d = m.groupdict()[f"d{i}"]
+                d = re.sub("\[\[([A-z]+)( [0-9]+)?\|[A-z]+\.?( [0-9]+)?]]", "\\1\\2", d).replace("c. ", "")
+                d = d.replace("[", "").replace("]", "").replace("*", "").strip().replace(',', '')
+                if "{{c|reprint" in d.lower() or "(reprint" in d.lower() or d.lower().startswith("cancel") or d.lower().startswith("future"):
+                    continue
                 d = re.sub("\{\{C\|.*?}}", "", d)
-                d = re.sub("&ndash;[A-z]+ [0-9|]+", "", d)
+                d = re.sub("([A-z]+ ?[0-9]*)(-|&[mn]dash;)([A-z]+ ?[0-9]*) ", "\\1 ", d)
+                d = re.sub("&[mn]dash; ?[A-z]+ [0-9|]+", "", d)
                 d = re.sub("\([A-Z]+\)", "", d)
                 d = re.sub("([A-z]+ ?[0-9]*) ([0-9]{4})( .*?)$", "\\1 \\2", d)
+                d = d.replace("Late ", "").replace("Early ", "")
+                d = re.sub("  +", " ", d)
                 d = d.split("<br")[0]
                 date_strs.append((d.split("-")[0], m.groupdict().get(f"r{i}")))
 
@@ -52,7 +59,7 @@ def extract_release_date(title, text):
             t, z = parse_date_string(d, title)
             if t and z:
                 page_dates.append((t, z, r))
-    return page_dates
+    return page_dates, date_strs
 
 
 SOURCE_INFOBOXES = ["activity book", "magazine", "magazine article", "magazine department", "music", "toy line",
@@ -101,7 +108,7 @@ def identify_infobox(t, infoboxes):
 
 def analyze_page(page, category, infobox):
     text = page.get()
-    dates = extract_release_date(page.title(), text)
+    dates, _ = extract_release_date(page.title(), text)
     c = re.search("{{Top.*?\|(can|leg|ncc|ncl|new|pre|btr|old|imp|reb|njo|lgc|inf)[|}]", text)
     ct = c.group(1) if c else None
     if ct in ["pre", "btr", "old", "imp", "reb", "new", "njo", "lgc", "inf"]:
@@ -207,8 +214,6 @@ def parse_line(line, i, p: Page, types, full, unique, target):
 
             x = extract_item(item, False, p.title(), types, master=True)
             if x:
-                if x.template == "SWCT" and not x.target:
-                    x.target = x.card
                 if x.original != original_item:
                     x.original = original_item
                 x.index = i

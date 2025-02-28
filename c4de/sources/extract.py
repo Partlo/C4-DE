@@ -9,6 +9,12 @@ from c4de.sources.domain import Item, ItemId
 IGNORE_TEMPLATES = ["BookCite", "=", "Subtitles", "PAGENAME"]
 
 
+ENCYCLOPEDIA = ["Ace Squadron", "Anakin Skywalker", "C-3PO", "Coruscant", "Darth Vader", "Emperor Palpatine", "Han Solo",
+                "Luke Skywalker", "Millennium Falcon", "Naboo", "Obi-Wan Kenobi", "Padmé Amidala", "Princess Leia Organa",
+                "R2-D2", "TIE Fighters", "Tatooine", "The Clone Wars", "The First Order", "The Grand Army of the Republic",
+                "The Rebel Alliance", "The Resistance", "The Separatists"]
+
+
 COLLAPSE = {
     "HighRepublicReaderGuide": "Star Wars: The High Republic: Chronological Reader's Guide",
     "GalaxiesAED": "Star Wars Galaxies: An Empire Divided",
@@ -24,7 +30,9 @@ COLLAPSE = {
 
 COLLAPSED_MAGAZINES = {
     "FactFile": ("The Official Star Wars Fact File", ""),
+    "FactFile2013": ("The Official Star Wars Fact File Part", "2013"),
     "FactFile\|y=2013": ("The Official Star Wars Fact File Part", "2013"),
+    "FactFile=2014": ("The Official Star Wars Fact File Part", "2014"),
     "FactFile\|y=2014": ("The Official Star Wars Fact File Part", "2014"),
     "FigurineCite": ("Star Wars: The Official Figurine Collection", ""),
 }
@@ -115,23 +123,11 @@ PREFIXES = {
     "Jedi Temple Challenge": "Episode <x> (Star Wars: Jedi Temple Challenge)",
     "JTC": "Episode <x> (Star Wars: Jedi Temple Challenge)",
     "CW": "Chapter <x> (Star Wars: Clone Wars)",
+    "CWACite": "Star Wars: Clone Wars Adventures Volume <x>",
+    "InQuestCite": "InQuest Gamer <x>",
     "VaderImmortal": "Vader Immortal – Episode <x>",
     "DisneyGallery": "<x> (Disney Gallery: The Mandalorian)",
     "GroguCutest": "Episode <x> (Grogu Cutest In The Galaxy)"
-}
-
-
-CUSTOM_SERIES_MAPPING = {
-    "BanthaCite": "Bantha Tracks",
-    "CWACite": "Star Wars: Clone Wars Adventures Volume",
-    "InQuestCite": "InQuest Gamer",
-    "StarWarsKidsCite": "Star Wars Kids (1997)",
-    "StarWarsKidsCite|year=1997": "Star Wars Kids (1997)",
-    "StarWarsKidsCite|year=1998": "Star Wars Kids (1998)",
-    "StarWarsKidsCite|year=1999": "Star Wars Kids (1999)",
-    "TCWUKCite|vol=4": "Star Wars Comic UK",
-    "TCWUKCite|vol=6": "Star Wars: The Clone Wars Comic",
-    "TCWUKCite|vol=7": "Star Wars Comic",
 }
 
 GAME_TEMPLATES = {
@@ -149,6 +145,9 @@ CORE_SETS = {
     "SWIA": "Star Wars: Imperial Assault Core Set",
     "SWPM": "Star Wars PocketModel TCG: Base Set",
 }
+
+DEPARTMENTS = ["A Certain Point of View", "Bantha Tracks", "Blaster", "Books", "Bounty Hunters", "Comics", "Comlink",
+               "Crossword", "Games", "Jedi Archive", "Jedi Library", "Red Five", "Rogues Gallery", "Toys", "Versus"]
 
 
 def convert_issue_to_template(s):
@@ -175,14 +174,15 @@ def decide_ff_issue(y, i):
 
 
 def extract_fact_file(z: str, s: str, a: bool):
-    x = re.search("\{\{(FactFile(\|y=(201[34]))?)\|([0-9]+)\|?}}", s)
+    s = s.replace("|y=2013", "2013").replace("|y=2014", "2014")
+    x = re.search("\{\{(FactFile(201[34])?)\|([0-9]+)\|?}}", s)
     if x:
-        issue = decide_ff_issue(x.group(3), x.group(4))
+        issue = decide_ff_issue(x.group(2), x.group(3))
         return Item(z, "General", a, template=x.group(1), target=f"The Official Star Wars Fact File {issue}")
 
-    x = re.search("(FactFile(\|y=(201[34]))?)\|(?P<i>[0-9]+)\|(German Edition - )?(?P<p>(?P<a>[0-9]* ?[A-Z]+)[ -]?(?P<n>[0-9]+) ?(-|–|—|&mdash;|&ndash;)? ?\\7?(?P<m>[0-9]*)?)(?P<s>[|,])? ?(?P<t>.*?)$", s)
+    x = re.search("(FactFile(201[34])?)\|(?P<i>[0-9]+)\|(German Edition - )?(?P<p>(?P<a>[0-9]* ?[A-Z]+)[ -]?(?P<n>[0-9]+) ?(-|–|—|&mdash;|&ndash;)? ?\\7?(?P<m>[0-9]*)?)(?P<s>[|,])? ?(?P<t>.*?)$", s)
     if x:
-        issue = decide_ff_issue(x.group(3), x.group('i'))
+        issue = decide_ff_issue(x.group(2), x.group('i'))
         page = x.group('p')
         abbr = x.group('a').upper()
         num1 = x.group('n')
@@ -198,14 +198,20 @@ def extract_fact_file(z: str, s: str, a: bool):
         item.ff_data = {"page": page, "abbr": abbr, "num1": num1, "num2": num2, "num3": num3, "num4": num4, "text": text, "legacy": x.group('s') == ","}
         return item
 
-    x = re.search("(FactFile(\|y=(201[34]))?)\|([0-9]+)\|'*(.*?)'*}}", s)
+    x = re.search("(FactFile(201[34])?)\|([0-9]+)\|'*(.*?)'*}}", s)
     if x:
-        issue = decide_ff_issue(x.group(3), x.group(4))
+        issue = decide_ff_issue(x.group(2), x.group(3))
         item = Item(z, "General", a, target=f"The Official Star Wars Fact File {issue}", template=x.group(1),
-                    issue=issue, text=x.group(5))
-        item.ff_data = {"page": None, "abbr": None, "num1": None, "num2": None, "num3": None, "num4": None, "text": x.group(5), "legacy": True}
+                    issue=issue, text=x.group(4))
+        item.ff_data = {"page": None, "abbr": None, "num1": None, "num2": None, "num3": None, "num4": None, "text": x.group(4), "legacy": True}
         return item
     return None
+
+
+def fix_insider_departments(name, template):
+    if template == "InsiderCite" and name in DEPARTMENTS:
+        return f"{name} (department)"
+    return name
 
 
 def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
@@ -347,6 +353,12 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         if m:
             return Item(z, mode, a, target=None, template=template, parent="Holonet", url=m.group(3).replace("|", "/"),
                         text=m.group(5))
+    elif template == "EncyclopediaCite":
+        m = re.search("\{\{EncyclopediaCite\|(.*?)( \([^I12].*?\))?(\|.*?)?}}", s)
+        if m and m.group(1) in ENCYCLOPEDIA:
+            return Item(z, mode, a, target=f"{m.group(1)} (reference book)", template=template)
+        elif m:
+            return Item(z, mode, a, target=m.group(1), template=template)
     elif template == "CelebrationTrailer":
         m = re.search("\{\{CelebrationTrailer\|['\[]*(?P<m>.*?)(\|.*?)?['\]]*\|(?P<c>.*?)}}", s)
         if m:
@@ -433,7 +445,14 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         if not m:
             m = re.search("\{\{SimpleToyCite\|.*?(item|pack|nolink)=(?P<i>.*?)(\|.*?)?\|parent=(?P<p>.*?)(\|.*?)?}}", s)
         if m:
-            return Item(z, mode, a, target=None, template=template, parent=m.groupdict()['p'], card=m.groupdict()['i'])
+            x = re.search("\|(url|link|altlink)=(.*?)(\|.*?)?}}", s)
+            u = x.group(2) if x else None
+            return Item(z, mode, a, target=None, template=template, parent=m.groupdict()['p'], card=m.groupdict()['i'], url=u)
+    elif template == "LegoMagazineCite":
+        m = re.search("\{\{LegoMagazineCite\|.*?story=(.*?)(\|.*?)?}}", s)
+        if not m:
+            m = re.search("\{\{LegoMagazineCite\|.*?issue=(.*?)(\|.*?)?}}", s)
+        return Item(z, mode, a, target=m.group(1), template=template)
     elif mode == "Cards" or mode == "Minis" or mode == "Toys" or "|card" in s:
         x = parse_card_line(s, z, template, mode, a)
         if x:
@@ -442,7 +461,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     # InsiderCite and similar templates - link= parameter
     m = re.search("{{[^|\[}\n]+\|link=(.*?)\|.*?\|(.*?)(\|(.*?))?}}", s)
     if m:
-        return Item(z, mode, a, target=m.group(2), template=template, parent=m.group(1), issue=m.group(1), format_text=m.group(4))
+        return Item(z, mode, a, target=fix_insider_departments(m.group(2), template), template=template, parent=m.group(1), issue=m.group(1), format_text=m.group(4))
 
     # Miniatures, toys or cards with set= parameter
     m = re.search("\{\{[^|\[}\n]+\|(.*?\|)?set=(?P<set>.*?)\|(.*?\|)?((scenario|pack)=(?P<scenario>.*?)\|?)?(.*?)}}", s)
@@ -455,7 +474,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         m = re.search("{{[^|\[}\n]+\|(?P<year>year=[0-9]+\|)?(?P<vol>volume=[0-9]\|)?(story=|article=)?\[*(?P<article>.*?)(#.*?)?(\|(?P<text>.*?))?]*\|(issue[0-9]?=)?(?P<issue>(Special Edition |Souvenir Special|Premiere Issue)?H?S? ?[0-9.]*)(\|issue[0-9]=.*?)?(\|.*?)?}}", s.replace("&#61;", "="))
     if m and template != "StoryCite" and template != "SimpleCite":
         p = determine_parent_magazine(m, template, types)
-        article = m.group('article')
+        article = fix_insider_departments(m.group('article'), template)
         parent = f"{p} {m.group('issue')}" if p and m.group('issue') else None
         if parent == article and m.group('text'):
             article = f"{parent}#{m.group('text')}"
@@ -541,12 +560,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
 
 
 def determine_parent_magazine(m: Match, template, types: dict):
-    if m.group('year'):
-        p = CUSTOM_SERIES_MAPPING.get(f"{template}|{m.group('year')}")
-    elif m.group('vol'):
-        p = CUSTOM_SERIES_MAPPING.get(f"{template}|{m.group('vol')}")
-    else:
-        p = CUSTOM_SERIES_MAPPING.get(template)
+    p = PREFIXES.get(template)
     if m.group('issue'):
         if template == "InsiderCite" and m.group('issue').isnumeric() and int(m.group('issue')) <= 23:
             p = "The Lucasfilm Fan Club Magazine"
@@ -571,14 +585,9 @@ def parse_card_line(s: str, z: str, template: str, mode: str, a: bool):
         c = re.search("\|cardname=(.*?)(\|.*?)?}}", s)
         return Item(z, mode, a, target=None, parent=GAME_TEMPLATES[template], template=template, card=c.group(1))
 
-    if template == "SWCT" and "cardname=" not in s:
-        m = re.search("{+[^|\[}\n]+\|(set=)?(.*?)(\|.*?)?}}", s)
-        if m:
-            return Item(z, mode, a, target=None, template=template, parent="Star Wars: Card Trader", card=m.group(2),
-                        text=m.group(3))
-    elif (card_set == "Core Set" or card_set == "Base Set") and CORE_SETS.get(template):
+    if (card_set == "Core Set" or card_set == "Base Set") and CORE_SETS.get(template):
         card_set = CORE_SETS[template]
-    elif template == "Topps" and card_set == "Star Wars Topps Now" and "|stext=" in s:
+    elif template == "Topps" and card_set == "Star Wars  Topps Now" and "|stext=" in s:
         card_set = re.search("\|stext=(.*?)[|}].*?$", s).group(1).replace("''", "")
     elif card_set and template == "TopTrumps":
         card_set = f"Top Trumps: {card_set}"

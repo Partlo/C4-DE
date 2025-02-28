@@ -3,7 +3,7 @@ from typing import List, Dict, Optional
 
 from pywikibot import Page
 from c4de.sources.domain import Item, ItemId
-from c4de.sources.extract import CUSTOM_SERIES_MAPPING, GAME_TEMPLATES
+from c4de.sources.extract import GAME_TEMPLATES
 
 
 def compare_cleaned(x, y, r1, s1="", r2=None, s2=""):
@@ -111,39 +111,7 @@ def determine_id_for_item(o: Item, page: Page, data: Dict[str, Item], by_target:
 
     # Template-specific matching
     for other, d in data_sets.items():
-        if o.template == "SWCT" and o.card:  # TODO: remove once converted
-            convert1, convert2, convert3, matches = [], [], [], []
-            o.card = o.card.replace("–", "-").replace("—", "-").replace("&mdash;", "-").replace("&ndash;", "-")
-            for s, x in d.items():
-                if x.template == "SWCT" and x.target and (x.target == o.parent or x.target in o.card or x.target.replace(" - ", " ") in o.card.replace(" - ", " ")):
-                    zx = x.card if x.card else x.target
-                    if o.card.startswith(f"{zx} -"):
-                        convert1.append((x, o.card.split(f"{zx} -", 1)[1]))
-                    elif o.card.endswith(f"- {zx}"):
-                        convert1.append((x, o.card.split(f"- {zx}", 1)[0]))
-                    elif o.card.replace(" - ", " ").startswith(f"{zx} -"):
-                        convert2.append((x, o.card.replace(" - ", " ").split(f"{zx} -", 1)[1]))
-                    elif o.card.startswith(f"{zx} -".replace(" - ", " ")):
-                        convert2.append((x, o.card.split(f"{zx} -".replace(" - ", " "), 1)[1]))
-                    elif o.card.replace(" - ", " ").endswith(f"- {zx}"):
-                        convert2.append((x, o.card.replace(" - ", " ").split(f"- {zx}", 1)[0]))
-                    elif o.card.endswith(f"- {zx}".replace(" - ", " ")):
-                        convert2.append((x, o.card.split(f"- {zx}".replace(" - ", " "), 1)[0]))
-                    elif f"{zx} -".replace(" - ", " ") in o.card:
-                        convert3.append((x, o.card.split(f"{zx} -".replace(" - ", " "), 1)[1]))
-                    elif f"- {zx}".replace(" - ", " ") in o.card:
-                        convert3.append((x, o.card.split(f"- {zx}".replace(" - ", " "), 1)[0]))
-                    else:
-                        matches.append(x)
-            if convert1 or convert2 or convert3:
-                convert = convert1 if convert1 else (convert2 if convert2 else convert3)
-                x, y = convert[-1]
-                o.original = f"{{{{SWCT|set={x.card if x.card else x.target}|cardname={y.strip()}}}}}"
-                return ItemId(o, x, True, other)
-            if matches:
-                x = sorted(matches, key=lambda a: len(a.card))[-1]
-                return ItemId(o, x, True, other)
-        elif o.template == "LEGOCite" and o.special:
+        if o.template == "LEGOCite" and o.special:
             alt = []
             for s, x in d.items():
                 if x.template == "LEGOCite" and x.special == o.special:
@@ -156,10 +124,6 @@ def determine_id_for_item(o: Item, page: Page, data: Dict[str, Item], by_target:
             for s, x in d.items():
                 if x.target == o.target:
                     return ItemId(o, x, True, other)
-    if o.template == "SWCT" and o.card:
-        print(f"SWCT fell through: {o.card}")
-        o.unknown = True
-        return ItemId(o, o, True, False)
 
     is_tracked_mini = o.template == "SWIA" or (o.mode == "Minis" and o.template not in ["Shatterpoint"])
     if o.mode == "Minis":
@@ -279,7 +243,7 @@ def determine_id_for_item(o: Item, page: Page, data: Dict[str, Item], by_target:
         if follow_redirect(o, page.site, log):
             o.followed_redirect = True
             x = match_target(o, by_target, other_targets, log)
-    if x and o.template == "TOMCite" and x.master.template == "InsiderCite" and "|reprint=1" not in x.master.original:
+    if x and o.template == "GermanFanCite" and x.master.template == "InsiderCite" and "|reprint=1" not in x.master.original:
         x.use_original_text = True
         x.current.unknown = True
 
@@ -491,13 +455,13 @@ def find_matching_set(mode, template, set_name, data: dict):
     return partial[0] if partial else None
 
 
-def find_matching_issue(items, issue, text):
+def find_matching_issue(items, issue, text, template):
     if "issue1=" in text:
         for t in items:
-            if t.issue == issue and t.original and "issue1=" in t.original:
+            if t.issue == issue and template == t.template and t.original and "issue1=" in t.original:
                 return t
     for t in items:
-        if t.issue == issue:
+        if t.issue == issue and template == t.template:
             return t
     return items[0]
 
@@ -533,9 +497,9 @@ def match_target_issue_name(o, target, by_target, other_targets, use_original):
                     return ItemId(o, items[0], False, b)
 
     if target and by_target and target in by_target:
-        return ItemId(o, find_matching_issue(by_target[target], o.issue, o.original), use_original, False)
+        return ItemId(o, find_matching_issue(by_target[target], o.issue, o.original, o.template), use_original, False)
     elif target and other_targets and target in other_targets:
-        return ItemId(o, find_matching_issue(other_targets[target], o.issue, o.original), use_original, False)
+        return ItemId(o, find_matching_issue(other_targets[target], o.issue, o.original, o.template), use_original, False)
     return None
 
 
@@ -575,9 +539,9 @@ def match_by_parent_target(o: Item, parent, target, by_target: Dict[str, List[It
 
 
 TEMPLATE_SUFFIXES = {
-    "EncyclopediaCite": ["booklet"],
+    "EncyclopediaCite": ["reference book"],
     "StoryCite": ["short story"],
-    "CWACite": ["comic"],
+    "CWACite": ["comic story", "comic"],
     "GoC": ["episode", "Galaxy of Creatures"],
     "GalacticPals": ["episode", "Galactic Pals"],
     "InsiderCite": ["Star Wars Insider", "article"],
@@ -627,10 +591,6 @@ def match_specific_target(o: Item, target: str, by_target: Dict[str, List[Item]]
                             return ItemId(o, i, False, False)
                         elif i.template == x and i.issue == m.group(2):
                             return ItemId(o, i, False, False)
-    if "|}}" in o.original:
-        m = re.search("\{\{([A-z_ ]+)\|([0-9]+)\|}}", o.original)
-        if m and m.group(1) in CUSTOM_SERIES_MAPPING:
-            targets.append(f"{CUSTOM_SERIES_MAPPING[m.group(1)]} {m.group(2)}")
 
     for t in targets:
         x = match_by_target(t, o, by_target, other_targets, log)
@@ -773,16 +733,17 @@ def match_url(o: Item, u: str, data: dict, other_data: dict):
         return m
 
     mx = None
-    if o.text and "Homing Beacon" in o.text:
-        mx = re.search("Homing Beacon #([0-9]+)", o.text)
+    if o.original and "Homing Beacon" in o.original:
+        mx = re.search("Homing Beacon #([0-9]+)", o.original)
     elif "/beacon" in o.url:
         mx = re.search("/beacon([0-9]+)\.html", o.url)
     if mx:
-        t = f"Web|HBCite|None|None|Homing Beacon (newsletter)|{mx.group(1)}|None|None"
-        if t in data:
-            return ItemId(o, data[t], False, False)
-        elif t in other_data:
-            return ItemId(o, other_data[t], False, True)
+        for x in ["", "None"]:
+            t = f"Web|HBCite|None|None|Homing Beacon (newsletter)|{mx.group(1)}|None|{x}"
+            if t in data:
+                return ItemId(o, data[t], False, False)
+            elif t in other_data:
+                return ItemId(o, other_data[t], False, True)
     return None
 
 

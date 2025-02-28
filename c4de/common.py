@@ -31,6 +31,11 @@ def error_log(text, *args):
     traceback.print_exc()
 
 
+def to_duration(now):
+    d = datetime.now() - now
+    return f"{d.seconds}.{d.microseconds}"
+
+
 def clean_text(text):
     return (text or '').replace('\t', '').replace('\n', '').replace('\u200e', '').strip()
 
@@ -153,6 +158,15 @@ def fix_disambigs(r, t, text):
     return text
 
 
+CONSOLES = ["32X", "3DO", "Android (operating system)", "Atari 2600", "Atari 5200", "Atari 8-bit", "ColecoVision",
+            "Commodore 64", "Dreamcast", "Google Stadia", "Intellivision", "iOS", "Linux", "Mac", "Nintendo",
+            "Game Boy Advance", "Game Boy Color", "Nintendo 3DS", "Nintendo 64", "Nintendo DS", "Nintendo Entertainment System",
+            "Nintendo Game Boy", "Nintendo GameCube", "Nintendo Switch", "Super Nintendo Entertainment System", "Wii", "Wii U",
+            "Oculus Quest", "Personal computer", "PlayStation", "PlayStation 2", "PlayStation 3", "PlayStation 4", "PlayStation 5",
+            "PlayStation Portable", "PlayStation Vita", "R-Zone", "Sega CD", "Sega Game Gear", "Steam", "Xbox", "Xbox 360",
+            "Xbox Cloud Gaming", "Xbox One", "Xbox Series X/S"]
+
+
 def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, remap, file=False, overwrite=False,
                   appearances: Dict[str, List[Item]] = None, sources: Dict[str, List[Item]] = None, canon=False) -> str:
     for r, t in redirects.items():
@@ -162,7 +176,10 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
         elif t in remap and "Free Comic Book" not in t:
             log(f"Skipping remap redirect {t}")
             continue
-        if r.startswith("Template:"):
+        if r in CONSOLES:
+            text = text.replace(f"[[{r}]]", f"[[Wikipedia:{r}|{r}]]").replace(f"[[{r}|", f"[[Wikipedia:{r}|")
+
+        elif r.startswith("Template:"):
             if r.replace("Template:", "{{").lower() not in text.lower():
                 continue
             if section_name:
@@ -215,6 +232,26 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
 
 
 def do_final_replacements(new_txt, replace):
+    for x in re.findall("((\{\{[Qq]uote\|[^{}\[\]|\n]*)(\[\[([^{}\[\]\n]*?\|)?[^{}\[\]\n]*?]][^{}\n]*?)(\|audio=[^|{}\[\]]*?)?\|<ref.*?}})", new_txt):
+        new_quote, attr, link, bc = "", "", "", 0
+        for c in x[2]:
+            if (c == "|" and bc == 0) or attr:
+                attr += c
+            elif c == "[":
+                bc += 1
+            elif c == "]":
+                bc -= 1
+                if bc == 0:
+                    new_quote += link
+                    link = ""
+            elif bc > 0 and c == "|":
+                link = ""
+            elif bc > 0:
+                link += c
+            else:
+                new_quote += c
+        new_txt = new_txt.replace(x[2], f"{new_quote}{attr}")
+
     while replace:
         new_txt2 = re.sub("(\[\[(?!File:)[^\[\]|\r\n]+)&ndash;", "\\1–",
                           re.sub("(\[\[(?!File:)[^\[\]|\n]+)&mdash;", "\\1—", new_txt))
@@ -223,29 +260,32 @@ def do_final_replacements(new_txt, replace):
         new_txt2 = re.sub("\[\[(.*?)\|\\1((?!(Bestoon)[^\n \[\]}{])*?)]]", "[[\\1]]\\2", new_txt2)
         new_txt2 = re.sub("(\|set=(.*?) \(.*?\))\|(s?text|sformatt?e?d?)=\\2([|}])", "\\1\\4", new_txt2)
         new_txt2 = re.sub("([^']''[^' ][^']+?'')'s ", "\\1{{'s}} ", new_txt2)
-        new_txt2 = re.sub("([^']''[^' ][^']+?s'')' ", "\\1{{'}} ", new_txt2)
+        new_txt2 = re.sub("([^']''((?!-class)[^' ])+?[^']+?s'')' ", "\\1{{'}} ", new_txt2)
         new_txt2 = new_txt2.replace("{{'}}s", "{{'s}}")
         new_txt2 = new_txt2.replace("{{'}}\n", "{{'}}")
         if "'''s " in new_txt2:
             new_txt2 = re.sub("( ''[^'\n]+'')'s ", "\\1{{'s}} ", new_txt2)
 
+        new_txt2 = re.sub("(\|url=[^\n|{}]+?)/\|", "\\1|", new_txt2)
         new_txt2 = new_txt2.replace("\n\n*{{ISBN", "\n*{{ISBN")
-        new_txt2 = new_txt2.replace("|stext=Topps ''Star Wars Living Set''", "")
+        if "stext=" in new_txt2:
+            new_txt2 = re.sub("(\|set=[^|{}\n]*?)(\|stext=[^|{}\n]*?)}}", "\\1}}", new_txt2)
 
         new_txt2 = re.sub("(\[\[((.*?) \((.*?)\)).*?]].*?)(\{\{Ab\|.*?)\[\[\\2\|''\\3'' \\4]]", "\\1\\5[[\\2|\\4]]", new_txt2)
         new_txt2 = re.sub("(\{\{[^\n{}]+?)(\|nolive=1)([^\n{}]*?(\|nobackup=1)?[^\n{}]*?)}}", "\\1\\3\\2}}", new_txt2)
         new_txt2 = re.sub("(\{\{[^\n{}]+?)(\|nobackup=1)([^\n{}]+?)}}", "\\1\\3\\2}}", new_txt2)
         new_txt2 = re.sub("([\n[]File:[^ \n|\]\[]+) ", "\\1_", new_txt2)
+
         x = re.search("\[\[([A-Z])(.*?)\|(.\\2)(.*?)]]", new_txt2)
         if x and x.group(3).lower().startswith(x.group(1).lower()) and x.group(3).lower() != "ochi of bestoon":
             new_txt2 = new_txt2.replace(x.group(0), f"[[{x.group(3)}]]{x.group(4)}")
 
-        new_txt2 = re.sub("(\{\{Top.*?)(\|italics=1)(.*?)(\|italics2=1)?(.*?)}}", "\\1\\3\\5\\2\\4}}", new_txt2)
-        new_txt2 = re.sub("(\{\{Top.*?)(\|italics2=1)(.+?)}}", "\\1\\3\\2}}", new_txt2)
+        new_txt2 = re.sub("(\|[a-z]+=[^|{}\n]*)\\1+", "\\1", new_txt2)
 
         if "''{{Film|" in new_txt2:
             new_txt2 = re.sub("(?<!')''(\{\{Film\|.*?}})'*", "\\1", new_txt2)
-        new_txt2 = re.sub("(\{\{Quote\|[^{}\n]*)\[\[([^{}\[\]\n]*?\|)?([^{}\[\]\n]*?)]]([^{}\n]*?)(\|[^|{}\n]+\|<ref.*?}})", "\\1\\3\\4\\5", new_txt2)
+
+        # TODO: remove
         for ix in re.findall(
                 "((\{\{(BuildFalconCite|BuildR2Cite|BuildXWingCite|BustCollectionCite|DarthVaderCite|FalconCite|FigurineCite|HelmetCollectionCite|ShipsandVehiclesCite|StarshipsVehiclesCite)\|[0-9]+\|[^|\[{}]+?)(\|((?!reprint).)*?)}})",
                 new_txt2):
@@ -257,7 +297,6 @@ def do_final_replacements(new_txt, replace):
         new_txt2 = new_txt2.replace(" (SWGTCG)|scenario=", "|scenario=")
         new_txt2 = new_txt2.replace("[[Ochi]] of Bestoon", "[[Ochi|Ochi of Bestoon]]")
         new_txt2 = new_txt2.replace("[[Battle station/Legends|battlestation", "[[Battle station/Legends|battle station")
-        new_txt2 = re.sub("(\{\{SWMiniCite\|set=.*?) \(Star Wars Miniatures\)", "\\1", new_txt2)
         new_txt2 = re.sub("\*.*?\{\{FactFile\|1\|Gala.*? [Mm]ap.*?}}", "*<!-- 2001-12-27 -->{{FactFile|1|[[:File:Galaxymap3.jpg|Galaxy Map poster]]}}", new_txt2)
         if "{{more" in new_txt2.lower():
             new_txt2 = re.sub("\{\{[Mm]ore[ _]?[Ss]ources}}\n+}}", "}}\n{{MoreSources}}", new_txt2)

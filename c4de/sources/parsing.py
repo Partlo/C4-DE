@@ -92,10 +92,10 @@ def _check_format_text(t, y):
     )
 
 
-def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_cats: list, manual: str = None) -> \
-        Tuple[str, Dict, PageComponents]:
+def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_cats: list, manual: str = None,
+                             keep_page_numbers=False) -> Tuple[str, Dict, PageComponents]:
     # now = datetime.now()
-    before, infobox = initial_cleanup(target, all_infoboxes, before=manual)
+    before, infobox = initial_cleanup(target, all_infoboxes, before=manual, keep_page_numbers=keep_page_numbers)
     # print(f"cleanup: {(datetime.now() - now).microseconds / 1000} microseconds")
     redirects = build_redirects(target, manual=manual)
     if "{{otheruses" in before.lower() or "{{youmay" in before.lower():
@@ -136,7 +136,8 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_c
     if target.title().startswith("User:") and "{{Top|legends=" in target.get():
         canon = True
         app_mode = BY_INDEX
-    return before, redirects, PageComponents(manual or target.get(), canon, non_canon, unlicensed, real, app_mode, media, infobox, flag)
+    return before, redirects, PageComponents(manual or target.get(), canon, non_canon, unlicensed, real, app_mode,
+                                             media, infobox, flag, target.title())
 
 
 def match_iu_header(line):
@@ -386,6 +387,7 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
             cs += 1
         if "SourceContents" in s:
             s = re.sub("^.*?{{SourceContents\|(parent=|issue=)?(\{\{.*?)}}( \{\{.*?}}.*?)\|contents=", "*\\2|parent=1}}\\3", s)
+            s = re.sub("^.*?{{SourceContents\|(parent=|issue=)?('*\[\[.*?]]'*)( \{\{.*?}}.*?)\|contents=", "*\\2}\\3", s)
             s = re.sub("^.*?{{SourceContents\|(parent=|issue=)?(.*?)\|contents=", "", s)
             s = re.sub("\|parent=1(.*?)\|parent=1", "|parent=1\\1", s)
             cs += 1
@@ -451,6 +453,7 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
 def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, unknown, unique_ids, attempt=False, name="Target"):
     if s.endswith("}}}}") and s.count("{{") < s.count("}}"):
         s = s[:-2]
+    is_exception = "<!-- Exception -->" in s
     z = re.sub("<!--.*?-->", "", s.replace("&ndash;", '–').replace('&mdash;', '—').strip())
     z = re.sub("<sup>(.*?)</sup>", "{{C|\\1}}", z)
     extra = ''
@@ -529,6 +532,7 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
             t.extra = extra.strip()
             t.ab = ab
             t.bold = bold
+            t.is_exception = is_exception
             ex = re.search("<!-- ?(Exception|Override)?:? ?([0-9X-]+)?\?? ?-->", s)
             if ex and ex.group(1):
                 t.override = ex.group(1)
@@ -567,7 +571,7 @@ def build_card_text(o: ItemId, c: ItemId):
     if c.current.subset and "subset=" not in ot:
         ot = re.sub("({{[^|}]*?\|(set=)?[^|}]*?\|(s?text=.*?\|)?)", f"\\1subset={o.current.subset}|", ot)
     while ot.count("|subset=") > 1:
-        ot = re.sub("(\|subset=.*?)\1", "\1", ot)
+        ot = re.sub("(\|subset=.*?)\\1", "\\1", ot)
     if o.master.template and o.master.master_page:
         ot = re.sub("\{\{([A-z0-9]+)\|.*?\|(url=|subset=|scenario=|pack=|mission=|cardname=|(swg)?(alt)?link=)", re.sub("\|p=.*?(\|.*?)?}}", "\\1", o.master.original.replace("}}", "")) + "|\\2", ot)
         if (o.master.mode == "Minis" or o.master.template == "SWIA") and c.master.card:
@@ -599,7 +603,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                 new_ref = appearances.target[x.group(1)][0].original
             elif x and x.group(1) in sources.target:
                 new_ref = sources.target[x.group(1)][0].original
-        x = re.search(",? (page|pg\.?|p?p\.|chapters?|ch\.) ([0-9-]+|one|two|three|four|five)(?!]),?", new_ref)
+        x = re.search(",? (page|pg\.?|p?p\.|chapters?|ch\.) ?([0-9-]+|one|two|three|four|five)(?!]),?", new_ref)
         if x:
             print(f"Found page/chapter numbers in reference: \"{x.group(0)}\" -> \"{new_ref}\"")
             # new_ref = new_ref.replace(x.group(0), "")

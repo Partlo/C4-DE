@@ -137,6 +137,12 @@ def is_external_link(d: ItemId, o: Item, unknown):
     elif d and d.master.external:
         o.mode = "Found-External"
         return True
+    elif o.template == "TORweb" and "subdomain=forums" in o.original:
+        o.mode = "External"
+        return True
+    elif o.template and o.url and o.template.startswith("SW") and ("/soundboards" in o.url or o.url.startswith("qa/")):
+        o.mode = "External"
+        return True
     elif "Folio" not in o.original and o.url and ("images-cdn" in o.url or (("subdomain=dmedmedia" in o.original or "subdomain=press" in o.original) and "news/" not in o.original)):
         o.mode = "CDN"
         return True

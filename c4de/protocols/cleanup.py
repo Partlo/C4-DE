@@ -287,35 +287,111 @@ def parse_archive(site, template):
     if not page.exists():
         return None
     archive = {}
-    for u, d in re.findall("\[['\"](.*?)/?['\"]] ?= ?['\"]?(.*?)['\"]?", page.get()):
+    for u, d in re.findall("\[['\"](.*?)/*?['\"]] ?= ?['\"]?(.*?)['\"]?[, ]*\n", page.get()):
+        if template == "Rebelscum":
+            u = re.sub("^(https?://)?w*\.?rebelscum\.com/", "", u)
         archive[u.replace("\\'", "'").lower()] = d
     return archive
 
 
 def clean_archive_usages(page: Page, text, data: FullListData = None):
+    txt, _ = _clean_archive_usages(page, text, data.archive_data if data else {})
+    return txt
+
+
+TEMPLATES = ["Asmodee", "BN", "Blogspot", "Comixology", "DPB", "Downpour", "EndorExpress", "Fortnite",
+             "FortniteYouTube", "Gamespot", "GooglePlay", "HoloNetNews", "Hunters", "ILMxLAB", "Insight", "JoeBooks",
+             "KotoCite", "LucasArtsCite", "Lucasfilm", "Marvel", "MobyGames", "NightdiveYouTube", "OfficialBlog",
+             "Pikids", "Previews", "QuirkBooks", "Rebelscum", "Roblox", "SWUweb", "SWYouTube", "TORYouTube", "TVcom",
+             "Ubisoft", "Unbound", "Workman", "YenPress", "AMGweb", "Abrams", "Altaya", "AppStore", "Apple", "ArenaNews",
+             "BFICite", "BandaiCite", "Blog", "CardCon", "Celebration", "Chronicle", "D23", "D23YouTube", "DB", "DHBoards", "DK", "DarkHorse", "Databank", "DeAgostini", "Destiny", "DeviantArt", "Disney", "DisneyCompany", "DisneyNOW", "DisneyPlus", "DisneyPlusYouTube", "DisneyToyCite", "DisneyXDYouTube", "DisneyYouTube", "EA", "EASWYouTube", "Egmont", "FFGTCG", "FFGYouTube", "FFGweb", "Faraway", "Fathead", "Galoob", "GentleGiantCite", "Goodreads", "Hachette", "Harper", "Hasbro", "HasbroCite", "Haynes", "HighBridge", "Hnn", "Holonet", "IDW", "ILM", "ILMVFXYouTube", "ILMxLABYouTube", "IncrediBuilds", "JKTCG", "KennerCite", "Kobo", "LEGOWebCite", "LEGOYouTube", "Merlin", "MetallicImpressions", "Penguin", "PenguinComics", "PenguinInt", "Quarto", "SEGACite", "SFBC", "SW", "SWArchive", "SWBoards", "SWE", "SWGTCG", "SWIA", "SWKids", "SWKidsYouTube", "SWMiniCite", "SWPM", "Scholastic", "ShopDisney", "SideshowCite", "SilverDolphin", "Simon&Schuster", "Smith's", "SonyCite", "SonyForumsCite", "Spotify", "Studio", "Suvudu", "TCG", "TORweb", "Target", "Taschen", "ThunderBay", "Titan", "TitanComics", "TomyCite", "TopTrumps", "Topps", "UbisoftYouTube", "WizardsCite", "WookYouTube", "ZyngaYouTube"]
+
+YEARLY = ['news/happy-star-wars-day', 'news/star-wars-black-friday-and-cyber-week-deals', 'news/star-wars-day-deals', 'news/star-wars-day-merchandise', 'news/star-wars-day-video-game-deals', 'news/star-wars-fathers-day-gift-guide', 'news/star-wars-halloween-shopping-guide', 'news/star-wars-holiday-gift-guide', 'news/star-wars-mothers-day-gift-guide', 'news/star-wars-reads', 'news/star-wars-valentines-day-gift-guide']
+
+
+def _clean_archive_usages(page: Page, text, archive_data: dict):
     templates_to_check = set()
     for c in page.categories():
         if c.title().endswith("same archivedate value") or c.title().endswith("with custom archivedate"):
             templates_to_check.add(re.search("^(.*?) usages with.*?$", c.title(with_ns=False)).group(1))
-    for t in templates_to_check:
-        tx = "SWYouTube" if t in ["ThisWeek", "HighRepublic Show"] else t
-        archive = data.archive_data.get(tx) if data else None
-        if not archive:
-            archive = parse_archive(page.site, tx)
-            if data:
-                data.archive_data[tx] = archive
+    if not templates_to_check:
+        return text, archive_data
 
-        if archive and "YouTube" in t:
-            for x in re.findall("(\{\{" + t + "\|(video=)?(.*?)(\|.*?)?(\|archive(date|url)=.*?)(\|.*?)?}})", text):
-                if "nolive=" in x[0] or "oldversion" in x[0] or x[2].lower() not in archive:
-                    continue
-                text = text.replace(x[4], "")
-        elif archive:
-            for x in re.findall("(\{\{" + t + "\|(.*?\|)?(url|a?l?t?link)=(.*?)(\|.*?)?(\|archive(date|url)=.*?)(\|.*?)?}})", text):
-                if "nolive=" in x[0] or "oldversion" in x[0] or x[3].lower() not in archive:
-                    continue
-                text = text.replace(x[5], "")
-    return text
+    if "SWArchive" in templates_to_check and "CargoBay" not in templates_to_check:
+        templates_to_check.add("CargoBay")
+    if "SWYouTube" in templates_to_check:
+        templates_to_check.add("ThisWeek")
+        templates_to_check.add("HighRepublicShow")
+        templates_to_check.add("StarWarsShow")
+    chunks = text.split("</ref>")
+    for t in templates_to_check:
+        tx = "SWYouTube" if t in ["ThisWeek", "HighRepublicShow", "StarWarsShow"] else t
+        tx = "Blogspot" if tx == "DailyswCite" else tx
+        if tx not in archive_data:
+            archive_data[tx] = parse_archive(page.site, tx)
+        archive = archive_data.get(tx) or {}
+        if not archive:
+            continue
+
+        for c in chunks:
+            if archive and t == "Rebelscum":
+                for x in re.findall("(\{\{KennerCite\|(.*?\|)?link=(h?t?t?.*?rebelscum\.com/)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?\|archive(date|url)=([^\n{}|]+?) ?)(\|[^\n{}]*?)?}})", c):
+                    if "oldversion" in x[0] or x[3].lower() not in archive:
+                        continue
+                    # elif "nolive=" in x[0] and x[7] != archive[x[3].lower()]:
+                    #     continue
+                    text = text.replace(x[5], "").replace(f"link={x[2]}{x[3]}", f"link={x[3]}")
+                for x in re.findall("(\{\{[A-z0-9 _]+\|(.*?\|)?(url|a?l?t?link)=([^\n{}|]*?rebelscum[^\n{}|]*?)/?(\|[^\n{}]*?)?( ?\|archive(date|url)=[^\n{}|]*? ?)(\|[^\n{}]*?)?}})", c):
+                    if "nolive=" in x[0] or "oldversion" in x[0]:
+                        continue
+                    if re.sub("(https?://)?w*\.?rebelscum\.com/", "", x[3].lower()) not in archive:
+                        continue
+                    text = text.replace(x[5], "")
+            elif archive and tx == "Blogspot":
+                for x in re.findall("(\{\{" + t + "\|(.*?\|)?(url|id|a?l?t?link)=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    if "oldversion" in x[0] or (x[3].lower() not in archive and f"search/label/{x[3]}".lower() not in archive):
+                        continue
+                    # elif "nolive=" in x[0] and x[8] != archive[x[3].lower()]:
+                    #     continue
+                    text = text.replace(x[5], "")
+                for x in re.findall("(\{\{" + t + "\|(.*?\|)?(blogspoturl)=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    if "oldversion" in x[0] or x[3].lower() not in archive or "|url=" in x[0]:
+                        continue
+                    text = text.replace(x[5], "")
+            elif archive and "YouTube" in t:
+                for x in re.findall("(\{\{" + t + "\|(video=)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    if "oldversion" in x[0] or x[2].lower() not in archive:
+                        continue
+                    text = text.replace(x[4], "")
+            elif archive and t == "SWE":
+                for x in re.findall("(\{\{" + t + "\|(url=)?([^\n{}|]*?)/?\|([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]*?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    z = f"{x[2]}/{x[3]}"
+                    if "oldversion" in x[0] or z.lower() not in archive:
+                        continue
+                    # elif "nolive=" in x[0] and x[7] != archive[x[2].lower()]:
+                    #     continue
+                    text = text.replace(x[5], "")
+            elif archive and t == "Databank":
+                for x in re.findall("(\{\{" + t + "\|(url=)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]*?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    if "oldversion" in x[0] or x[2].lower() not in archive:
+                        continue
+                    # elif "nolive=" in x[0] and x[7] != archive[x[2].lower()]:
+                    #     continue
+                    text = text.replace(x[4], "")
+            elif archive:
+                for x in re.findall("(\{\{" + t + "\|(.*?\|)?(url|id|a?l?t?link)=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    if "oldversion" in x[0] or x[3].lower() not in archive or x[3].lower() in YEARLY:
+                        continue
+                    # elif "nolive=" in x[0] and x[8] != archive[x[3].lower()]:
+                    #     continue
+                    text = text.replace(x[5], "")
+                for x in re.findall("(\{\{" + t + "\|((?!(url|id|a?l?t?link)=)[^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+?)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    if "oldversion" in x[0] or x[1].lower() not in archive or x[1].lower() in YEARLY:
+                        continue
+                    # elif "nolive=" in x[0] and x[7] != archive[x[1].lower()]:
+                    #     continue
+                    text = text.replace(x[4], "")
+    return text, archive_data
 
 
 def clean_up_archive_dates(site, t=None):
@@ -341,41 +417,56 @@ def clean_up_archive_dates(site, t=None):
         page.put(text, "Clearing stored archivedates")
 
 
-MAINTENANCE_CATS = ["High-priority template and page issues", "Low-priority template and page issues",
-                    "Tracking maintenance categories"]
+MAINTENANCE_CATS = ["High-priority template and page issues", "Medium-priority template and page issues",
+                    "Low-priority template and page issues", "Tracking maintenance categories"]
+ARCHIVEDATE_CATS = ["Custom archivedate usages", "Same archivedate usages", "Unarchived URLs"]
+MAINSPACE_ONLY = ["Pages with broken file links"]
+
+
+def is_empty_maintenance_category(c: Category):
+    if c.isEmptyCategory():
+        return True
+    elif c.title(with_ns=False) in MAINSPACE_ONLY:
+        return len(list(c.articles(namespaces=0, total=5))) == 0
+    else:
+        for p in c.articles():
+            if p.namespace().id != 2 and p.namespace().id % 2 == 0:
+                return False
+    return True
+
+
+def mark_as_empty(text):
+    for t in [*ARCHIVEDATE_CATS, *MAINTENANCE_CATS]:
+        text = text.replace(f"[[Category:{t}|", f"[[Category:{t}/Empty|").replace(f"[[Category:{t}]]", f"[[Category:{t}/Empty]]")
+    return text
+
+
+def mark_as_non_empty(text):
+    for t in [*ARCHIVEDATE_CATS, *MAINTENANCE_CATS]:
+        text = text.replace(f"[[Category:{t}/Empty|", f"[[Category:{t}|").replace(f"[[Category:{t}/Empty]]", f"[[Category:{t}]]")
+    return text
 
 
 def clean_up_archive_categories(site):
     done = []
-    for mc in Category(site, "Archivedate usages").subcategories():
-        for c in mc.subcategories():
+
+    for tx in [*ARCHIVEDATE_CATS, *MAINTENANCE_CATS]:
+        done.append(f"{tx}")
+        done.append(f"{tx}/Empty")
+        for c in Category(site, f"{tx}/Empty").subcategories():
+            if c.title() in done or c.title().endswith("/Empty"):
+                continue
             done.append(c.title())
-            if c.title().endswith("/Empty"):
-                for cx in c.subcategories():
-                    if not cx.isEmptyCategory():
-                        text = cx.get()
-                        for t in [mc.title(), *MAINTENANCE_CATS]:
-                            text = text.replace(f"[[Category:{t}/Empty|", f"[[Category:{t}|").replace(f"[[Category:{t}/Empty]]", f"[[Category:{t}]]")
-                        if text != cx.get():
-                            cx.put(text, "Marking as non-empty")
-            elif c.isEmptyCategory():
-                text = c.get()
-                for t in [mc.title(), *MAINTENANCE_CATS]:
-                    text = text.replace(f"[[Category:{t}|", f"[[Category:{t}/Empty|").replace(f"[[Category:{t}]]", f"[[Category:{t}/Empty]]")
+            if not is_empty_maintenance_category(c):
+                text = mark_as_non_empty(c.get())
+                if text != c.get():
+                    c.put(text, "Marking as non-empty")
+
+        for c in Category(site, tx).subcategories():
+            if c.title() in done or c.title().endswith("/Empty"):
+                continue
+            done.append(c.title())
+            if is_empty_maintenance_category(c):
+                text = mark_as_empty(c.get())
                 if text != c.get():
                     c.put(text, "Marking as empty")
-
-    for tx in MAINTENANCE_CATS:
-        for c in Category(site, tx).subcategories():
-            if c.title() in done:
-                continue
-            done.append(c.title())
-            if c.isEmptyCategory():
-                text = c.get().replace(f"[[Category:{tx}|", f"[[Category:{tx}/Empty|").replace(f"[[Category:{tx}]]", f"[[Category:{tx}/Empty]]")
-                c.put(text, "Marking as empty")
-        for c in Category(site, f"{tx}/Empty").subcategories():
-            if c.title() in done:
-                continue
-            if not c.isEmptyCategory():
-                text = c.get().replace(f"[[Category:{tx}/Empty|", f"[[Category:{tx}|").replace(f"[[Category:{tx}/Empty]]", f"[[Category:{tx}]]")
-                c.put(text, "Marking as non-empty")

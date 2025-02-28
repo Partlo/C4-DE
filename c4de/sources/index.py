@@ -115,7 +115,8 @@ def extract_release_date_reference(site, target, date: datetime):
     if not page.exists():
         return '', None
     text = page.get()
-    dates = [d for d in extract_release_date(page.title(), text) if d and d[1]]
+    dates, date_strs = extract_release_date(page.title(), text)
+    dates = [d for d in dates if d and d[1]]
     if not dates:
         return '', None
     elif len(dates) == 1:
@@ -140,7 +141,7 @@ def extract_release_date_reference(site, target, date: datetime):
 
 def extract_reference(line, text):
     if line:
-        m = re.search("<ref name=\".*?\".*?>(.*?)</ref>", line)
+        m = re.search("<ref name=\".*?\" *?>(.*?)</ref>", line)
         if m:
             return m.group(1)
         m = re.search("<ref name=\"(.*?)\" ?/>", line)
@@ -154,12 +155,12 @@ def extract_reference(line, text):
 def build_date_and_ref(i: Item, site, links: set, refs: dict, contents: dict, ref_name=None, existing: dict=None):
     date_str, parsed_date = convert_date_str(re.sub("XX[A-Z]", "XX", i.date), links)
     date_ref = ''
-    if date_str:
+    if date_str and not i.mode == "Toys":
         if i.target:
             date_ref = get_reference_for_release_date(site, i.target, parsed_date, refs, contents)
         if i.parent and not date_ref:
             date_ref = get_reference_for_release_date(site, i.parent, parsed_date, refs, contents)
-        if not date_ref and existing and i.original in existing:
+        if not date_ref and existing and existing.get(i.original):
             _, date_ref = existing[i.original]
         if not date_ref and i.url and i.can_self_cite():
             if not ref_name:
@@ -173,7 +174,11 @@ def build_date_and_ref(i: Item, site, links: set, refs: dict, contents: dict, re
         exd, exr = existing[i.original]
         date_str = date_str if date_str else exd
         date_ref = date_ref if date_ref else exr
-    return date_str, date_ref
+    return date_str, date_ref or ''
+
+
+def clean(x):
+    return re.sub("(\{\{(BuildR2Cite|BuildXWingCite|BuildFalconCite|FalconCite|HelmetCollectionCite|BustCollectionCite)\|[0-9]+\|[^{}\n]*?)\|[^{}\n]*?}}", "\\1}}", x)
 
 
 def create_index(site, page: Page, results: AnalysisResults, appearances: dict, sources: dict, save: bool):
@@ -181,6 +186,8 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
 
     current_page = Page(site, f"Index:{page.title()}")
     current = {}
+    keep = {}
+    current_item = None
     references = {}
     if current_page.exists():
         text = current_page.get().split("==Media index==")[-1].split("==Notes")[0].strip() + "\n"
@@ -188,20 +195,26 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
             text = re.sub("\(Star Wars Encyclopedia\)(\|.*?)?}}", "(booklet)}}", text)
         redirects = build_redirects(current_page, manual=text)
         text = fix_redirects(redirects, text, "Index", {}, {}, appearances, sources)
+        text = re.sub("(<ref name=.*?( />|</ref>))(<ref name=.*?( />|</ref>))*", "\\1", text)
         if "  " in text:
             text = re.sub("  +", " ", text)
-        for x in re.findall("\*([\[\]A-z. 0-9,]*\[*[12][0-9]{3}]*.*?):(<ref name.*?( />|</ref>))? ?(.*?[]}]+'*)( \{\{[A-z0-9]+.*?}})?( *(–|—|&.dash;).*?)?\n", text):
-            current[x[3]] = (x[0], x[1], x[5] or '')
+        for ln in text.splitlines():
+            x = re.search("^\*([\[\]A-z. 0-9,]*\[*[12][0-9]{3}]*.*?|Current|Unknown):(<ref name.*?( />|</ref>))? ?(.*?[]}]+'*)( *\{\{[A-z0-9]+.*?}})?( *(–|—|&.dash;).*?)?$", ln)
+            if x:
+                current[x.group(4)] = (x.group(1), x.group(2), x.group(6) or '')
+                current_item = x.group(4)
+            if ln.startswith("**") and current_item:
+                keep[current_item] = ln
 
     add_by = {}
     for t, (date, ref, nt) in current.items():
         u = re.search("(\|(video|url|link)=|(You[Tt]ube|StarWarsShow|ThisWeek|HighRepublicShow|Databank)\|)(?P<u>.*?)\|", t)
         match = False
-        z = t.replace("&ndash;", "–").replace("&mdash;", "—")
+        z = clean(t.replace("&ndash;", "–").replace("&mdash;", "—"))
         for i in found:
             match = False
             for o in [i.master, i.current]:
-                if o.original.replace("&ndash;", "–").replace("&mdash;", "—") == z:
+                if clean(o.original.replace("&ndash;", "–").replace("&mdash;", "—")) == z:
                     match = True
                 elif z.count("|") > 1 and z.rsplit("|", 1)[0] + "}}" == o.original.replace("&ndash;", "–").replace("&mdash;", "—"):
                     match = True
@@ -230,12 +243,23 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
         if nt and not match:
             print(t, nt)
 
+    # TODO: CardGameSet and SourceContents
     found = sorted(found, key=lambda a: (a.master.date, a.master.mode == "DB", a.master.sort_index(results.canon), a.sort_text()))
 
-    lines = ["This is the media index page for [[{{PAGENAME}}]].", "", "==Media index=="]
+    x = page.title()
+    title = re.search("\n\|title=(.*?)\n", page.get())
+    if title:
+        x = re.sub("<br ?/?>", " ", title.group(1)).replace("  ", "")
+    elif x.endswith("/Legends") or x.endswith("/Canon"):
+        x = page.title().replace("/Legends", "").replace("/Canon", "")
+
+    if x != page.title():
+        x = page.title() + "|" + x
+    lines = [f"This is the media index page for [[{x}]].", "", "==Media index=="]
     refs = {}
     contents = {}
     links = set()
+    has_references = False
     for i in found:
         date_str, date_ref = build_date_and_ref(i.master, site, links, refs, contents, existing=references)
         if i.master.original in add_by:
@@ -247,9 +271,10 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
         xt = re.sub(" ?\{\{Ab\|.*?}}", "", xt).replace("|audiobook=1", "")
         if xt.count("{{") < xt.count("}}") and xt.endswith("}}}}"):
             xt = xt[:-2]
+        has_references = has_references or "<ref" in xt
         lines.append(xt)
 
-    if refs:
+    if has_references:
         lines.append("\n==Notes and references==")
         if len(refs) > 20:
             lines.append("{{ScrollBox|content=")
@@ -270,16 +295,19 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
     index = Page(site, f"Index:{page.title()}")
     old_id = index.latest_revision_id if index.exists() else None
     new_txt = clean_archive_usages(index, "\n".join(lines), None)
-    if save:
+    if save and not index.exists():
         index.put(new_txt, "Source Engine: Generating Index page", botflag=False)
     else:
         t1 = re.sub(">.*?</ref>", " />", re.sub("name=\".*?\"", "name=\"name\"", index.get() if index.exists() else ""))
         t2 = re.sub(">.*?</ref>", " />", re.sub("name=\".*?\"", "name=\"name\"", new_txt))
 
         showDiff(clean_date_strings(t1), clean_date_strings(t2))
-        with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/test_text.txt", mode="w",
-                         encoding="utf-8") as f:
-            f.writelines("\n".join(lines))
+        if save:
+            index.put(new_txt, "Source Engine: Generating Index page", botflag=False)
+        else:
+            with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/test_text.txt", mode="w",
+                             encoding="utf-8") as f:
+                f.writelines("\n".join(lines))
 
     return index, old_id
 

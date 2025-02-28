@@ -3,7 +3,7 @@ import re
 from datetime import datetime
 from pywikibot import Page, Category, showDiff
 
-from c4de.common import error_log, fix_redirects, do_final_replacements, sort_top_template
+from c4de.common import error_log, fix_redirects, do_final_replacements, sort_top_template, to_duration
 from c4de.protocols.cleanup import clean_archive_usages
 from c4de.sources.analysis import analyze_section_results
 from c4de.sources.determine import determine_id_for_item
@@ -98,7 +98,7 @@ def sort_categories(pieces, namespace_id, bad_categories):
     categories = []
     related_cats = []
     rc_count = 0
-    for line in pieces:
+    for line in "\n".join(pieces).splitlines():
         if "{{relatedcategories" in line.lower():
             rc_count += line.count("{")
             related_cats.append(line)
@@ -144,10 +144,10 @@ def format_update_contents(ln, page: Page, results: PageComponents, appearances:
                 d = determine_id_for_item(x, page, appearances.unique, appearances.target, sources.unique,
                                           sources.target, {}, results.canon, False)
                 if d and x.is_card_or_mini() and d.current.card:
-                    new_items.append(build_card_text(d, d).replace("|parent=1", ""))
+                    new_items.append(build_card_text(d, d).replace("|parent=1", "").replace("|reprint=1", ""))
                     continue
                 elif d:
-                    new_items.append(d.master.original)
+                    new_items.append(d.master.original.replace("|reprint=1", ""))
                     continue
         new_items.append(i[0])
     return ", ".join(new_items)
@@ -324,7 +324,6 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
 
     # print(f"rebuild: {(datetime.now() - now).microseconds / 1000} microseconds")
     replace = True
-    # if re.sub("<!--.*?-->", "", page.get(force=True)) != re.sub("<!--.*?-->", "", new_txt):
     if redirects:
         new_txt = fix_redirects(redirects, new_txt, "Body", remap, disambigs)
     if "{{WP}}" in new_txt:
@@ -336,7 +335,7 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
     # now = datetime.now()
     t = do_final_replacements(new_txt, replace)
     # print(f"replace: {(datetime.now() - now).microseconds / 1000} microseconds")
-    return t.replace("\n\n{{RelatedCategories", "\n{{RelatedCategories")
+    return t
 
 
 def handle_legends_links(text, title):
@@ -377,7 +376,7 @@ def build_final(final, media_cat, redirects):
             print("Unable to move categories to RelatedCategories, as no categories would be left")
         elif cats:
             related = "\n".join(["{{RelatedCategories", *cats, "}}"])
-            final = "\n".join(lines).strip() + "\n" + related
+            final = "\n".join(lines).strip() + "\n\n" + related
 
     final = re.sub("\|\n+\[\[Category:", "|[[Category:", final)
 
@@ -392,17 +391,26 @@ def build_final(final, media_cat, redirects):
 
 def build_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appearances: FullListData,
                sources: FullListData, bad_cats: list, remap: dict, include_date: bool, checked: list, log=True,
-               use_index=True, collapse_audiobooks=True, manual: str = None, extra=None):
-    text, redirects, results = build_initial_components(target, disambigs, infoboxes, bad_cats, manual)
+               use_index=True, collapse_audiobooks=True, manual: str = None, extra=None, time=False, keep_pages=False):
+    now = datetime.now()
+    text, redirects, results = build_initial_components(target, disambigs, infoboxes, bad_cats, manual, keep_pages)
+    if time:
+        print(f"initial: {to_duration(now)} seconds")
     unknown = build_page_components(target, text, redirects, results, types, disambigs, appearances, sources,
                                     remap, log, extra=extra)
+    if time:
+        print(f"components: {to_duration(now)} seconds")
     if results.real and collapse_audiobooks:
         collapse_audiobooks = False
 
     components, unknown_items, analysis = analyze_section_results(
         target, results, appearances, sources, remap, use_index, include_date, collapse_audiobooks, checked, log)
+    if time:
+        print(f"components: {to_duration(now)} seconds")
 
     new_txt = build_final_text(target, results, types, disambigs, remap, redirects, appearances, sources, components, log)
+    if time:
+        print(f"final: {to_duration(now)} seconds")
     return new_txt, analysis, unknown, unknown_items
 
 
@@ -411,7 +419,7 @@ def build_new_text(target: Page, infoboxes: dict, types: dict, disambigs: list, 
                    use_index=True, collapse_audiobooks=True, manual: str = None, extra=None):
     new_txt, analysis, unknown, unknown_items = build_text(
         target, infoboxes, types, disambigs, appearances, sources, bad_cats, remap, include_date, checked, log,
-        use_index, collapse_audiobooks, manual, extra)
+        use_index, collapse_audiobooks, manual, extra, keep_pages=True)
 
     record_local_unknown(unknown, unknown_items, target)
     return new_txt

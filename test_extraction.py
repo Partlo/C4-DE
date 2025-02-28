@@ -1,9 +1,11 @@
 import re
 import sys
 import traceback
+import time
 from datetime import datetime
 
 from pywikibot import Site, Page, handle_args, pagegenerators, showDiff, input_choice, Timestamp
+from pywikibot.exceptions import APIMWError
 
 from c4de.sources.build import build_new_text
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, load_template_types, \
@@ -12,6 +14,11 @@ from c4de.sources.infoboxer import load_infoboxes
 
 
 STATUS = ["Category:Wookieepedia Featured articles", "Category:Wookieepedia Good articles", "Category:Wookieepedia Comprehensive articles"]
+
+
+def to_duration(now):
+    d = datetime.now() - now
+    return f"{d.seconds}.{d.microseconds}"
 
 
 def analyze(*args):
@@ -51,10 +58,6 @@ def analyze(*args):
             bot = False
         if "-count:" in arg.lower():
             count = int(arg.replace("-count:", ""))
-        if "canon" in arg.lower() and not encyclopedia:
-            encyclopedia = [p.title() for p in Page(gen_factory.site, "Star Wars Encyclopedia: The Comprehensive Guide to the Star Wars Galaxy").linkedPages(namespaces=0)]
-            ultimate = [p.title() for p in Page(gen_factory.site, "Ultimate Star Wars").linkedPages(namespaces=0)]
-            ultimate2 = [p.title() for p in Page(gen_factory.site, "Ultimate Star Wars, New Edition").linkedPages(namespaces=0)]
     gen_factory.site.login(user="C4-DE Bot")
     if start_on:
         print(f"Starting on {start_on}")
@@ -74,7 +77,7 @@ def analyze(*args):
     gen = pagegenerators.PreloadingGenerator(gen_factory.getCombinedGenerator(), groupsize=50)
 
     ci = 47919
-    li = 116015
+    li = 115796
     i = count - 1
     if any("Legends articles" in a or "C4-DE traversal" in a for a in args):
         i += ci
@@ -127,6 +130,7 @@ def analyze(*args):
             if not any(c.title(with_ns=False) == "Canon articles" for c in page.categories()):
                 continue
         try:
+            now = datetime.now()
             bf = bot
             media = False
             for c in page.categories():
@@ -135,7 +139,6 @@ def analyze(*args):
                 elif c.title(with_ns=False) == "Real-world media":
                     media = True
 
-            now = datetime.now()
             before = page.get(force=True)
             old_text = f"{before}"
             old_revision = None
@@ -146,12 +149,6 @@ def analyze(*args):
                         print(f"Reloaded revision {r['revid']} for {page.title()}")
                         break
             extra = []
-            if page.title() in encyclopedia:
-                extra.append("Star Wars Encyclopedia: The Comprehensive Guide to the Star Wars Galaxy")
-            if page.title() in ultimate:
-                extra.append("Ultimate Star Wars")
-            if page.title() in ultimate2:
-                extra.append("Ultimate Star Wars, New Edition")
             text = build_new_text(page, infoboxes, types, [], appearances, sources, cats, remap, include_date,
                                   checked, log=log, collapse_audiobooks=True, manual=old_revision, extra=extra)
             if text is None:
@@ -169,12 +166,13 @@ def analyze(*args):
                 text = text.replace(ix[0], ix[1] + "}}")
                 if ix[1] + "}}" in old_text:
                     z1 = z1.replace(ix[0], ix[1] + "}}")
+            dx = to_duration(now)
 
             if text.replace("E -->", " -->") == old_text.replace("E -->", " -->"):
-                print(f"{i} -> {z} -> No changes found for {page.title()} -> {(datetime.now() - now).microseconds / 1000} ms")
+                print(f"{i} -> {z} -> No changes found for {page.title()} -> {to_duration(now)} seconds")
                 continue
             elif len(text) - len(old_text) == 1 and text.replace("\n", "") == old_text.replace("\n", ""):
-                print(f"Skipping {page.title()}; infobox newline is only change -> {(datetime.now() - now).microseconds / 1000} ms")
+                print(f"Skipping {page.title()}; infobox newline is only change -> {to_duration(now)} seconds")
                 continue
 
             match = re.sub("\{\{1stID\|.*?}}", "{{1stID}}", re.sub("<!--.*?-->", "", z1.replace("ncomplete list", "ncompleteList").replace("ncomplete_list", "ncompleteList").replace("–", "&ndash;").replace("—", "&mdash;").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]"))) == \
@@ -193,8 +191,11 @@ def analyze(*args):
             z1 = re.sub("\|stext=.*?(\|.*?)?}}", "\\1}}", z1)
             z2 = re.sub("\|stext=.*?(\|.*?)?}}", "\\1}}", z2)
 
-            showDiff(re.sub("<!--.*?-->", "", z2), re.sub("<!--.*?-->", "", z1), context=1)
-            print(f"{page.title()} -> {(datetime.now() - now).microseconds / 1000} ms")
+            if include_date:
+                showDiff(z2, z1, context=1)
+            else:
+                showDiff(re.sub("<!--.*?-->", "", z2), re.sub("<!--.*?-->", "", z1), context=1)
+            print(f"{page.title()} -> {dx} seconds")
             if not override and always:
                 page.put(text, media_msg if media else message, botflag=match or bf)
                 continue
@@ -218,6 +219,10 @@ def analyze(*args):
                 continue
         # except KeyboardInterrupt as e:
         #     quit()
+        except APIMWError as e:
+            print(e)
+            time.sleep(30)
+            continue
         except Exception as e:
             traceback.print_exc()
             print(e)

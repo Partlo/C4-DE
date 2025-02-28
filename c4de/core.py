@@ -69,7 +69,14 @@ THUMBS_UP = "👍"
 THUMBS_DOWN = "👎"
 TIMER = "⏲️"
 EXCLAMATION = "❗"
+STOP_SIGN = "🛑"
 BOARD_EMOTES = {"EduCorps": "EC", "AgriCorps": "AC", "Inquisitorius": "Inq"}
+
+REPOSTS = ["Ahsoka", "Andor", "Obi-Wan Kenobi", "Rebels", "Resistance", "The Clone Wars", "The Bad Batch",
+           "Tales of the Empire", "Tales of the Jedi", "The Book of Boba Fett", "Visions",
+           "The Phantom Menace", "Attack of the Clones", "Revenge of the Sith", "A New Hope", "The Empire Strikes Back",
+           "Return of the Jedi", "The Force Awakens", "The Last Jedi", "The Rise of SKywalker",
+           "Rogue One", "Rogue One: A Story"]
 
 
 # noinspection PyPep8Naming
@@ -143,6 +150,9 @@ class C4DE_Bot(commands.Bot):
         with open(EDELWEISS_CACHE, "r") as f:
             self.edelweiss_cache = json.load(f)
 
+        with open(INDEX_CACHE, "r") as f:
+            self.index_cache = json.load(f)
+
         self.overdue_cts = []
         self.project_data = {}
         self.files_to_be_renamed = []
@@ -214,6 +224,8 @@ class C4DE_Bot(commands.Bot):
             await self.build_sources()
             log("Startup process completed.")
             self.ready = True
+            self.check_altaya.start()
+            self.check_index_requests.start()
 
             # for message in await self.text_channel("star-wars-news").history(limit=25).flatten():
             #     if message.id == 1264945242130616444:
@@ -983,6 +995,21 @@ class C4DE_Bot(commands.Bot):
     def flatten_text(t):
         return re.sub("(\|book=.*?)(\|story=.*?)(\|.*?)?}}", "\\2\\1\\3}}", re.sub("<!--.*?-->", "", t.replace("&ndash;", "-").replace("&mdash;", "-").replace("—", "-").replace("—", "-").replace("\n", "").replace(" ", "")).replace("{{!}}", "|"))
 
+    @tasks.loop(minutes=5)
+    async def check_index_requests(self):
+        for page in Category(self.site, "Index requests").articles():
+            try:
+                if page.exists():
+                    if page.isRedirectPage():
+                        page = page.getRedirectTarget()
+                    analysis = get_analysis_from_page(page, self.infoboxes, self.templates, self.disambigs, self.appearances,
+                                                      self.sources, self.bad_cats, self.remap, False, False)
+                    create_index(self.site, page, analysis, self.appearances.target, self.sources.target, True)
+                    self.add_index_to_page(page)
+
+            except Exception as e:
+                await self.report_error("Index requests", type(e), e)
+
     async def handle_create_index_command(self, message: Message, command: dict):
         try:
             target = Page(self.site, command['article'])
@@ -992,32 +1019,66 @@ class C4DE_Bot(commands.Bot):
                 return
             if target.isRedirectPage():
                 target = target.getRedirectTarget()
+            if not self.index_cache:
+                self.index_cache = {}
+
+            if message.author != self.user:
+                if target.title() in self.index_cache:
+                    user, date = self.index_cache[target.title()]
+                    try:
+                        in_window = (datetime.now() - datetime.strptime(date, "%Y-%m-%d")).days < 4
+                    except Exception:
+                        in_window = False
+                    if user != message.author.display_name and in_window:
+                        await message.add_reaction(STOP_SIGN)
+                        await message.channel.send(f"The index for {target.title()} has recently been created by another user. Please update the index manually, or request that the user or Cade recreate it.")
+                        return
 
             await message.add_reaction(TIMER)
             analysis = get_analysis_from_page(target, self.infoboxes, self.templates, self.disambigs, self.appearances,
                                               self.sources, self.bad_cats, self.remap, False, False)
             result, old_id = create_index(self.site, target, analysis, self.appearances.target, self.sources.target, True)
             await message.remove_reaction(TIMER, self.user)
+            if message.author != self.user:
+                self.index_cache[target.title()] = (message.author.display_name, datetime.now().strftime("%Y-%m-%d"))
+                with open(INDEX_CACHE, "w") as f:
+                    f.writelines(json.dumps(self.index_cache, indent=4))
 
             ux = result.full_url().replace('%2F', '/').replace('%3A', ':')
             if old_id:
                 await message.channel.send(f"Updated: [{result.title()}](<{ux}?diff=next&oldid={old_id}>)")
             else:
                 await message.channel.send(f"Completed: [{result.title()}](<{ux}>)")
-                text = target.get()
-                if "{{Indexpage}}" not in text:
-                    if "==Appearances==" in text:
-                        target.put(text.replace("==Appearances==", "==Appearances==\n{{Indexpage}}"), "Adding Index", botflag=False)
-                    elif "==Sources==" in text:
-                        target.put(text.replace("==Sources==", "==Sources==\n{{Indexpage}}"), "Adding Index", botflag=False)
-                    else:
-                        await message.channel.send("Could not locate Appearances or Sources header in target article, so {Indexpage} has not been added")
+                if not self.add_index_to_page(target):
+                    await message.channel.send("Could not locate Appearances or Sources header in target article, so {Indexpage} has not been added")
         except Exception as e:
             print(traceback.format_exc())
             await self.report_error("Create index", type(e), e)
             await message.remove_reaction(TIMER, self.user)
             await message.add_reaction(EXCLAMATION)
             await message.channel.send("Encountered error while analyzing page")
+
+    @staticmethod
+    def add_index_to_page(target: Page):
+        text = target.get()
+        new_text = text.replace("{{IndexRequest}}\n", "")
+        success = True
+        if "{{Indexpage}}" in text:
+            msg = "Removing IndexRequest template after index update"
+        else:
+            msg = "Adding Index"
+            if "==Appearances==" in text:
+                new_text = new_text.replace("==Appearances==", "==Appearances==\n{{Indexpage}}")
+            elif "==Sources==" in text:
+                new_text = new_text.replace("==Sources==", "==Sources==\n{{Indexpage}}")
+            elif "{{IndexRequest}}" in text:
+                msg = "Removing IndexRequest template after index update"
+            else:
+                success = False
+
+            if new_text != text:
+                target.put(new_text, msg, botflag=False)
+        return success
 
     @tasks.loop(hours=1)
     async def check_future_products(self):
@@ -1051,7 +1112,7 @@ class C4DE_Bot(commands.Bot):
         text = page.get()
         unused = []
         for x in self.site.unusedfiles(total=250):
-            if x.title() not in exceptions and not x.title().startswith(":Video:"):
+            if x.title() not in exceptions and ":Video" not in x.title():
                 unused.append(x.title())
 
         if unused:
@@ -1133,6 +1194,26 @@ class C4DE_Bot(commands.Bot):
         self.reload_infoboxes()
         self.reload_auto_categories()
         self.reload_templates()
+
+    @tasks.loop(hours=4)
+    async def check_altaya(self):
+        log("Scheduled Operation: Checking Altaya")
+        try:
+            with open("C:/Users/cadec/Documents/projects/C4DE/c4de/data/altaya.txt", "r") as f:
+                current = "\n".join(f.readlines()).strip()
+
+            x = requests.get("https://www.altaya.fr/fr/miniatures-figurines/star-wars-vaisseaux")
+            items = re.findall("<option .*?value=\"([0-9]+)\">[\n\t ]*.*?\+ ?(.*?)[\n\t ]*</option>", x.text)
+            latest = str(max(int(a) + 1 for a, b in items))
+            log(f"Current Altaya listing: {latest} -> {current}")
+            if latest:
+                if current != latest:
+                    await self.text_channel(UPDATES).send(f"New *Star Wars Starships & Vehicles* issue {latest} found in [Altaya's website](<https://www.altaya.fr/fr/miniatures-figurines/star-wars-vaisseaux>)")
+                with open("C:/Users/cadec/Documents/projects/C4DE/c4de/data/altaya.txt", "w") as f:
+                    print(latest)
+                    f.writelines(latest)
+        except Exception as e:
+            error_log(f"Encountered {type(e)} while checking Altaya", e)
 
     @tasks.loop(hours=1)
     async def check_edelweiss(self):
@@ -1659,6 +1740,9 @@ class C4DE_Bot(commands.Bot):
                 dy = "Special"
             else:
                 dy = (d or nd).split("-")[0]
+                x = re.search("\|(Star Wars:? )?(.*?) ?&#124; ?(.*?) ?&#124; ?(Disney\+|Star Wars) *}}", t)
+                if x and x.group(2) in REPOSTS:
+                    dy = "Repost"
             if dy not in by_year:
                 by_year[dy] = []
             by_year[dy].append((d, t))

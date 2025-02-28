@@ -60,6 +60,7 @@ class Item:
         self.no_issue = no_issue
         self.old_version = self.original and ("oldversion" in self.original or "|old=true" in self.original)
 
+        self.is_exception = False
         self.unknown = False
         self.from_extra = None
         self.canon = None
@@ -122,7 +123,8 @@ class Item:
         elif self.card:
             return self.card.replace("''", "")
         else:
-            return self.original
+            print(f"no card? {self.card}, {self.original}")
+            return self.original.replace("''", "")
 
     def is_internal_mode(self):
         return self.mode == "Web" or self.mode == "YT" or self.mode == "Toys" or self.mode == "Cards"
@@ -246,7 +248,7 @@ class PageComponents:
     :type sections: dict[str, SectionLeaf]
     """
     def __init__(self, original: str, canon: bool, non_canon: bool, unlicensed: bool, real: bool, mode, media, infobox,
-                 flag: list):
+                 flag: list, page_name):
         self.before = ""
         self.final = ""
         self.original = original
@@ -258,6 +260,7 @@ class PageComponents:
         self.media = media
         self.infobox = infobox
         self.flag = flag
+        self.page_name = page_name
 
         self.ncs = SectionComponents([], [], [], '')
         self.src = SectionComponents([], [], [], '')
