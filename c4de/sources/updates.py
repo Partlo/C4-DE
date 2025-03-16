@@ -1,5 +1,6 @@
 import codecs
 
+from c4de.sources.domain import Item
 from pywikibot import Site, Page, Category, showDiff
 import re
 from datetime import datetime
@@ -106,8 +107,7 @@ def identify_infobox(t, infoboxes):
     return None
 
 
-def analyze_page(page, category, infobox):
-    text = page.get()
+def analyze_page(page, text, category, infobox):
     dates, _ = extract_release_date(page.title(), text)
     c = re.search("{{Top.*?\|(can|leg|ncc|ncl|new|pre|btr|old|imp|reb|njo|lgc|inf)[|}]", text)
     ct = c.group(1) if c else None
@@ -145,8 +145,8 @@ def get_future_products_list(site: Site, infoboxes=None):
             continue
         t = page.get()
         infobox = identify_infobox(t, infoboxes)
-        if should_check_product(infobox, t, page, cat):
-            results.append(analyze_page(page, None, infobox))
+        if should_check_product(infobox, t, page, cat.title()):
+            results.append(analyze_page(page, t, None, infobox))
             unique.add(page.title())
 
     for c in cat.subcategories():
@@ -161,8 +161,8 @@ def get_future_products_list(site: Site, infoboxes=None):
                 continue
             t = page.get()
             infobox = identify_infobox(t, infoboxes)
-            if should_check_product(infobox, t, page, c):
-                results.append(analyze_page(page, c.title(), infobox))
+            if should_check_product(infobox, t, page, c.title()):
+                results.append(analyze_page(page, t, c.title(), infobox))
                 unique.add(page.title())
     return results
 
@@ -252,6 +252,25 @@ def dates_match(dates: List[Tuple[str, datetime, str]], master, infobox):
     return False
 
 
+def compare_dates(title, text, target, items, mismatch, no_dates, infobox=None):
+    dates, strs = extract_release_date(title, text)
+    if dates:
+        if not dates_match(dates, items[0].date, infobox):
+            print(title, items[0].date, build_date(dates))
+            mismatch[target] = (build_date(dates), items[0].date)
+    elif items[0].date:
+        no_dates[target] = (strs[0] if strs else None, items[0].date)
+        print(f"No date? {items[0].date} -> {items[0].original}")
+
+
+def compare_all_dates(site, by_target: Dict[str, List[Item]], mismatch, no_dates):
+    for target, items in by_target.items():
+        p = Page(site, target)
+        if p.exists() and not p.isRedirectPage():
+            compare_dates(p.title(), p.get(), target, items, mismatch, no_dates)
+    return mismatch, no_dates
+
+
 def build_tracked(a, d, tracked):
     tracked.add(a.replace('&#61;', '=').replace('&hellip;', '…').replace('&mdash;', '—'))
     for i in d:
@@ -259,8 +278,8 @@ def build_tracked(a, d, tracked):
             tracked.add(i.parent.replace('&#61;', '=').replace('&hellip;', '…'))
 
 
-def search_for_missing(site, appearances, sources):
-    infoboxes = list_all_infoboxes(site)
+def search_for_missing(site, appearances, sources, infoboxes=None, check_dates=False) -> Tuple[List[FutureProduct], list, List[FutureProduct]]:
+    infoboxes = infoboxes or list_all_infoboxes(site)
     tracked = set()
     for a, d in appearances.target.items():
         build_tracked(a, d, tracked)
@@ -281,25 +300,23 @@ def search_for_missing(site, appearances, sources):
             for p in sc.articles(namespaces=0):
                 pages_checked.add(p.title())
 
-    # TODO: Soundtracks
     counts = {"total": 0, "found": 0}
-    collections = []
+    diff_dates, collections = [], []
     for c in Category(site, "Media collections").subcategories():
-        check_category(c, cats_checked, pages_checked, tracked, infoboxes, collections, counts)
+        check_category(c, cats_checked, pages_checked, tracked, infoboxes, collections, diff_dates, counts,
+                       appearances, sources, check_dates)
 
-    for c in Category(site, "Star Wars media by type").subcategories():
-        check_category(c, cats_checked, pages_checked, tracked, infoboxes, not_found, counts)
-
-    for c in Category(site, "Trading cards").subcategories():
-        check_category(c, cats_checked, pages_checked, tracked, infoboxes, not_found, counts)
+    for c in Category(site, "C4-DE media traversal").subcategories():
+        check_category(c, cats_checked, pages_checked, tracked, infoboxes, not_found, diff_dates, counts, appearances,
+                       sources, check_dates)
 
     finish = datetime.now()
     print(f"Found {counts['found']} in {(finish - start).seconds} seconds")
-    return not_found, collections
+    return not_found, diff_dates, collections
 
 
-def should_check_product(inf, t, p: Page, c: Category):
-    if "Game Book" in p.title() or ("Young Jedi Adventures episodes" in c.title() and " / " in p.title()):
+def should_check_product(inf, t, p: Page, ct):
+    if "Game Book" in p.title() or ("Young Jedi Adventures episodes" in ct and " / " in p.title()):
         return False
     elif inf in INFOBOX_SKIP:
         # print(f"Skipping {inf} article: {p.title()} in {c.title()}")
@@ -311,13 +328,17 @@ def should_check_product(inf, t, p: Page, c: Category):
         return False
     elif inf in ["toy line", "magazine"] and p.title().startswith("LEGO"):
         return False
-    elif f"[[{c.title()}| " in t or f"[[{c.title()}|*" in t or f"[[Category:{p.title()}| " in t:
+    elif f"[[{ct}| " in t or f"[[{ct}|*" in t or f"[[Category:{p.title()}| " in t:
         # print(f"Skipping root page {p.title()} for {c.title()}")
         return False
     return True
 
 
-def check_category(c: Category, cats_checked, pages_checked, tracked, infoboxes, not_found, counts):
+NON_RWM_PARAMS = ["rwc", "rwp", "real", "music"]
+
+
+def check_category(c: Category, cats_checked, pages_checked, tracked, infoboxes, not_found: List[FutureProduct],
+                   diff_dates: list, counts, appearances: FullListData, sources: FullListData, check_dates=False):
     if c.title() in cats_checked:
         return
     cats_checked.add(c.title())
@@ -328,28 +349,50 @@ def check_category(c: Category, cats_checked, pages_checked, tracked, infoboxes,
     elif any(cc.title(with_ns=False) == "Ignored categories for Source Engine traversal" for cc in c.categories()):
         return
 
+    dates_mismatch, no_dates = {}, {}
     for p in c.articles(namespaces=0):
         try:
             # if counts["total"] % 50 == 0:
             #     print(counts["total"], counts["found"], p.title())
             counts["total"] += 1
-            if p.namespace().id != 0 or p.title() in tracked or p.title() in pages_checked or not p.exists() or p.isRedirectPage():
+            pt = p.title().replace("…", "&hellip;")
+            if p.namespace().id != 0 or pt in pages_checked or not p.exists() or p.isRedirectPage():
                 continue
-            pages_checked.add(p.title())
-
-            t = p.get()
-            inf = identify_infobox(t, infoboxes) or 'article'
-            if should_check_product(inf, t, p, c):
-                print(f"Found {inf}: {p.title()}")
-                counts["found"] += 1
-                not_found.append(analyze_page(p, c.title(), inf))
+            pages_checked.add(pt)
+            if check_dates and pt in appearances.target:
+                t = p.get()
+                infobox = identify_infobox(t, infoboxes)
+                compare_dates(pt, t, pt, appearances.target[pt], dates_mismatch, no_dates, infobox)
+            elif check_dates and pt in sources.target:
+                t = p.get()
+                infobox = identify_infobox(t, infoboxes)
+                compare_dates(pt, t, pt, sources.target[pt], dates_mismatch, no_dates, infobox)
+            elif pt in tracked:
+                continue
+            elif pt in appearances.target or pt in sources.target:
+                print(f"huh? {pt}")
+            else:
+                t = p.get()
+                if any(f"|{r}|" in t or f"|{r}}}}}" in t for r in NON_RWM_PARAMS):
+                    continue
+                inf = identify_infobox(t, infoboxes) or 'article'
+                if should_check_product(inf, t, p, c.title()):
+                    print(f"Found {inf}: {pt}, {pt in appearances.target}, {p.title() in appearances.target} {pt in sources.target}, {p.title() in sources.target}")
+                    counts["found"] += 1
+                    not_found.append(analyze_page(p, t, c.title(), inf))
         except Exception as e:
             print(p.title(), e)
+    for k, v in dates_mismatch.items():
+        diff_dates.append(f"Mismatch: {k}\t{v[0]}\t{v[1]}")
+    for k, v in no_dates.items():
+        diff_dates.append(f"No Date: {k}\t{v[0]}\t{v[1]}")
+    # return
 
     for sc in sorted(list(c.subcategories()), key=lambda a: not a.title().endswith("by type")):
-        check_category(sc, cats_checked, pages_checked, tracked, infoboxes, not_found, counts)
+        check_category(sc, cats_checked, pages_checked, tracked, infoboxes, not_found, diff_dates, counts,
+                       appearances, sources, check_dates)
 
-    return not_found
+    return not_found, diff_dates
 
 
 def build_item_type(item_type, i: FutureProduct):
@@ -502,11 +545,12 @@ def build_final_new_items(new_items: List[FutureProduct], audiobooks: List[str])
                 t = f"{{{{StoryCite|book={x.group(1)}|story={i.page.title()}}}}}"
         else:
             t = f"''[[{i.page.title()}]]''"
-            t = re.sub("''\[\[((.*?) \(audiobook\))]]''", "[[\\1|''\\2'' audiobook]]", t)
+            t = re.sub("''\[\[((.*?) \((trade paperback|audiobook)\))]]''", "[[\\1|''\\2'' \\3]]", t)
             t = re.sub("''\[\[((.*?) (\([0-9]+\)) ([0-9]+))]]''", "[[\\1|''\\2'' \\3 \\4]]", t)
             t = re.sub("''\[\[(([^|\](]*?) \(.*?\)( [0-9]+)?)]]''", "[[\\1|''\\2''\\3]]", t)
             t = re.sub("''\[\[(.*?)\|(((?!'').)*?) ([0-9]+)]]''", "[[\\1|''\\2'' \\3]]", t)
             t = re.sub("''\[\[([^|\]]+?) ([0-9]+)]]''", "[[\\1 \\2|''\\1'' \\2]]", t)
+            t = re.sub("\[\[(.*? Vol[.a-z]*?) ([0-9]+)\|''\\1'' \\2]]", "''[[\\1 \\2]]''", t)
             if "[[Untitled" in t and t.startswith("''"):
                 t = t[2:-2]
 

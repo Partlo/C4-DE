@@ -823,7 +823,8 @@ def build_new_section(name, section: SectionItemIds, results: PageComponents, mo
             rows += build_item_text(o, d, nl, sl, final_without_extra, final_items, new_text, section.name,
                                     collapse_audiobooks, section.mark_as_non_canon, results.unlicensed, log)
 
-        if not results.real and o.master.canon is not None and o.master.canon != results.canon and o.master.target not in both_continuities:
+        if not results.real and o.master.canon is not None and o.master.canon != results.canon \
+                and o.master.target not in both_continuities and "{{BtsOnly}}" not in o.current.extra:
             mismatch.append(o)
 
     return FinishedSection(name, rows, "\n".join(new_text)), final_items

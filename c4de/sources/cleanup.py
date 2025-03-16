@@ -57,6 +57,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, keep_page_num
     # now = datetime.now()
     if not before:
         before = target.get(force=True)
+    before = before.replace("\u202c", "")
     # print(f"retrieval: {(datetime.now() - now).microseconds / 1000} microseconds")
     if "]]{{" in before or "}}{{" in before:
         before = re.sub(
@@ -107,6 +108,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, keep_page_num
     before = before.replace("||text=", "|text=").replace("|Parent=1", "|parent=1")
     before = before.replace("{{C|non-canon|reprint=1}}", "")
     before = before.replace("\"/>", "\" />").replace("<nowiki>|</nowiki>", "&#124;")
+    before = re.sub("</ref>([A-z])", "</ref> \\1", before)
     before = re.sub("(\{\{1st[A-z]*)\|\n}}", "\\1}}", before)
     before = re.sub("(\{\{1st[A-z]*\|[^|}\n]*?)\n}}", "\\1}}", before)
     before = re.sub("\n=([A-z ]+)==", "\n==\\1==", before)

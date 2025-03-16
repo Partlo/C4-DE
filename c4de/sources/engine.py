@@ -586,7 +586,7 @@ def load_auto_categories(site):
 
 def load_appearances(site, log, canon_only=False, legends_only=False):
     data = []
-    pages = ["Legends", "Canon", "Audiobook", "Unlicensed"]
+    pages = ["Legends", "Canon", "Audiobook", "Unlicensed", "Audiobook/German"]
     other = ["Extra", "Series", "Collections", "Reprint"]
     if canon_only:
         pages = ["Canon", "Audiobook"]

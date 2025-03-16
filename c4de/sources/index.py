@@ -1,6 +1,6 @@
 from pywikibot import Site, Page, Category, showDiff
 from datetime import datetime
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 import codecs
 import re
 
@@ -85,7 +85,7 @@ def convert_date_str(date, links: set):
         return date, None
 
 
-def get_reference_for_release_date(site, target, date, refs: dict, contents: dict):
+def get_reference_for_release_date(site, target, formatted, date, refs: dict, contents: dict):
     try:
         if not date:
             print(f"No release date found for {target}")
@@ -95,6 +95,11 @@ def get_reference_for_release_date(site, target, date, refs: dict, contents: dic
             return f'<ref name="{t}" />'
 
         ref_text, other_date = extract_release_date_reference(site, target, date)
+        if ref_text and ref_text.count("[[") == 0 and ref_text.count("{{") == 0:
+            tx = t.split(" (")[0]
+            if ref_text.replace("''", "").startswith(tx):
+                ref_text = formatted
+
         if ref_text and ref_text in contents:
             return f'<ref name="{contents[ref_text]}" />'
         elif ref_text:
@@ -108,7 +113,7 @@ def get_reference_for_release_date(site, target, date, refs: dict, contents: dic
     return ''
 
 
-def extract_release_date_reference(site, target, date: datetime):
+def extract_release_date_reference(site, target, date: datetime) -> Tuple[Optional[str], Optional[str]]:
     page = Page(site, target)
     if page.exists() and page.isRedirectPage():
         page = page.getRedirectTarget()
@@ -157,9 +162,9 @@ def build_date_and_ref(i: Item, site, links: set, refs: dict, contents: dict, re
     date_ref = ''
     if date_str and not i.mode == "Toys":
         if i.target:
-            date_ref = get_reference_for_release_date(site, i.target, parsed_date, refs, contents)
+            date_ref = get_reference_for_release_date(site, i.target, i.original, parsed_date, refs, contents)
         if i.parent and not date_ref:
-            date_ref = get_reference_for_release_date(site, i.parent, parsed_date, refs, contents)
+            date_ref = get_reference_for_release_date(site, i.parent, i.original, parsed_date, refs, contents)
         if not date_ref and existing and existing.get(i.original):
             _, date_ref = existing[i.original]
         if not date_ref and i.url and i.can_self_cite():
@@ -252,6 +257,8 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
         x = re.sub("<br ?/?>", " ", title.group(1)).replace("  ", "")
     elif x.endswith("/Legends") or x.endswith("/Canon"):
         x = page.title().replace("/Legends", "").replace("/Canon", "")
+    if x.startswith("Unidentified"):
+        x = x[0].lower() + x[1:]
 
     if x != page.title():
         x = page.title() + "|" + x

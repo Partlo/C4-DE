@@ -10,6 +10,7 @@ from c4de.sources.determine import determine_id_for_item
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, SectionComponents, FinishedSection, \
     NewComponents
 from c4de.sources.extract import extract_item
+from c4de.sources.index import create_index
 from c4de.sources.media import MEDIA_STRUCTURE, prepare_media_infobox_and_intro
 from c4de.sources.parsing import build_initial_components, build_page_components, MASTER_STRUCTURE, build_card_text
 
@@ -409,6 +410,15 @@ def build_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appe
         print(f"components: {to_duration(now)} seconds")
 
     new_txt = build_final_text(target, results, types, disambigs, remap, redirects, appearances, sources, components, log)
+    if re.search("\{\{[FCG]Anom.*?\|index=.*?}}", target.get()):
+        index, old_id = create_index(target.site, target, analysis, appearances.target, sources.target, True)
+        if index and "{{Indexpage" not in new_txt:
+            if "==Appearances==" in text:
+                new_txt = new_txt.replace("==Appearances==", "==Appearances==\n{{Indexpage}}")
+            elif "==Sources==" in text:
+                new_txt = new_txt.replace("==Sources==", "==Sources==\n{{Indexpage}}")
+        new_txt = remove_index_param(new_txt)
+
     if time:
         print(f"final: {to_duration(now)} seconds")
     return new_txt, analysis, unknown, unknown_items
@@ -425,9 +435,14 @@ def build_new_text(target: Page, infoboxes: dict, types: dict, disambigs: list, 
     return new_txt
 
 
+def remove_index_param(t):
+    return re.sub("(\{\{[FCG]Anom.*?)\|index=.*?(\|.*?)?}}", "\\1\\2}}", t)
+
+
 def analyze_target_page(target: Page, infoboxes: dict, types: dict, disambigs: list, appearances: FullListData,
                         sources: FullListData, bad_cats: list, remap: dict, save: bool, include_date: bool,
                         log=True, use_index=True, collapse_audiobooks=True):
+    old_text = target.get(force=True)
     new_txt, analysis, unknown, unknown_items = build_text(
         target, infoboxes, types, disambigs, appearances, sources, bad_cats, remap, include_date, [], log,
         use_index, collapse_audiobooks)
@@ -445,12 +460,12 @@ def analyze_target_page(target: Page, infoboxes: dict, types: dict, disambigs: l
     #                 date_txt.append(f"{d[1].master.date} --> {d[0]}: #{d[2]} {d[3]}: -> {d[1].master.original}")
     #         f.writelines("\n" + "\n".join(date_txt))
 
-    if save and new_txt != target.get(force=True):
+    if save and new_txt != old_text:
         if "�" in new_txt:
             error_log(f"Unexpected characters found in changes")
-            error_log(showDiff(target.get(force=True), new_txt))
+            error_log(showDiff(old_text, new_txt))
         z1 = re.sub("<!--.*?-->", "", new_txt)
-        z2 = re.sub("<!--.*?-->", "", target.get(force=True)).replace("text=SWCC 2022", "text=SWCA 2022")
+        z2 = re.sub("<!--.*?-->", "", remove_index_param(old_text))
         match = z1 == z2
         target.put(new_txt, "Source Engine analysis of Appearances, Sources and references", botflag=match, force=True)
 
@@ -494,7 +509,7 @@ def analyze_target_page(target: Page, infoboxes: dict, types: dict, disambigs: l
         else:
             final_results.append(i)
 
-    return results
+    return results, create_index
 
 
 def record_local_unknown(unknown, unknown_items, target: Page):

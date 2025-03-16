@@ -72,7 +72,8 @@ EXCLAMATION = "❗"
 STOP_SIGN = "🛑"
 BOARD_EMOTES = {"EduCorps": "EC", "AgriCorps": "AC", "Inquisitorius": "Inq"}
 
-REPOSTS = ["Ahsoka", "Andor", "Obi-Wan Kenobi", "Rebels", "Resistance", "The Clone Wars", "The Bad Batch",
+# Readd Andor later
+REPOSTS = ["Ahsoka", "Skeleton Crew", "Obi-Wan Kenobi", "Rebels", "Resistance", "The Clone Wars", "The Bad Batch",
            "Tales of the Empire", "Tales of the Jedi", "The Book of Boba Fett", "Visions",
            "The Phantom Menace", "Attack of the Clones", "Revenge of the Sith", "A New Hope", "The Empire Strikes Back",
            "Return of the Jedi", "The Force Awakens", "The Last Jedi", "The Rise of SKywalker",
@@ -849,7 +850,7 @@ class C4DE_Bot(commands.Bot):
         for x in pages1:
             if x.target in ex_rpg:
                 rpg.append(f"#{x.date}: {x.original}")
-            elif x.template in ["WEGCite", "DarkStryder", "Journal", "GamerCite", "LivingForce", "WizCite", "WizardsCite", "FFG", "FFGXW", "DoD"]:
+            elif x.template in ["WEGCite", "DarkStryder", "JournalCite", "GamerCite", "LivingForce", "WizCite", "WizardsCite", "FFG", "FFGXW", "DoD"]:
                 rpg.append(f"#{x.date}: {x.original}")
                 # rpg.append(f"#{x.date}: {x.timeline or 'N/A'}: {x.original}")
             else:
@@ -1097,7 +1098,7 @@ class C4DE_Bot(commands.Bot):
 
     async def handle_missing_search(self):
         try:
-            results, collections = search_for_missing(self.site, self.appearances, self.sources)
+            results, _, collections = search_for_missing(self.site, self.appearances, self.sources)
             handle_results(self.site, results, collections)
             await self.build_sources()
         except Exception as e:
@@ -1111,29 +1112,49 @@ class C4DE_Bot(commands.Bot):
         page = Page(self.site, "Wookieepedia:WookieeProject Images/Unused images")
         text = page.get()
         unused = []
+        audio1 = []
         for x in self.site.unusedfiles(total=250):
             if x.title() not in exceptions and ":Video" not in x.title():
-                unused.append(x.title())
+                if x.title().lower().endswith(".ogg") or x.title().lower().endswith(".flac"):
+                    audio1.append(x.title())
+                else:
+                    unused.append(x.title())
 
-        if unused:
-            files, new_lines = [], []
-            for ln in text.splitlines():
-                if ln.startswith("File:"):
-                    x = ln.split("|")[0]
-                    pf = FilePage(self.site, x)
-                    if not pf.exists():
-                        continue
-                    elif any(up.title() != "Wookieepedia:WookieeProject Images/Unused images" for up in pf.using_pages(total=5)):
-                        continue
+        files, audio2 = [], []
+        for ln in text.splitlines():
+            if ln.startswith("File:"):
+                x = ln.split("|")[0]
+                pf = FilePage(self.site, x)
+                if not pf.exists():
+                    continue
+                elif any(up.title() != "Wookieepedia:WookieeProject Images/Unused images" for up in pf.using_pages(total=5)):
+                    continue
+                if ".ogg" in ln.lower() or ".flac" in ln.lower():
+                    audio2.append(ln)
+                else:
                     files.append(ln)
-                elif ln != "</gallery>":
-                    new_lines.append(ln)
 
-            d = datetime.now().strftime("%Y-%m-%d")
-            for i in unused:
-                if not any(f.startswith(i) for f in files):
-                    files.append(f"{i}|{d}")
-            text = "\n".join([*new_lines, *sorted(files, key=lambda a: a.split("|")[-1] if "|" in a else a), "</gallery>"])
+        d = datetime.now().strftime("%Y-%m-%d")
+        for i in unused:
+            if not any(f.startswith(i) for f in files):
+                files.append(f"{i}|{d}")
+        for i in audio1:
+            if not any(f.startswith(i) for f in audio2):
+                audio2.append(f"{i}|{d}")
+
+        new_lines = ["{{/Header}}", "", "----", '<gallery widths="120px" position="left" spacing="small" captionalign="left" captionsize="small" bordersize="none" hideaddbutton="true">']
+        new_lines += sorted(files, key=lambda a: a.split("|")[-1] if "|" in a else a)
+        new_lines.append("</gallery>")
+
+        if audio2:
+            new_lines.append("")
+            new_lines.append("===Audio Files===")
+            new_lines.append('<gallery widths="120px" position="left" spacing="small" captionalign="left" captionsize="small" bordersize="none" hideaddbutton="true">')
+            new_lines += sorted(audio2, key=lambda a: a.split("|")[-1] if "|" in a else a)
+            new_lines.append("</gallery>")
+
+        text = "\n".join(new_lines)
+        if text != page.get():
             page.put(text, botflag=False, summary="Recording newly unused files")
 
     def fix_double_redirects(self):
@@ -1418,7 +1439,7 @@ class C4DE_Bot(commands.Bot):
         except TimeoutError:
             pass
         except Exception as e:
-            await self.report_error(f"Deleted Pages: {e}", type(e), e)
+            await self.report_error(f"Usage Categories: {e}", type(e), e)
 
     @tasks.loop(minutes=15)
     async def check_deleted_pages(self):
@@ -1442,7 +1463,7 @@ class C4DE_Bot(commands.Bot):
                     if "rate limit" in str(e):
                         time.sleep(5)
                     elif "Maximum number of edits" in str(e):
-                        await message.add_reaction(self.emoji_by_name("trash"))
+                        await message.add_reaction(self.emoji_by_name("GNK"))
                     else:
                         await self.report_error(f"Deleted Pages (messages): {message.content} -> {e}", type(e), e)
                 except Exception as e:
@@ -1738,11 +1759,10 @@ class C4DE_Bot(commands.Bot):
         for d, t in templates:
             if "®" not in t and "™" not in t and emoji.emoji_count(t) > 0:
                 dy = "Special"
+            elif d and d.startswith("R:"):
+                dy = "Repost"
             else:
                 dy = (d or nd).split("-")[0]
-                x = re.search("\|(Star Wars:? )?(.*?) ?&#124; ?(.*?) ?&#124; ?(Disney\+|Star Wars) *}}", t)
-                if x and x.group(2) in REPOSTS:
-                    dy = "Repost"
             if dy not in by_year:
                 by_year[dy] = []
             by_year[dy].append((d, t))
@@ -1832,19 +1852,9 @@ class C4DE_Bot(commands.Bot):
             success, archivedate = archive_url(m["url"], timeout=60 if youtube else 30, enabled=self.should_archive)
             include_archivedate = success
 
-        if youtube:
-            t = f"New Video on the official {m['site']} YouTube channel"
-        elif m["site"] == "Databank":
-            t = f"New Entry on the Databank"
-        elif not m['site']:
-            t = f"New Article"
-        else:
-            s = (m['site'].split('.com:')[0] + '.com') if '.com:' in m['site'] else m['site']
-            t = f"New Article on {s}"
         f = m["title"].replace("''", "*").replace("’", "'").replace("“", '"').replace('“', '"')
         f = re.sub("^(''[^'\n]+'')'s ", "\\1{{'s}} ", f)
         f = re.sub("( ''[^'\n]+'')'s ", "\\1{{'s}} ", f)
-        msg = "{0} **{1}:**    {2}\n- <{3}>".format(self.emoji_by_name(site_data["emoji"]), t, f, m["url"])
 
         if success and not already_archived:
             try:
@@ -1854,7 +1864,24 @@ class C4DE_Bot(commands.Bot):
             except Exception as e:
                 await self.report_error(m["url"], type(e), e)
 
+        date = m.get('date')
         template = self.build_citation_template(m, youtube, site_data, archivedate if include_archivedate and not already_archived else None)
+
+        if youtube:
+            t = f"New Video on the official {m['site']} YouTube channel"
+            x = re.search("\|.*?\|(Star Wars:? )?(,*?) ?&#124; ?(.*?) ?&#124; ?(Disney\+|Star Wars) *}}", t)
+            if x and x.group(2) in REPOSTS:
+                date = f"R: {date}"
+                t += " (Repost)"
+        elif m["site"] == "Databank":
+            t = f"New Entry on the Databank"
+        elif not m['site']:
+            t = f"New Article"
+        else:
+            s = (m['site'].split('.com:')[0] + '.com') if '.com:' in m['site'] else m['site']
+            t = f"New Article on {s}"
+
+        msg = "{0} **{1}:**    {2}\n- <{3}>".format(self.emoji_by_name(site_data["emoji"]), t, f, m["url"])
         msg += f"\n- `{template}`"
 
         if success:
@@ -1876,7 +1903,7 @@ class C4DE_Bot(commands.Bot):
                     if f in msg.replace("-", "").lower() or f in m["content"].lower():
                         results.append((data["channel"], msg))
 
-        return results, m.get('date'), template
+        return results, date, template
 
     @staticmethod
     def build_citation_template(msg: dict, youtube, site_data: dict, archivedate):

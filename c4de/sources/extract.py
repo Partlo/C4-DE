@@ -348,11 +348,12 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         if m:
             return Item(z, mode, a, target=None, parent=f"HoloNet News Vol. 531 {m.group(2)}", template="HnnAd",
                         issue=m.group(2), url=m.group(1))
-    elif template == "Holonet":
-        m = re.search("\{\{Holonet\|((both|old)=true\|)?(.*?\|.*?)\|(.*?)(\|.*?)?}}", s)
+    elif template == "Holonet" or template == "HolonetOld":
+        m = re.search("\{\{Holonet\|(.*?\|.*?)\|(.*?)(\|.*?)?}}", s)
         if m:
-            return Item(z, mode, a, target=None, template=template, parent="Holonet", url=m.group(3).replace("|", "/"),
-                        text=m.group(5))
+            ux = "info/holonet" if template == "HolonetOld" else "holonet/"
+            return Item(z, mode, a, target=None, template=template, parent="Holonet", url=ux + m.group(1).replace("|", "/"),
+                        text=m.group(2))
     elif template == "EncyclopediaCite":
         m = re.search("\{\{EncyclopediaCite\|(.*?)( \([^I12].*?\))?(\|.*?)?}}", s)
         if m and m.group(1) in ENCYCLOPEDIA:
@@ -420,10 +421,10 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     elif mode == "YT":
         m = re.search("{{[^|\[}\n]+\|((subdomain|parameter)=.*?\|)?(video=)?(?P<video>.*?)(&.*?)?\|(text=)?(?P<text>.*?)(\|.*?)?}}", s)
         if m:
-            u = re.search("\|sw_url=(.*?)(\|.*?)?}}", s)
+            u = re.search("\|(sw|site)_url=(.*?)(\|.*?)?}}", s)
             i = re.search("\|int=(.*?)(\|.*?)?}}", s)
             return Item(z, mode, a, target=i.group(1) if i else None, template=template, url=m.group('video'), text=m.groupdict()['text'],
-                        special=u.group(1) if u else None)
+                        special=u.group(2) if u else None)
     elif template == "Databank":
         m = re.search("{{Databank\|(url=|entry=)?(.*?)\|(title=)?(.*?)(\|.*?)?}}", s)
         if m and m.group(1):
@@ -457,6 +458,10 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         x = parse_card_line(s, z, template, mode, a)
         if x:
             return x
+    elif template in types.get("Magazine", []):
+        m = re.search("\{\{([^A-z0-9 _]+)\|([0-9]+)}}", s)
+        if m:
+            return Item(z, mode, a, target=f"{types['Magazine'][template]} {m.group(1)}", template=template)
 
     # InsiderCite and similar templates - link= parameter
     m = re.search("{{[^|\[}\n]+\|link=(.*?)\|.*?\|(.*?)(\|(.*?))?}}", s)

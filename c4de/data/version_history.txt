@@ -211,3 +211,9 @@
 *'''4.4.0''': February 28, 2025
 **Source Engine tweaks
 **Support for the IndexRequest site-side template
+*'''4.4.1''': March 16, 2025
+**Added support for index= parameters in the article nomination templates, which will create an index page automatically
+**Added support for the BtsOnly template
+**Fixed logic in the overall page parser to better recognize real-world pages during analysis
+**Overhauled the media traversal protocol to check all media, not just appearances, when looking for media not on the Masterlist
+**Reworked the UnusedFiles reporter to separate out audio files
