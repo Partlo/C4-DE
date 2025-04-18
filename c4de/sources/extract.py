@@ -44,6 +44,7 @@ REFERENCE_MAGAZINES = {
     "BustCollectionCite": "Star Wars Bust Collection <x>",
     "DarthVaderCite": "Star Wars: Darth Vader <x> (magazine)",
     "FalconCite": "Star Wars: Millennium Falcon <x>",
+    "FigurineCite": "Star Wars: The Official Figurine Collection <x>",
     "HelmetCollectionCite": "Star Wars Helmet Collection <x>",
     "ShipsandVehiclesCite": "Star Wars Starships & Vehicles <x>",
     "StarshipsVehiclesCite": "Star Wars: The Official Starships & Vehicles Collection <x>",
@@ -127,7 +128,8 @@ PREFIXES = {
     "InQuestCite": "InQuest Gamer <x>",
     "VaderImmortal": "Vader Immortal – Episode <x>",
     "DisneyGallery": "<x> (Disney Gallery: The Mandalorian)",
-    "GroguCutest": "Episode <x> (Grogu Cutest In The Galaxy)"
+    "GroguCutest": "Episode <x> (Grogu Cutest In The Galaxy)",
+    "RebuildTheGalaxy": "<x> (Rebuild the Galaxy)"
 }
 
 GAME_TEMPLATES = {
@@ -368,14 +370,10 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         m = re.search("\{\{HBCite\|([0-9]+)", s)
         if m:
             return Item(z, mode, a, target=None, template=template, parent="Homing Beacon (newsletter)", issue=m.group(1))
-    elif template == "Visions":
-        m = re.search("\{\{Visions\|(?P<f>focus=1\|)?(?P<e>.*?)(\|.*?)?}}", s)
-        if not m:
-            m = re.search("\{\{Visions\|(?P<e>.*?)(\|.*?(?P<f>focus=1)?.*?)?}}", s)
-        if m and m.group('f'):
-            return Item(z, mode, a, target=f"Star Wars Visions: Filmmaker Focus#{m.group('e')}", template=template, issue=m.group('f'))
-        elif m:
-            return Item(z, mode, a, target=m.group('e'), template=template)
+    elif template == "VisionsFocus":
+        m = re.search("\{\{VisionsFocus\|(?P<e>.*?)( \(.*?\))?(\|.*?)?}}", s)
+        if m:
+            return Item(z, mode, a, target=f"Star Wars Visions: Filmmaker Focus#{m.group('e')}", template=template, issue=m.group('e'))
     elif template == "Blog":  # Blog template - first two parameters combined are the URL
         if "listing=" in s:
             m = re.search("\{\{Blog\|(listing=true\|)(.*?)(\|.*?)?}}", s)
@@ -605,6 +603,8 @@ def parse_card_line(s: str, z: str, template: str, mode: str, a: bool):
         card = m.group(2) if m else None
         if not card and "rulebook=" in s:
             card = "Rulebook"
+        if not card and "parent=2" in s:
+            card = "Parent"
     u = re.search("(url|link)=(.*?)[|}]", s)
     t = re.search("{[^|\[}\n]+\|.*?text=(?P<text>.*?)[|}]", s)
     sh = re.search("\|ship=(.*?)[|}]", s)

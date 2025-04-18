@@ -119,12 +119,12 @@ class Item:
 
     def card_sort_text(self):
         if self.card and "#" in self.card:
-            return re.sub("#([0-9])\)", "#0\\1)", self.card.replace("''", ""))
+            return re.sub("#([0-9])\)", "#0\\1)", self.card.replace("''", "").replace('"', ''))
         elif self.card:
-            return self.card.replace("''", "")
+            return self.card.replace("''", "").replace('"', '')
         else:
             print(f"no card? {self.card}, {self.original}")
-            return self.original.replace("''", "")
+            return self.original.replace("''", "").replace('"', '')
 
     def is_internal_mode(self):
         return self.mode == "Web" or self.mode == "YT" or self.mode == "Toys" or self.mode == "Cards"
@@ -159,8 +159,9 @@ class Item:
     def unique_id(self):
         s = ((self.card or '') + (self.special or '')) if (self.card or self.special) else None
         t = (self.format_text or self.text) if (self.target == "Database" or self.target == "Puzzle") else self.text
+        t = (t or '').lower()
         x = f"i-{self.issue}" if "issue1" in self.original else self.issue
-        i = f"{self.mode}|{self.template}|{self.target}|{self.url}|{self.parent}|{x}|{s}|{t or ''}"
+        i = f"{self.mode}|{self.template}|{self.target}|{self.url}|{self.parent}|{x}|{s}|{t}"
         return f"{i}|True" if self.old_version else i
 
     def can_self_cite(self):
@@ -203,6 +204,13 @@ class ItemId:
         self.by_parent = by_parent
 
         self.replace_references = master.original and "]]'' ([[" not in master.original
+        if master.template == "Film" and "[[" in current.original and "]]" in current.original:
+            if "|" not in current.original:
+                self.replace_references = True
+            else:
+                z = current.original.split("|", 1)[-1].replace("]]", "").replace("''", "")
+                if z.replace(":", "") == master.target.replace(":", ""):
+                    self.replace_references = True
 
     def sort_date(self):
         if self.current.override_date:

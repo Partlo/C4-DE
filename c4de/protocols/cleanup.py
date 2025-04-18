@@ -287,24 +287,18 @@ def parse_archive(site, template):
     if not page.exists():
         return None
     archive = {}
-    for u, d in re.findall("\[['\"](.*?)/*?['\"]] ?= ?['\"]?(.*?)['\"]?[, ]*\n", page.get()):
+    for u, d in re.findall("\[['\"](.+?)/*?['\"]] ?= ?['\"]?(.*?)['\"]?[, ]*\n", page.get()):
+        if u.startswith("/") and u != "/":
+            u = u[1:]
         if template == "Rebelscum":
             u = re.sub("^(https?://)?w*\.?rebelscum\.com/", "", u)
-        archive[u.replace("\\'", "'").lower()] = d
+        archive[u.replace("\\'", "'").replace("{{=}}", "=").lower()] = d
     return archive
 
 
 def clean_archive_usages(page: Page, text, data: FullListData = None):
     txt, _ = _clean_archive_usages(page, text, data.archive_data if data else {})
     return txt
-
-
-TEMPLATES = ["Asmodee", "BN", "Blogspot", "Comixology", "DPB", "Downpour", "EndorExpress", "Fortnite",
-             "FortniteYouTube", "Gamespot", "GooglePlay", "HoloNetNews", "Hunters", "ILMxLAB", "Insight", "JoeBooks",
-             "KotoCite", "LucasArtsCite", "Lucasfilm", "Marvel", "MobyGames", "NightdiveYouTube", "OfficialBlog",
-             "Pikids", "Previews", "QuirkBooks", "Rebelscum", "Roblox", "SWUweb", "SWYouTube", "TORYouTube", "TVcom",
-             "Ubisoft", "Unbound", "Workman", "YenPress", "AMGweb", "Abrams", "Altaya", "AppStore", "Apple", "ArenaNews",
-             "BFICite", "BandaiCite", "Blog", "CardCon", "Celebration", "Chronicle", "D23", "D23YouTube", "DB", "DHBoards", "DK", "DarkHorse", "Databank", "DeAgostini", "Destiny", "DeviantArt", "Disney", "DisneyCompany", "DisneyNOW", "DisneyPlus", "DisneyPlusYouTube", "DisneyToyCite", "DisneyXDYouTube", "DisneyYouTube", "EA", "EASWYouTube", "Egmont", "FFGTCG", "FFGYouTube", "FFGweb", "Faraway", "Fathead", "Galoob", "GentleGiantCite", "Goodreads", "Hachette", "Harper", "Hasbro", "HasbroCite", "Haynes", "HighBridge", "Hnn", "Holonet", "IDW", "ILM", "ILMVFXYouTube", "ILMxLABYouTube", "IncrediBuilds", "JKTCG", "KennerCite", "Kobo", "LEGOWebCite", "LEGOYouTube", "Merlin", "MetallicImpressions", "Penguin", "PenguinComics", "PenguinInt", "Quarto", "SEGACite", "SFBC", "SW", "SWArchive", "SWBoards", "SWE", "SWGTCG", "SWIA", "SWKids", "SWKidsYouTube", "SWMiniCite", "SWPM", "Scholastic", "ShopDisney", "SideshowCite", "SilverDolphin", "Simon&Schuster", "Smith's", "SonyCite", "SonyForumsCite", "Spotify", "Studio", "Suvudu", "TCG", "TORweb", "Target", "Taschen", "ThunderBay", "Titan", "TitanComics", "TomyCite", "TopTrumps", "Topps", "UbisoftYouTube", "WizardsCite", "WookYouTube", "ZyngaYouTube"]
 
 YEARLY = ['news/happy-star-wars-day', 'news/star-wars-black-friday-and-cyber-week-deals', 'news/star-wars-day-deals', 'news/star-wars-day-merchandise', 'news/star-wars-day-video-game-deals', 'news/star-wars-fathers-day-gift-guide', 'news/star-wars-halloween-shopping-guide', 'news/star-wars-holiday-gift-guide', 'news/star-wars-mothers-day-gift-guide', 'news/star-wars-reads', 'news/star-wars-valentines-day-gift-guide']
 
@@ -326,6 +320,7 @@ def _clean_archive_usages(page: Page, text, archive_data: dict):
     chunks = text.split("</ref>")
     for t in templates_to_check:
         tx = "SWYouTube" if t in ["ThisWeek", "HighRepublicShow", "StarWarsShow"] else t
+        tx = "LEGOYouTube" if tx == "LegoMiniMovie" else tx
         tx = "Blogspot" if tx == "DailyswCite" else tx
         if tx not in archive_data:
             archive_data[tx] = parse_archive(page.site, tx)
@@ -417,8 +412,8 @@ def clean_up_archive_dates(site, t=None):
         page.put(text, "Clearing stored archivedates")
 
 
-MAINTENANCE_CATS = ["High-priority template and page issues", "Medium-priority template and page issues",
-                    "Low-priority template and page issues", "Tracking maintenance categories"]
+MAINTENANCE_CATS = ["High-priority template and page issues", "Low-priority template and page issues",
+                    "ArchiveAccess tracking categories", "Tracking maintenance categories"]
 ARCHIVEDATE_CATS = ["Custom archivedate usages", "Same archivedate usages", "Unarchived URLs"]
 MAINSPACE_ONLY = ["Pages with broken file links"]
 

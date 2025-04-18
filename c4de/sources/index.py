@@ -213,7 +213,7 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
 
     add_by = {}
     for t, (date, ref, nt) in current.items():
-        u = re.search("(\|(video|url|link)=|(You[Tt]ube|StarWarsShow|ThisWeek|HighRepublicShow|Databank)\|)(?P<u>.*?)\|", t)
+        u = re.search("(\|(video|url|link)=|(You[Tt]ube|StarWarsShow|ThisWeek|LegoMiniMovie|HighRepublicShow|Databank)\|)(?P<u>.*?)\|", t)
         match = False
         z = clean(t.replace("&ndash;", "–").replace("&mdash;", "—"))
         for i in found:
@@ -252,9 +252,9 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
     found = sorted(found, key=lambda a: (a.master.date, a.master.mode == "DB", a.master.sort_index(results.canon), a.sort_text()))
 
     x = page.title()
-    title = re.search("\n\|title=(.*?)\n", page.get())
+    title = re.search("(?<!SucessionBox)\n\|(name|title)=(.*?)\n", page.get())
     if title:
-        x = re.sub("<br ?/?>", " ", title.group(1)).replace("  ", "")
+        x = re.sub("<br ?/?>", " ", title.group(2)).replace("  ", "")
     elif x.endswith("/Legends") or x.endswith("/Canon"):
         x = page.title().replace("/Legends", "").replace("/Canon", "")
     if x.startswith("Unidentified"):

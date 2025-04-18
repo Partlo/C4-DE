@@ -46,6 +46,9 @@ def check_targets(o: Item, target, by_target: Dict[str, List[Item]], other_targe
     return None
 
 
+SPECIAL_REMAP = ["Star Wars Kids Answer Quest"]
+
+
 def determine_id_for_item(o: Item, page: Page, data: Dict[str, Item], by_target: Dict[str, List[Item]], other_data: Dict[str, Item],
                           other_targets: Dict[str, List[Item]], remap: dict, canon: bool, log: bool, ref=False):
     """ :rtype: ItemId """
@@ -53,6 +56,10 @@ def determine_id_for_item(o: Item, page: Page, data: Dict[str, Item], by_target:
     # Remapping common mistakes in naming
     if remap and o.target and o.target in remap:
         m = check_targets(o, remap[o.target], by_target, other_targets, use_original_text=False)
+        if m:
+            return m
+    elif o.target and o.target in SPECIAL_REMAP and o.parent:
+        m = check_targets(o, o.parent, by_target, other_targets, use_original_text=False)
         if m:
             return m
     if o.template in GAME_TEMPLATES and o.card:

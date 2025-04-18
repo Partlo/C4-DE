@@ -294,6 +294,7 @@ def do_final_replacements(new_txt, replace):
         # new_txt2 = re.sub("}} \{\{C\|Reissued in (\[\[.*?)}}", "reissued=\\1}}", new_txt2)
         # new_txt2 = re.sub("(reissus?ed?=.*?\[\[.*?\|)''(.*?)'']]", "\\1\\2]]", new_txt2)
         new_txt2 = re.sub("2012 edition}} \{\{C\|\[*2012]* edition}}", "2012 edition}}", new_txt2)
+        new_txt2 = re.sub("(\{\{SWMiniCite\|set=[^\n}]+?\|)cardname=", "\\1pack=", new_txt2)
         new_txt2 = new_txt2.replace(" (SWGTCG)|scenario=", "|scenario=")
         new_txt2 = new_txt2.replace("[[Ochi]] of Bestoon", "[[Ochi|Ochi of Bestoon]]")
         new_txt2 = new_txt2.replace("[[Battle station/Legends|battlestation", "[[Battle station/Legends|battle station")

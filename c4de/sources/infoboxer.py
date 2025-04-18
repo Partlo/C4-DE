@@ -78,7 +78,7 @@ def build_fields_for_infobox(page) -> InfoboxInfo:
     theme = re.search("theme-source=\"(.*?)\"", text)
     if theme:
         fields.append(theme.group(1))
-    o = re.search("optional=(.*?)[|}]", text)
+    o = re.search("\|optional=(.*?)[|}]", text)
     if o:
         optional += re.split('[,]', o.group(1))
     combo, groups = {}, {}

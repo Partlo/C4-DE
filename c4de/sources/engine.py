@@ -197,31 +197,24 @@ SERIES_MAPPING = {
     "Star Wars: Clone Wars": ["Clone Wars Chapter", 1, 22]
 }
 
-EXPANSION = {
-    "Canto Bight (novella collection)": ["Hear Nothing, See Nothing, Say Nothing", "The Ride", "Rules of the Game", "The Wine in Dreams"],
-    "The Clone Wars: Stories of Light and Dark": ["Almost a Jedi", "Bane's Story", "Bug (short story)", "Dark Vengeance: The True Story of Darth Maul and His Revenge Against the Jedi Known as Obi-Wan Kenobi", "Dooku Captured (short story)", "Hostage Crisis (short story)", "Kenobi's Shadow", "The Lost Nightsister", "Pursuit of Peace (short story)", "The Shadow of Umbara", "Sharing the Same Face"],
-    "Dark Legends": ["Bakurat (short story)", "A Bitter Harvest", "Blood Moon", "Buyer Beware", "The Dark Mirror", "The Gilded Cage", "A Life Immortal", "The Orphanage", "The Predecessor", "The Sleep of Ages"],
-    "From a Certain Point of View": ["Added Muscle", "The Angle", "The Baptist", "Beru Whitesun Lars (short story)", "Born in the Storm", "The Bucket", "Bump", "By Whatever Sun", "Change of Heart", "Contingency Plan", "Desert Son", "Duty Roster", "Eclipse (short story)", "End of Watch", "Far Too Remote", "Fully Operational (short story)", "Grounded", "An Incident Report", "The Kloo Horn Cantina Caper", "Laina (short story)", "The Luckless Rodian", "Master and Apprentice (short story)", "Not for Nothing", "Of MSE-6 and Men", "Palpatine (short story)", "Raymus", "The Red One", "Reirin (short story)", "Rites", "The Secrets of Long Snoot", "The Sith of Datawork", "Sparks (short story)", "Stories in the Sand", "There is Another", "Time of Death", "The Trigger", "Verge of Greatness", "We Don't Serve Their Kind Here", "Whills (short story)", "You Owe Me a Ride"],
-    "From a Certain Point of View: Return of the Jedi": ["Ackbar (comic)", "Any Work Worth Doing", "Brotherhood (short story)", "Divine (?) Intervention", "Dune Sea Songs of Salt and Moonlight", "Ending Protocol", "Everyone's a Critic (short story)", "Fancy Man", "Fortuna Favors the Bold", "From a Certain Point of View (short story)", "Gone to the Winner's Circle", "Impact (short story)", "Kernels and Husks", "Kickback (short story)", "My Mouth Never Closes", "No Contingency", "One Normal Day", "Reputation (Boba Fett)", "Return of the Whills", "Satisfaction", "The Ballad of Nanta (short story)", "The Burden of Leadership", "The Buy-In", "The Chronicler", "The Emperor's Red Guards", "The Extra Five Percent", "The Impossible Flight of Ash Angels", "The Key to Remembering", "The Last Flight", "The Light That Falls", "The Man Who Captured Luke Skywalker", "The Plan", "The Steadfast Soldier", "The Veteran", "Then Fall, Sidious", "To the Last", "Trooper Trouble", "Twenty and Out", "When Fire Marked the Sky", "Wolf Trap"],
-    "From a Certain Point of View: The Empire Strikes Back": ["Against All Odds", "Amara Kel's Rules for TIE Pilot Survival (Probably)", "The Backup Backup Plan", "Bespin Escape", "Beyond Hope", "Beyond the Clouds", "But What Does He Eat?", "Disturbance", "The Dragonsnake Saves R2-D2", "Due on Batuu", "Eyes of the Empire", "Faith in an Old Friend", "Fake It Till You Make It", "The Final Order", "The First Lesson", "For the Last Time", "A Good Kiss", "Heroes of the Rebellion (short story)", "Hunger (short story)", "Into the Clouds", "Ion Control", "Kendal", "Lord Vader Will See You Now", "The Man Who Built Cloud City", "A Naturalist on Hoth", "No Time for Poetry", "Rendezvous Point (short story)", "Right-Hand Man", "Rogue Two (short story)", "She Will Keep Them Warm", "Standard Imperial Procedure", "STET!", "There Is Always Another", "This Is No Cave", "Tooth and Claw", "The Truest Duty", "Vergence (short story)", "Wait for It", "The Whills Strike Back", "The Witness"],
-    "Life Day Treasury": ["A Coruscant Solstice", "The Kindling", "The Kroolok", "An Old Hope", "Reflection Day (short story)", "The Song of Winter's Heart", "The Spirit of Life Day", "The Tree of Life"],
-    "Myths & Fables": ["The Black Spire", "Chasing Ghosts", "The Dark Wraith", "The Droid with a Heart", "Gaze of Stone", "The Golden One", "The Knight & the Dragon", "The Leviathan", "The Silent Circle (short story)", "The Skiff & the Galleons", "The Sleeping Eye", "An Unwilling Apprentice", "Vengeful Waves", "The Wanderer (short story)", "The Witch & the Wookiee"],
-    "The Rise of the Empire": ["Bottleneck (short story)", "The Levers of Power", "Mercy Mission (short story)"],
-    "Stories of Jedi and Sith": ["Blood Moon Uprising (short story)", "The Eye of the Beholder", "The Ghosts of Maul", "A Jedi's Duty", "Luke on the Bright Side", "Masters", "Resolve (short story)", "Through the Turbulence", "What a Jedi Makes", "Worthless"],
-    "Tales from a Galaxy Far, Far Away: Aliens: Volume I": ["All Creatures Great and Small", "The Crimson Corsair and the Lost Treasure of Count Dooku", "The Face of Evil", "High Noon on Jakku", "A Recipe for Death", "True Love"],
+LIST_AT_START = ["Star Wars: Galactic Defense", "Star Wars: Force Arena"]
 
-    "5-Minute Star Wars Hero Stories": ["Destroy the Death Star!", "The Ewoks Join the Fight (short story)", "A Friend for Rey", "A Jedi, You Must Become", "Rathtars on the Loose!"],
-    "5-Minute Star Wars Stories": ["The Battle of Hoth (short story)", "Destroy the Death Star!", "Escape from Darth Vader (5-Minute Star Wars Stories)", "The Ewoks Join the Fight (short story)", "A Friend for Rey", "A Jedi, You Must Become", "The Last Adventure", "Race to the Finish Line", "Rathtars on the Loose!", "Rescue from Jabba's Palace (Star Wars Galactic Adventures)", "Yoda and the Count"],
-    "5-Minute Star Wars Stories Strike Back": ["Adventure in the Arena", "Captured in Canto Bight", "Clash at Cloud City", "Death Star Battle (short story)", "The Duel for Peace", "The Fight in the Forest (short story)", "Finn and Poe Team Up! (short story)", "A Journey Begins", "Mission to Maz", "Poe's Plan", "Short Negotiations", "Trapped in the Death Star"],
-    "5-Minute Star Wars Villain Stories": ["The Battle of Hoth (short story)", "Escape from Darth Vader (5-Minute Star Wars Stories)", "Mission to Maz", "Rescue from Jabba's Palace (Star Wars Galactic Adventures)", "Yoda and the Count"],
-    "5-Minute Star Wars Stories (second edition)": ["Attack of the X-Wings", "A Battle for the Galaxy", "Danger in the Desert", "A Duel Against the Dark Side", "The Final Battle", "Fleeing Hoth", "The Heart of a Jedi", "Mission to Mos Eisley (short story)", "The Mystery of the Clones", "A Race to Victory", "A Spark of Hope", "An Unexpected Ally"],
-    "Galactic Adventures Storybook Collection": ["C-3PO's New Arm", "Captain Phasma's Escape from Starkiller Base", "Chewie and the Courageous Kid", "Darth Maul and the Rathtars", "Darth Vader and the Weapon of a Sith", "Han and the Rebel Rescue", "A Jedi's Control", "Lando's Big Score", "Leia and the Great Island Escape", "Leia Charts Her Own Course", "Luke and the Lost Jedi Temple", "Poe and the Missing Ship", "R2-D2 and the Renegade Rescue", "The Rebellion's Biggest Heist", "Rey's First Flight", "Rose and Paige Fight for the Resistance", "Size Matters Not (Galactic Adventures Storybook Collection)", "Stormtrooper in Training"],
-    "The Original Trilogy Stories": ["AT-AT Attack! (short story)", "A Bad Feeling About This", "The Battle for Endor (short story)", "The Battle of Yavin (short story)", "Betrayal at Bespin", "Escape from Darth Vader (The Original Trilogy Stories)", "Escape from the Death Star (short story)", "The Final Duel", "Flight and Fight!", "The Hero's Journey Begins", "Leia and the Ewoks", "Rescue from Jabba's Palace (The Original Trilogy Stories)", "The Rescue of Princess Leia", "Return to Dagobah", "The Revelation", "Size Matters Not (The Original Trilogy Stories)", "Survival on Hoth", "An Unusual Hiding Place"],
-    "The Prequel Trilogy Stories": ["Ambushed!", "Anakin's Vow", "The Brink of War", "The Cyborg and the Jedi", "Darth Vader Rises", "A Deadly Plot", "A Different Path", "Driven to the Dark Side", "Droid Attack!", "The Duel with Dooku", "Empire Ascendant", "Escaping Naboo", "The Final Fight (The Prequel Trilogy Stories)", "Into the Arena", "The Path of a Podracer", "The Rule of Two (short story)", "The Secret Army", "Short Negotiations (The Prequel Trilogy Stories)"],
-    "Star Wars Galactic Adventures (2015)": ["Do or Do Not (short story)", "The Ewoks Join the Fight (short story)", "Rescue from Jabba's Palace (Star Wars Galactic Adventures)"],
-    "Star Wars Galactic Adventures (2016)": ["The Battle of Hoth (short story)", "Destroy the Death Star!", "Escape from Darth Vader (5-Minute Star Wars Stories)", "The Ewoks Join the Fight (short story)", "A Jedi, You Must Become", "Rescue from Jabba's Palace (Star Wars Galactic Adventures)"],
-    "Star Wars Galactic Stories: 7 Stories from a Galaxy Far, Far Away....": ["The Battle of Hoth (short story)", "Do or Do Not (short story)", "Escape from Darth Vader (5-Minute Star Wars Stories)", "The Ewoks Join the Fight (short story)", "A Friend for Rey", "Rathtars on the Loose!", "Rescue from Jabba's Palace (Star Wars Galactic Adventures)"],
-    "Star Wars Galactic Storybook": ["Against All Odds (Star Wars Galactic Storybook)", "The Battle Continues", "The Final Fight (Star Wars Galactic Storybook)", "A Jedi Tale", "A New Adventure", "New Heroes for the Galaxy"],
+MANGA = {
+    "Star Wars Rebels (webomic)": {
+        "Star Wars Rebels, Vol. 1": ["Star Wars Rebels: Spark of Rebellion"],
+        "Star Wars Rebels, Vol. 2": ["Rise of the Old Masters", "Empire Day (episode)", "Gathering Forces"],
+        "Star Wars Rebels, Vol. 3": ["Path of the Jedi", "Call to Action", "Rebel Resolve", "Fire Across the Galaxy"]
+    },
+    "Star Wars: The Mandalorian: The Manga": {
+        "Star Wars: The Mandalorian: The Manga, Vol. 1": ["Chapter 1: The Mandalorian"],
+        "Star Wars: The Mandalorian: The Manga, Vol. 2": ["Chapter 2: The Child", "Chapter 3: The Sin"],
+        "Star Wars: The Mandalorian: The Manga, Vol. 3": ["Chapter 4: Sanctuary," "Chapter 5: The Gunslinger", "Chapter 6: The Prisoner"],
+        "Star Wars: The Mandalorian: The Manga, Vol. 4": ["Chapter 6: The Prisoner", "Chapter 7: The Reckoning", "Chapter 8: Redemption"],
+    }
+}
+
+EXPANSION = {
+    "The Clone Wars: Grievous Attacks!": ["Rookies (short story)", "Downfall of a Droid (short story)", "Lair of Grievous (short story)"],
 
     "Star Wars (radio)": ["A Wind to Shake the Stars", "Points of Origin", "Black Knight, White Princess, and Pawns", "While Giants Mark Time", "Jedi that Was, Jedi to Be", "The Millennium Falcon Deal", "The Han Solo Solution", "Death Star's Transit", "Rogues, Rebels and Robots", "The Luke Skywalker Initiative", "The Jedi Nexus", "The Case for Rebellion", "Force and Counterforce"],
     "The Empire Strikes Back (radio)": ["Freedom's Winter", "The Coming Storm", "A Question of Survival", "Fire and Ice", "The Millennium Falcon Pursuit", "Way of the Jedi (episode)", "New Allies, New Enemies", "Dark Lord's Fury", "Gambler's Choice", "The Clash of Lightsabers"],
@@ -230,7 +223,6 @@ EXPANSION = {
     "Mos Eisley Adventure Set": ["A Line in the Sand...", "The Passage From Perdition", "There's Many a Slip Betwixt Cup and Lip", "Harvest Day (adventure)", "Vested Interest"],
 
     "Star Wars: X-Wing (novel series)": ["X-Wing: Iron Fist", "X-Wing: Isard's Revenge", "X-Wing: Mercy Kill", "X-Wing: Rogue Squadron", "X-Wing: Solo Command", "X-Wing: Starfighters of Adumar", "X-Wing: The Bacta War", "X-Wing: The Krytos Trap", "X-Wing: Wedge's Gamble", "X-Wing: Wraith Squadron"],
-    "Star Wars: The Clone Wars: Secret Missions": ["The Clone Wars: Secret Missions 1: Breakout Squad", "The Clone Wars: Secret Missions 2: Curse of the Black Hole Pirates", "The Clone Wars: Secret Missions 3: Duel at Shattered Rock", "The Clone Wars: Secret Missions 4: Guardians of the Chiss Key"],
     "Dark Times: Blue Harvest 0": ["Dark Times: Blue Harvest, Part 1", "Dark Times: Blue Harvest, Part 2"],
     "Star Wars: The Old Republic, Threat of Peace": ["The Old Republic, Threat of Peace Act 1: Treaty of Coruscant", "The Old Republic, Threat of Peace Act 2: New Galactic Order", "The Old Republic, Threat of Peace Act 3: Uncertain Surrender"],
     "Star Wars: The Old Republic, Blood of the Empire": ["The Old Republic, Blood of the Empire Act 1: Shades of the Sith", "The Old Republic, Blood of the Empire Act 2: The Broken World", "The Old Republic, Blood of the Empire Act 3: Burn the Future"],
@@ -254,11 +246,6 @@ EXPANSION = {
                                       "Young Jedi Knights: Return to Ord Mantell", "Young Jedi Knights: Shadow Academy",
                                       "Young Jedi Knights: Shards of Alderaan", "Young Jedi Knights: The Emperor's Plague",
                                       "Young Jedi Knights: The Lost Ones", "Young Jedi Knights: Trouble on Cloud City"],
-    "Young Jedi Knights: Jedi Shadow": ["Young Jedi Knights: Heirs of the Force", "Young Jedi Knights: Shadow Academy", "Young Jedi Knights: The Lost Ones"],
-    "Young Jedi Knights: Jedi Sunrise": ["Young Jedi Knights: Lightsabers", "Young Jedi Knights: Darkest Knight", "Young Jedi Knights: Jedi Under Siege"],
-    "Young Jedi Knights: The Fall of the Diversity Alliance": ["Young Jedi Knights: Shards of Alderaan", "Young Jedi Knights: Diversity Alliance", "Young Jedi Knights: Delusions of Grandeur", "Young Jedi Knights: Jedi Bounty", "Young Jedi Knights: The Emperor's Plague"],
-    "Young Jedi Knights: The Rise of the Shadow Academy": ["Young Jedi Knights: Heirs of the Force", "Young Jedi Knights: Shadow Academy", "Young Jedi Knights: The Lost Ones", "Young Jedi Knights: Lightsabers", "Young Jedi Knights: Darkest Knight", "Young Jedi Knights: Jedi Under Siege"],
-    "Young Jedi Knights: Under Black Sun": ["Young Jedi Knights: Return to Ord Mantell", "Young Jedi Knights: Trouble on Cloud City", "Young Jedi Knights: Crisis at Crystal Reef"],
 }
 
 
@@ -641,7 +628,7 @@ def load_source_lists(site, log):
                     line = re.sub("(\{\{SWMiniCite.*?)\|num=[0-9-]+", "\\1", line)
                     line = re.sub("(\{\{SWIA.*?)\|page=[0-9]+", "\\1", line)
                     line = re.sub("<!-- .*? -->", "", line)
-                    line = re.sub("}}<[0-9 A-z]+>", "", line)
+                    line = re.sub("}}<[0-9 A-z-]+>", "}}", line)
 
                 if "Toys" in sp:
                     line = re.sub("(\|text=.*?)(\|set=.*?)\|", "\\2\\1|", line)
@@ -664,7 +651,7 @@ def load_source_lists(site, log):
             for o, line in enumerate(lines):
                 if "/Header}}" in line or line.startswith("----"):
                     continue
-                x = re.search("\*(R: )?(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? *(?P<t>.*?) ?†?( {{C\|(original|alternate): (?P<a>.*?)}})?( {{C\|int: (?P<i>.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
+                x = re.search("\*(R: )?(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? *(?P<t>.*?) ?†?( {{C\|1?=?(original|alternate): (?P<a>.*?)}})?( {{C\|int: (?P<i>.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
                 if x:
                     i += 1
                     data.append({"index": i, "page": f"Web/{y}", "date": x.group("d"), "item": x.group("t"),
@@ -1038,13 +1025,13 @@ def determine_index(x: Item, target, i: dict, canon, legends, c_unknown, l_unkno
     canon_index = match_audiobook(x, target, canon, log_match and canon_index_expected, x.master_page)
     if canon_index is not None:
         x.canon_index = canon_index + o
-    elif canon_index_expected:
+    elif canon_index_expected and target not in LIST_AT_START:
         c = True
 
     legends_index = match_audiobook(x, target, legends, log_match and legends_index_expected, x.master_page)
     if legends_index is not None:
         x.legends_index = legends_index + o
-    elif legends_index_expected:
+    elif legends_index_expected and target not in LIST_AT_START:
         l = True
 
     return c, l

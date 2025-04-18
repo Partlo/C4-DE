@@ -310,9 +310,9 @@ def build_page_components(target: Page, text: str, redirects: dict, results: Pag
                 found = True
                 break
         if x == 1 and not found:
-            intro += (f"=={k}==\n" + '\n'.join(v.lines) + "\n")
+            intro.append(f"=={k}==\n" + '\n'.join(v.lines) + "\n")
             for sx, sz in v.subsections.items():
-                intro += (f"==={sx}===\n" + '\n'.join(sz.lines) + "\n")
+                intro.append(f"==={sx}===\n" + '\n'.join(sz.lines) + "\n")
             found = True
         if not found:
             rest += (f"=={k}==\n" + '\n'.join(v.lines) + "\n")
@@ -484,7 +484,7 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
 
     if not extra:
         x1 = re.search(
-            '( ?(<ref.*?>)?(<small>)? ?\{+ ?(1st[A-z]*|V?[A-z][od]|[Ff]act|[Bb]ts[Oo]nly|DLC|[Ll]n|[Cc]rp|[Uu]n|[Nn]cm?|[Cc]|[Aa]mbig|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Uu]nborn|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Nn]cs?|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene|[Cc]rawl) ?[|}].*?$)',
+            '( ?(<ref.*?>)?(<small>)? ?\{+ ?(1st[A-z]*|V?[A-z][od]|[Ff]act|[Bb]ts[Oo]nly|DLC|[Ll]n|[Cc]rp|[Uu]n|[Nn]cm?|[Cc]|[Aa]mbig|[Cc]osmetic|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Uu]nborn|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Nn]cs?|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene|[Cc]rawl) ?[|}].*?$)',
             z)
         extra = x1.group(1) if x1 else ''
         if extra:
@@ -603,7 +603,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                 new_ref = appearances.target[x.group(1)][0].original
             elif x and x.group(1) in sources.target:
                 new_ref = sources.target[x.group(1)][0].original
-        x = re.search(",? (page|pg\.?|p?p\.|chapters?|ch\.) ?([0-9-]+|one|two|three|four|five)(?!]),?", new_ref)
+        x = re.search(",? (page|pg\.?|p?p\.|chapters?|ch\.) ?([0-9-]+|one|two|three|four|five)(?!])[,.]?", new_ref)
         if x:
             print(f"Found page/chapter numbers in reference: \"{x.group(0)}\" -> \"{new_ref}\"")
             # new_ref = new_ref.replace(x.group(0), "")
@@ -657,7 +657,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
 
         new_templates = []
         for t in templates:
-            if ("bypass=1" in t or t == "{{'s}}" or "{{TORcite" in t or "{{SWG" in t or t.startswith("{{C|") or
+            if ("bypass=1" in t or t == "{{'s}}" or "{{TORcite" in t or "{{TCWA" in t or "{{SWG" in t or t.startswith("{{C|") or
                     t.startswith("{{Blogspot") or t.startswith("{{Cite") or t.startswith("{{PageNumber")):
                 continue
             x = extract_item(t, False, "reference", types)

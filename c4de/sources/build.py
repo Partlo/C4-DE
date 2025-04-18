@@ -429,7 +429,7 @@ def build_new_text(target: Page, infoboxes: dict, types: dict, disambigs: list, 
                    use_index=True, collapse_audiobooks=True, manual: str = None, extra=None):
     new_txt, analysis, unknown, unknown_items = build_text(
         target, infoboxes, types, disambigs, appearances, sources, bad_cats, remap, include_date, checked, log,
-        use_index, collapse_audiobooks, manual, extra, keep_pages=True)
+        use_index, collapse_audiobooks, manual, extra, keep_pages=False)
 
     record_local_unknown(unknown, unknown_items, target)
     return new_txt
@@ -509,7 +509,7 @@ def analyze_target_page(target: Page, infoboxes: dict, types: dict, disambigs: l
         else:
             final_results.append(i)
 
-    return results, create_index
+    return results
 
 
 def record_local_unknown(unknown, unknown_items, target: Page):

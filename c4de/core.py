@@ -559,7 +559,7 @@ class C4DE_Bot(commands.Bot):
             error_log(type(e), e)
 
     async def ghost_touch(self, message: Message):
-        match = re.search("[Gg]host touch (-ref:|Category:)?(.*?)$", message.content)
+        match = re.search("[Gg]host touch (-ref:|-cat:|Category:)?(.*?)$", message.content)
         if match:
             await message.add_reaction(TIMER)
             if match.group(1) == "Category:":
@@ -877,6 +877,7 @@ class C4DE_Bot(commands.Bot):
             if self.have_sources_changed():
                 await self.build_sources()
         except Exception as e:
+            traceback.print_exc()
             await self.report_error("Sources rebuild", type(e), e)
 
     @staticmethod
@@ -909,7 +910,7 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def is_analyze_source_command(message: Message):
-        match = re.search("(analy[zs]e|build|check) sources? (for |on )?(?P<article>.*?)(?P<date> with dates?)?(?P<text> (by|and|with) text)?$", message.content)
+        match = re.search("([Aa]naly[zs]e|[Bb]uild|[Cc]heck) sources? (for |on )?(?P<article>.*?)(?P<date> with dates?)?(?P<text> (by|and|with) text)?$", message.content)
         if match:
             return match.groupdict()
         return None
@@ -930,7 +931,8 @@ class C4DE_Bot(commands.Bot):
             old_text = target.get()
 
             await message.add_reaction(TIMER)
-            results = analyze_target_page(target, self.infoboxes, self.templates, self.disambigs, self.appearances, self.sources, self.bad_cats, self.remap,
+            results = analyze_target_page(target, self.infoboxes, self.templates, self.disambigs, self.appearances,
+                                          self.sources, self.bad_cats, self.remap,
                                           save=True, include_date=False, use_index=True)
             await message.remove_reaction(TIMER, self.user)
             await message.add_reaction(self.emoji_by_name("bb8thumbsup"))
@@ -994,7 +996,13 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def flatten_text(t):
-        return re.sub("(\|book=.*?)(\|story=.*?)(\|.*?)?}}", "\\2\\1\\3}}", re.sub("<!--.*?-->", "", t.replace("&ndash;", "-").replace("&mdash;", "-").replace("—", "-").replace("—", "-").replace("\n", "").replace(" ", "")).replace("{{!}}", "|"))
+        z = re.sub("(\|book=.*?)(\|story=.*?)(\|.*?)?}}", "\\2\\1\\3}}",
+                   re.sub("<!--.*?-->", "",
+                          t.replace("&ndash;", "-").replace("&mdash;", "-").replace("—", "-").replace("—", "-").replace("\n", "").replace(" ", "")
+                          ).replace("{{!}}", "|")).replace("{{Journal|", "{{JournalCite|")
+        while re.search("([\n[]File:[^ \n|\]\[]+) ", z):
+            z = re.sub("([\n[]File:[^ \n|\]\[]+) ", "\\1_", z)
+        return z
 
     @tasks.loop(minutes=5)
     async def check_index_requests(self):
@@ -1471,6 +1479,8 @@ class C4DE_Bot(commands.Bot):
 
             if update:
                 log(f"Could not find messages {update} in #{ADMIN_REQUESTS} to update")
+                for k in update:
+                    self.admin_messages.pop(k)
             with open(ADMIN_CACHE, "w") as f:
                 f.writelines(json.dumps(self.admin_messages, indent=4))
         except TimeoutError:
@@ -1576,9 +1586,11 @@ class C4DE_Bot(commands.Bot):
             for site, data in self.rss_data["sites"].items():
                 if template and data["template"] == template:
                     target_site = site
-                elif data["baseUrl"].split("//", 1)[-1].split("www.", 1)[-1] in command["url"]:
+                elif data["baseUrl"] and data["baseUrl"].split("//", 1)[-1].split("www.", 1)[-1] in command["url"]:
                     target_site = site
                     template = template or data["template"]
+                if target_site:
+                    break
 
             site_data = self.rss_data["sites"].get(target_site)
             if not site_data:
@@ -1667,7 +1679,7 @@ class C4DE_Bot(commands.Bot):
         db = None
         if site == "StarWars.com":
             messages = check_sw_news_page(site_data["url"], self.external_rss_cache["sites"], site_data["title"])
-            other, db = compare_site_map(self.site, ["Star Wars: Skeleton Crew"], messages,
+            other, db = compare_site_map(self.site, [], messages,
                                          self.external_rss_cache["sites"]["StarWars.com"])
             messages += other
         elif site_data["template"] == "SWUweb":
@@ -1934,6 +1946,8 @@ class C4DE_Bot(commands.Bot):
     def add_urls_to_archive(self, template, new_url, archivedate):
         if template == "ThisWeek" or template == "HighRepublicShow":
             template = "SWYouTube"
+        if template == "LegoMiniMovie":
+            template = "LEGOYouTube"
         if template == "Hunters" and "arena-news" in new_url:
             new_url = new_url.replace("arena-news/", "")
             template = "ArenaNews"
@@ -1989,7 +2003,7 @@ class C4DE_Bot(commands.Bot):
     def build_archive_module_text(text, new_url, archivedate):
         new_text = []
         found, start = False, False
-        u = new_url.replace("=", "{{=}}")
+        u = new_url.replace("{{=}}", "=")
         for line in text.splitlines():
             if not start:
                 start = line.strip().startswith("[")
@@ -1999,7 +2013,7 @@ class C4DE_Bot(commands.Bot):
             elif not found and (line.strip().startswith("}") or u < line.strip()[1:].strip()):
                 if "[" in new_text[-1] and not new_text[-1].strip().endswith(","):
                     new_text[-1] = new_text[-1].rstrip() + ","
-                new_text.append(f'  ["{u}"] = "{archivedate}",')
+                new_text.append(f'\t["{u}"] = "{archivedate}",')
                 found = True
             new_text.append(line)
 

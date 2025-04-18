@@ -545,7 +545,7 @@ def build_final_new_items(new_items: List[FutureProduct], audiobooks: List[str])
                 t = f"{{{{StoryCite|book={x.group(1)}|story={i.page.title()}}}}}"
         else:
             t = f"''[[{i.page.title()}]]''"
-            t = re.sub("''\[\[((.*?) \((trade paperback|audiobook)\))]]''", "[[\\1|''\\2'' \\3]]", t)
+            t = re.sub("''\[\[((.*?) \((trade paperback|(u?n?abridged )?audiobook)\))]]''", "[[\\1|''\\2'' \\3]]", t)
             t = re.sub("''\[\[((.*?) (\([0-9]+\)) ([0-9]+))]]''", "[[\\1|''\\2'' \\3 \\4]]", t)
             t = re.sub("''\[\[(([^|\](]*?) \(.*?\)( [0-9]+)?)]]''", "[[\\1|''\\2''\\3]]", t)
             t = re.sub("''\[\[(.*?)\|(((?!'').)*?) ([0-9]+)]]''", "[[\\1|''\\2'' \\3]]", t)

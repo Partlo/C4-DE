@@ -217,3 +217,8 @@
 **Fixed logic in the overall page parser to better recognize real-world pages during analysis
 **Overhauled the media traversal protocol to check all media, not just appearances, when looking for media not on the Masterlist
 **Reworked the UnusedFiles reporter to separate out audio files
+*'''4.4.2''': April 18, 2025
+**Removed collection-specific SeriesListing logic, as those legacy maintenance categories have been cleared
+**Added temporary manga expansion logic for Mandalorian and Rebels manga
+**Fixed archive URL command so that it actually adds to the correct template
+**Various minor bug fixes and removal of legacy logic

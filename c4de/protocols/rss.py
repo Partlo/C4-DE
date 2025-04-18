@@ -616,7 +616,7 @@ def check_user_rights_nominations(site: Site):
     page = Page(site, "Wookieepedia:Requests for user rights")
     text = page.get()
 
-    noms = {"Rollback": [], "Admin": [], "Bureaucrat": []}
+    noms = {"Rollback": [], "Admin": [], "Bureaucrat": [], "SMT": []}
     for u in re.findall("\n{{/(.*?)/(.*?)}}", text):
         if u[0] not in noms:
             error_log(f"Unexpected nom type {u[0]}")
@@ -737,7 +737,7 @@ def compile_tracked_urls(site):
                     urls.append(line.split("|sw_url=")[-1].split("|")[0].split("}", 1)[0])
                 elif "{{SW|" in line:
                     urls.append(line.split("|url=", 1)[-1].split("|")[0].split("}", 1)[0])
-                    if "{{C|alternate: " in line:
+                    if "{{C|alternate: " in line or "{{C|1=alternate: " in line:
                         urls.append(line.split("alternate: ", 1)[-1].split("}", 1)[0])
 
     for line in Page(site, "Wookieepedia:Sources/Web/Databank").get().splitlines():
@@ -751,6 +751,7 @@ def compile_tracked_urls(site):
 IGNORE = """
 ahsoka-props-costumes-sdcc-2023
 art-inspired-by-the-mandalorian
+badge-art-star-wars-celebration-japan-2025
 badge-art-swce23
 character-posters-ahsoka
 community/force-for-change-at-the-force-awakens-world-premiere
@@ -760,12 +761,24 @@ community/star-wars-legion-gallery-part-2
 community/star-wars-legion-gallery-part-3
 covers-the-high-republic
 dark-horse-the-high-republic-phase-iii-artwork-reveal
+disneyland-after-dark-star-wars-nite-2024
 disneyplus/lego-star-wars
+dispatches-from-the-occlusion-zone-nycc-2024
+empire-state-building-imperial-march
 fashion-illustrator-marilee-heyer-sketches
 films/star-wars-episode-ix-the-rise-of-skywalker
+films/star-wars-the-clone-wars
 first-look-the-mandalorian-season-two
+gallery-ewan-mcgregor-honored-with-star-on-hollywood-walk-of-fame
+gamescom-stills-star-wars-outlaws
 gift-the-galaxy-good-morning-america
 heroes-concept-art-the-high-republic
+image-gallery-ahsoka-season-1-4k-ultra-hd
+image-gallery-the-mandalorian-season-3-4k-ultra-hd
+imperial-march-star-wars-empire-state-building-takeover
+imperial-march-the-galactic-empire-state-building
+interior-pages-marvels-star-wars-legacy-of-vader
+into-the-breach-episode-stills-the-bad-batch
 lego-star-wars-holiday-special-concept-art
 lego-star-wars-the-force-awakens-screenshots
 lego-star-wars-the-skywalker-saga
@@ -773,11 +786,17 @@ mandalorian-mayhem-rocket-league-screenshots
 marvel-star-wars-rebels-variant-covers
 news/20-favorite-quotes-the-mandalorian-season-one
 news/the-recruit-episode-guide-star-wars-resistance
+parody-poster-lego-star-wars-rebuild-the-galaxy
+preview-pages-dark-horse-the-bad-batch-issue-1
 rebels-season-two-fan-art-contest-winners
+reveal-pages-the-star-wars-bestiary-volume-1-creatures-of-the-galaxy
 screenshots-minecraft-star-wars-path-of-the-jedi-dlc
+screenshots-star-wars-hunters-pc
+season-of-the-force-merchandise
 shag-beeline-creative-return-of-the-jedi-collection
 star-wars-battlefront-screenshots
 star-wars-celebration-live-backstage
+star-wars-dad-jokes-preview
 star-wars-eclipse-screenshots
 star-wars-force-arena-mobile-screenshots
 star-wars-frames-a-new-hope
@@ -793,12 +812,16 @@ star-wars-uprising-screenshots
 stellan-gios-lightsaber-the-high-republic
 swce-2023-online-store-products
 tales-from-the-death-star-nycc-2023
+tetniss-model-close-upds-star-wars-skeleton-crew
+the-acolyte-costumes-sdcc-2024
 the-bad-batch-mobile-wallpaper
 the-empire-strikes-back-ralph-mcquarrie
+the-jedi-knights-of-the-high-republic-nycc-2024
 thra-6-preview
 thra-7-preview
 thra-8-preview
 villains-concept-art-the-high-republic
+wanted-posters-star-wars-rebels
 
 art-awakens-official-rules
 eras
@@ -836,23 +859,28 @@ def handle_site_map(sitemap: set, urls, skip, updated_db_entries, guides):
         u = f"https://www.starwars.com/{x}"
         if x in skip or u in skip:
             continue
-        r = requests.get(u)
-        if r.url != u:
-            continue
-        elif '<section class="module image_gallery' in r.text and x not in guides:
-            continue
-        title = re.search("<title>(.*?)</title>", r.text)
-        if title:
-            title = title.group(1).replace(" | StarWars.com", "").strip()
-        else:
-            title = "Unable to Determine Title"
-        title = title.replace("’", "'").replace('&#39;', "'").replace('&quot;', '"')
-        s = "Databank" if x.startswith("databank/") else "StarWars.com"
-        if s == "Databank" and ("- " in title or "|" in title):
-            title = re.sub(" ?[-\|] (The Acolyte|Star Wars Databank|Databank)", "", title)
-        if u in updated_db_entries:
-            updated_db_entries.pop(u)
-        diff.append({"site": s, "url": u, "title": title, "date": datetime.now().strftime('%Y-%m-%d')})
+        try:
+            print(u)
+            r = requests.get(u)
+            if r.url != u:
+                continue
+            elif '<section class="module image_gallery' in r.text and x not in guides:
+                print(u, "gallery")
+                continue
+            title = re.search("<title>(.*?)</title>", r.text)
+            if title:
+                title = title.group(1).replace(" | StarWars.com", "").strip()
+            else:
+                title = "Unable to Determine Title"
+            title = title.replace("’", "'").replace('&#39;', "'").replace('&quot;', '"')
+            s = "Databank" if x.startswith("databank/") else "StarWars.com"
+            if s == "Databank" and ("- " in title or "|" in title):
+                title = re.sub(" ?[-\|] (The Acolyte|Star Wars Databank|Databank)", "", title)
+            if u in updated_db_entries:
+                updated_db_entries.pop(u)
+            diff.append({"site": s, "url": u, "title": title, "date": datetime.now().strftime('%Y-%m-%d')})
+        except Exception as e:
+            error_log(f"Encountered {type(e)} while checking sitemap URL: {u}", e)
     return diff, updated_db_entries
 
 

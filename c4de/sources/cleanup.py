@@ -13,16 +13,12 @@ REPLACEMENTS = [
     ("{{mO}}", "{{Mo}}"), ("*{{Indexpage", "{{Indexpage"), ("<br>", "<br />"),
     ("Youtube", "YouTube"), ("{{Scrollbox", "{{ScrollBox"), ("referneces", "references"), ("{{MO}}", "{{Mo}}"),
     ("{{scrollbox", "{{ScrollBox"), ("</reF>", "</ref>"), ("\n</ref>", "</ref>"), ("†", "&dagger:"),
-    ("{{SWArchive|subdomain=cargobay|url=webapps/cargobay/", "{{CargoBay|url="),
+    ("{{Visions|focus=1", "{{VisionsFocus"),
+    ("2024 Topps Star Wars Hyperspace Always A Bigger Fish", "2024 Topps Star Wars Hyperspace|subset=Always A Bigger Fish"),
 
     ("[[B1-Series battle droid]]", "[[B1-series battle droid/Legends|B1-series battle droid]]"),
     ("[[Variable Geometry Self-Propelled Battle Droid, Mark I/Legends|Variable Geometry Self-Propelled Battle Droid, Mark I]]", "[[Vulture-class starfighter/Legends|''Vulture''-class starfighter]]"),
     ("[[Variable Geometry Self-Propelled Battle Droid, Mark I]]", "[[Vulture-class starfighter|''Vulture''-class starfighter]]"),
-
-    ("Tales of the Jedi —", "Tales of the Jedi –"), ("Tales of the Jedi &mdash;", "Tales of the Jedi –"),
-    ("StarWarsKidsCite|year=1999", "Kids1999Cite"),  ("StarWarsKidsCite|year=1998", "Kids1998Cite"),
-    ("StarWarsKidsCite|year=1997", "Kids1997Cite"),  ("StarWarsKidsCite", "Kids1997Cite"),
-
 
     ("Red Five (Star Wars Insider)", "Red Five (department)"),
     ("A Certain Point of View (Star Wars Insider)", "A Certain Point of View (department)"),
@@ -50,9 +46,6 @@ REPLACEMENTS = [
 ]
 
 
-UNIDENTIFIED_CATEGORIES = ["Mandalorians", "Aqualish", "Bith", "Chagrians", "Chiss", "Duros", "Ewoks", "Gamorreans", "Gran", "Grysks", "Hutts", "Ithorians", "Jawas", "Mirialans", "Mon Calamari", "Neimoidians", "Patitites", "Quarren", "Rodians", "Sullustans", "Togruta", "Trandoshans", "Twi'leks", "Weequays", "Wookiees", "Yuuzhan Vong", "Zabrak", "Zeltrons", "humans", "wampas", "males", "females", "bounty hunters", "nobility", "clone troopers", "clone cadets", "clone commandos", "clone officers", "clone trooper pilots", "clone trooper sergeants", "Advanced Recon Commandos",]
-
-
 def initial_cleanup(target: Page, all_infoboxes, before: str=None, keep_page_numbers=False):
     # now = datetime.now()
     if not before:
@@ -63,16 +56,6 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, keep_page_num
         before = re.sub(
             "(]]|}})(\{+ ?(1st[A-z]*|[A-z][od]|[Ll]n|[Uu]n\|[Nn]cm?|[Cc]|[Aa]mbig|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Nn]cs?|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene) ?[|}])",
             "\\1 \\2", before)
-
-    for c in UNIDENTIFIED_CATEGORIES:
-        if f"Category:Unidentified {c}" in before:
-            before = before.replace(f"Category:Unidentified {c}|", f"Category:{c[0].capitalize()}{c[1:]}|").replace(f"Category:Unidentified {c}]", f"Category:{c[0].capitalize()}{c[1:]}]")
-    for c in ["fathers", "brothers", "grandfathers", "husbands", "nephews", "sons", "uncles"]:
-        if f"Category:Unidentified {c}" in before:
-            before = before.replace(f"Category:Unidentified {c}", "Category:Males")
-    for c in ["mothers", "sisters", "grandmothers", "wives", "daughters", "aunts"]:
-        if f"Category:Unidentified {c}" in before:
-            before = before.replace(f"Category:Unidentified {c}", "Category:Females")
 
     x, _, y = target.title().replace("/Legends", "").replace("/Canon", "").partition(" (")
     for z in ["{{PAGENAME}}", x, target.title()]:
@@ -94,6 +77,14 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, keep_page_num
     if all_infoboxes and not target.title().startswith("User:") and not target.title().startswith("File:"):
         before, infobox = handle_infobox_on_page(before, target, all_infoboxes, False)
     # print(f"infobox: {(datetime.now() - now).microseconds / 1000} microseconds")
+
+    # fixing bad references
+    before = re.sub("<ref name ?=([^'\">]*?)[\"'] ?/ ?>", "<ref name=\"\\1\" />", before)
+    before = re.sub("<ref name ?=([^'\">]*?)[\"'] ?>", "<ref name=\"\\1\">", before)
+    before = re.sub("<ref name ?=[\"']([^'\" ]+?) ?/ ?>", "<ref name=\"\\1\" />", before)
+    before = re.sub("<ref name ?=[\"']([^'\" ]+?) ?>", "<ref name=\"\\1\">", before)
+    before = re.sub("<ref name ?=([^'\">]+?) ?/ ?>", "<ref name=\"\\1\" />", before)
+    before = re.sub("<ref name ?=([^'\">]+?) ?>", "<ref name=\"\\1\">", before)
 
     before = re.sub("=+ ?([Rr]eferences?|[Nn]otes? (and )?[Rr]ef.*?) ?=+", "==Notes and references==", before)
     before = re.sub("= ?Non-[Cc]anon [Aa]ppearances ?=", "=Non-canon appearances=", before)
@@ -149,12 +140,10 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, keep_page_num
     before = re.sub("\{\{[Cc]orrect[ _]title", "{{CorrectTitle", before)
 
     before = re.sub("( \{\{(C\|Hologram|1st|[MmPpCcVv]o).*?}})\\1+", "\\1", before)
+    before = re.sub("\{\{InsiderCite\|(1?[0-9]|2[012])\|", "{{LucasFanClubCite|\\1|", before)
 
     # temp fixes
     before = re.sub("(\{\{([A-z _0-9]+)\|.*?}}) (\{\{1st[a-z]*)\|\{\{\\2.*?}}( \{.*?)?\n", "\\1 \\3}}\\4\n", before)
-
-    # before = re.sub("(\{\{TOMCite\|[0-9]+\|Database)\|.*?}}", "\\1}}", before)
-    before = re.sub("\{\{(Legion|Armada|FFGXW2?|SWIA|Shatterpoint|Destiny)\|([^\n|{}=]+)}}", "{{\\1|set=\\2}}", before)
 
     while re.search("\[\[Category:[^\n|\]_]+_", before):
         before = re.sub("(\[\[Category:[^\n|\]_]+)_", "\\1 ", before)
@@ -163,7 +152,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, keep_page_num
     if not keep_page_numbers:
         check_multi = False
         if "{{PageNumber}}" in before:
-            before = re.sub("\">(((?!\{\{PageNumber)[^\n<])+? ?(['\"]*[\[{]+[^\n\[{]*?[}\]]+['\"]*),? ?(pa?ge?\.?|p?p\.|chapters?|ch\.) ?([0-9-]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen)(?!]),?</ref>)", "\">{{PageNumber}} \\1", before)
+            before = re.sub("\">(((?!\{\{PageNumber)[^\n<])+? ?(['\"]*[\[{]+[^\n\[{]*?[}\]]+['\"]*),? ?(pa?ge?\.?|p?p\.|chapters?|ch\.) ?([0-9-]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen)(?!])[,.]?</ref>)", "\">{{PageNumber}} \\1", before)
             for x in re.findall("((<ref name=\"([^\"\n>]+?)\")>\{\{PageNumber}} ?(['\"]*[\[{]+[^\n\[{]*?[}\]]+['\"]*),? ?(pa?ge?\.?|p?p\.|[Cc]hapters?|ch\.) ?([0-9-]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen)(?!])[,.]?</ref>)", before):
                 if before.count(f"\">{x[3]}") == 0:
                     zy = x[1].replace(f":{x[5]}\"", '"')
@@ -236,16 +225,6 @@ def regex_cleanup(before: str) -> str:
         before = re.sub("\|oldversion=1(\|[^\n}{]*?)?(\|archive(date|url)=([^|\n}{]+))", "|oldversion=\\4\\1", before)
 
     before = re.sub("(\{\{[A-z0-9 _]+\|.*?\|(.*?) \(.*?\))\|\\2}}", "\\1}}", before)
-    if "Star Wars Galaxies" in before or "GalaxiesAED" in before:
-        before = re.sub("([*>]) ?'*\[\[Star Wars Galaxies: An Empire Divided]]'*", "\\1{{GalaxiesAED}}", before)
-        before = re.sub("([*>]) ?'*\[\[Star Wars Galaxies\|'*Star Wars Galaxies: An Empire Divided'*]]'*?(: An Empire Divided'*)?","\\1{{GalaxiesAED}}", before)
-        before = re.sub("([*>]) ?'*\[\[Star Wars Galaxies(\|.*?)?]]'*: An Empire Divided'*", "\\1{{GalaxiesAED}}", before)
-        before = re.sub("\{\{GalaxiesAED}}'*: An Empire Divided'*", "{{GalaxiesAED}}", before)
-        before = re.sub("([*>]) ?'*\[\[Star Wars Galaxies]]'*", "\\1{{GalaxiesNGE}}", before)
-        before = before.replace("[[Star Wars Galaxies: The Complete Online Adventures|''Star Wars Galaxies: The Complete Online Adventures'' bonus DVD]]","[[Star Wars Galaxies Bonus DVD|''Star Wars Galaxies'' Bonus DVD]]")
-
-    if "{{SWGcite" in before:
-        before = before.replace("|exp=SK|", "|exp=NGE|").replace("|exp=TCOA|", "|exp=NGE|").replace("|exp=TTE|", "|exp=RotW|")
     if "{{Blog|" in before:
         before = re.sub("(\{\{Blog\|(official=true\|)?[^|\n}\]]+?\|[^|\n}\]]+?\|[^|\n}\]]+?)(\|(?!(archive|date|nolive|nobackup))[^}\n]*?)(\|(?!(archive|date|nolive|nobackup))[^}\n]*?)(\|.*?)?}}","\\1\\6}}", before)
         before = re.sub("(\{\{Blog\|listing=true\|[^|\n}\]]+?)(\|(?!(archive|date|nolive|nobackup))[^}\n]*?)(\|(?!(archive|date|nolive|nobackup))[^}\n]*?)(\|.*?)?}}","\\1\\6}}", before)
@@ -258,9 +237,6 @@ def regex_cleanup(before: str) -> str:
         before = re.sub("\{\{Hunters\|url=arena-news/(.*?)/?\|", "{{ArenaNews|url=\\1|", before)
     if "{{Disney|books|" in before:
         before = re.sub("\{\{Disney\|books\|(.*?)\|", "{{Disney|subdomain=books|url=\\1|text=", before)
-    if "ArtStation" in before:
-        before = re.sub("(\{\{ArtStation(\|.*?)?)\|url=(.*?)(\|.*?)\|profile=\\1(\|.*?)?}}", "\\1|profile=\\2\\3\\4}}", before)
-        before = re.sub("\{\{ArtStation\|url=(((?!profile=).)*?)}}", "{{ArtStation|profile=\\1}}", before)
     if "Rebelscum.com" in before or "TheForce.net" in before:
         before = re.sub("\*'*?\[(http.*?) (.*?)]'*? (on|at|-).*?\[\[(Rebelscum\.com|TheForce\.net).*]].*?\n","{{WebCite|url=\\1|text=\\2|work=\\4}}", before)
     return before
