@@ -636,7 +636,7 @@ def _match_by_target(o: Item, t, targets, from_other, log: bool):
             return ItemId(o, x, o.collapsed, from_other)
         elif not o.template and not x.template and not o.parent and not x.parent:
             return ItemId(o, x, o.collapsed, from_other)
-        elif x.url and o.url and do_urls_match(o.url, o.template, x, True, True):
+        elif x.url and o.url and do_urls_match(o.url, o.template, x,True, True):
             return ItemId(o, x, o.collapsed, from_other)
     return ItemId(o, targets[0], o.collapsed, False)
 
@@ -664,6 +664,14 @@ def matches_up_to_string(d, u, x, in_both: bool):
         return (x in d or u in d) and d.split(x, 1)[0] == u.split(x, 1)[0]
 
 
+def match_news_format(d, u):
+    if "/news2" in d and "/news2" in u:
+        x = re.search("^(.*?)/.*?/(news[0-9]+)", d)
+        y = re.search("^(.*?)/.*?/(news[0-9]+)", u)
+        return x and y and x.group(1) == y.group(1) and x.group(2) == y.group(2)
+    return False
+
+
 def do_urls_match(url, template, d: Item, replace_page, log=False):
     d_url = prep_url(d.url)
     alternate_url = prep_url(d.alternate_url)
@@ -686,6 +694,8 @@ def do_urls_match(url, template, d: Item, replace_page, log=False):
             return 2
         elif d_url == re.sub("indexp([0-9]+)\.html", "index.html?page=\\1", url):
             return 2
+    elif d_url and template == "SWArchive" and match_news_format(d_url, url, ):
+        return 2
     elif d_url and matches_up_to_string(d_url.lower(), url.lower(), "/index.html", False):
         return 1
     elif d_url and template == "SW" and d.template == "SW" and url.startswith("tv-shows/") and \

@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from pywikibot import Site, Page, Category, showDiff
 from get_chrome_driver import GetChromeDriver
 
-from selenium.common.exceptions import WebDriverException, SessionNotCreatedException
+from selenium.common.exceptions import WebDriverException, SessionNotCreatedException, ElementNotInteractableException
 from selenium.webdriver import Remote as WebDriver, Chrome, ChromeService, Firefox, FirefoxService
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.firefox.options import Options as FirefoxOptions
@@ -203,7 +203,18 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
                     if not date:
                         log(f"Cannot find shipping date for {title}")
                         continue
-                    publication_date = date[0].get_attribute("innerHTML").replace("On Sale Date:", "").replace("Ship Date:","").replace("<br>", "").strip()
+                    publication_date = date[0].get_attribute("innerHTML").replace("On Sale Date:", "").replace("Ship Date:","").strip()
+                    if "<br>" in publication_date:
+                        possible, parts = [], []
+                        for p in publication_date.split("<br>"):
+                            if p.strip():
+                                if " 201" in p.strip() or " 202" in p.strip() or " 203" in p.strip():
+                                    possible.append(p)
+                                parts.append(p.strip())
+                        if possible or parts:
+                            publication_date = possible[0] if possible else parts[0]
+                        else:
+                            publication_date = publication_date.replace("<br>", "").strip()
 
                     fmt = item.find_elements(By.CLASS_NAME, "pve_format")
                     sub_names = item.find_elements(By.CLASS_NAME, "pve_subName")
@@ -224,7 +235,7 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
                         continue
 
                     results.append({
-                        "title": title,
+                        "title": title.replace("[", "(").replace("]", ")"),
                         "subTitle": sub_names[0].text if sub_names else "",
                         "publicationDate": publication_date,
                         "author": item.find_element(By.CSS_SELECTOR, ".title_Author").text,
@@ -358,7 +369,7 @@ def analyze_products(site, products: List[dict], search_terms):
             elif item["title"] == "Star Wars Encyclopedia" and not item["hasImage"]:
                 continue
 
-            if not page and (item["title"] in false_positives or "t-shirt" in item["title"].lower() or "Box Set" in item['title'] or "Weird But True" in item['title'] or "Card Game CDU" in item['title']):
+            if not page and any(s.lower() in item["title"].lower() for s in false_positives):
                 continue
             elif not page and not any(s.lower() in item["title"].lower() for s in search_terms):
                 results["newItems"].append((item['sku'], f"(Potential False Positive): {item['title']} - {url}{archive_sku(item['sku'])}"))
@@ -421,10 +432,10 @@ def analyze_products(site, products: List[dict], search_terms):
 
             page_dates = []
             for d in date_strs:
-                c = re.sub("\([A-Z]+\)", "", d.split("{{C|")[0].strip())
+                c = re.sub("\([A-Z]+\)", "", d.split("{{C|")[0].strip()).replace(",", "")
                 if c:
                     try:
-                        page_dates.append(datetime.strptime(c, "%B %d, %Y"))
+                        page_dates.append(datetime.strptime(c, "%B %d %Y"))
                     except Exception as e:
                         try:
                             page_dates.append(datetime.strptime(c.replace(',', ''), "%B %Y"))
@@ -478,6 +489,9 @@ def run_edelweiss_protocol(site, cache, scheduled=False):
         driver = build_driver(headless=True, firefox=True)
         try:
             products += extract_items_from_edelweiss(driver, term, sku_list)
+        except ElementNotInteractableException as e:
+            error_log(type(e), e, tb=False)
+            return [f"Error encountered during Edelweiss protocol; cannot complete scan."], []
         except Exception as e:
             error_log(type(e), e)
             return [f"Error encountered during Edelweiss protocol: {type(e)} - {e}"], []
@@ -488,6 +502,9 @@ def run_edelweiss_protocol(site, cache, scheduled=False):
 
     try:
         analysis_results, reprints = analyze_products(site, products, search_terms)
+    except ElementNotInteractableException as e:
+        error_log(type(e), e, tb=False)
+        return [f"Error encountered during Edelweiss protocol; cannot complete scan."], []
     except Exception as e:
         error_log(type(e), e)
         return [f"Error encountered during Edelweiss protocol: {type(e)} - {e}"], []

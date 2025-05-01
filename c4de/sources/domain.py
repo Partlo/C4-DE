@@ -69,7 +69,7 @@ class Item:
         self.external = False
         self.unlicensed = False
         self.abridged = False
-        self.audiobook = False
+        self.is_audiobook = False
         self.german_ad = False
         self.reprint = False
         self.has_content = False

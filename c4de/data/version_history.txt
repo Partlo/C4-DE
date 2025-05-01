@@ -222,3 +222,8 @@
 **Added temporary manga expansion logic for Mandalorian and Rebels manga
 **Fixed archive URL command so that it actually adds to the correct template
 **Various minor bug fixes and removal of legacy logic
+*'''4.5.0''': May 1, 2025
+**Split C4-DE into an RSS-dedicated node and one for the Source Engine
+**Cleanup of old series-mapping and other defunct logic
+**Added archival scripts, still under refinement
+**Added create-list command for non-Index timeline sorting

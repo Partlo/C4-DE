@@ -150,7 +150,7 @@ def analyze(*args):
                         break
             extra = []
             text = build_new_text(page, infoboxes, types, [], appearances, sources, cats, remap, include_date,
-                                  checked, log=log, collapse_audiobooks=True, manual=old_revision, extra=extra)
+                                  checked, log=log, collapse_audiobooks=True, manual=old_revision, extra=extra, keep_pages=False)
             if text is None:
                 continue
 
@@ -188,8 +188,8 @@ def analyze(*args):
             #     continue
 
             # showDiff(old_text, text, context=1)
-            z1 = re.sub("\|stext=.*?(\|.*?)?}}", "\\1}}", z1)
-            z2 = re.sub("\|stext=.*?(\|.*?)?}}", "\\1}}", z2)
+            z1 = re.sub("\|stext=.*?(\|.*?)?}}", "\\1}}", z1).replace("Journal|", "JournalCite|")
+            z2 = re.sub("\|stext=.*?(\|.*?)?}}", "\\1}}", z2).replace("Journal|", "JournalCite|")
 
             if include_date:
                 showDiff(z2, z1, context=1)

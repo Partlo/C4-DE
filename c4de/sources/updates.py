@@ -6,7 +6,7 @@ import re
 from datetime import datetime
 from typing import List, Tuple, Dict
 
-from c4de.sources.engine import extract_item, FullListData, build_template_types, GERMAN_MAPPING
+from c4de.sources.engine import extract_item, FullListData, build_template_types
 
 
 def list_all_infoboxes(site):
@@ -156,6 +156,8 @@ def get_future_products_list(site: Site, infoboxes=None):
             if page.title().startswith("List of") or page.title().startswith("Timeline of"):
                 continue
             elif c.title() == "Category:Future events" and len(page.title()) == 4 and page.title().startswith("20"):
+                continue
+            elif c.title() == "Category:Official Star Wars conventions":
                 continue
             elif page.title() in unique:
                 continue
@@ -561,15 +563,15 @@ def build_final_new_items(new_items: List[FutureProduct], audiobooks: List[str])
                     break
 
         d = build_date(i.dates)
-        final.append([t, prep_date(d), 100, fix_numbers(t), "German" in i.page.title() or i.page.title() in GERMAN_MAPPING])
+        final.append([t, prep_date(d), 100, fix_numbers(t), False])
     return final
 
 
 def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[FutureProduct]],
-                   all_changed: Dict[str, Dict[str, FutureProduct]], use_sections, save=False):
+                   all_changed: Dict[str, Dict[str, FutureProduct]], use_sections, save=False, override=False):
     new_items = all_new.get(key) or []
     changed = all_changed.get(key) or {}
-    if not (new_items or changed):
+    if not (new_items or changed or override):
         return
 
     audiobooks = [a.page.title() for a in all_new["Audiobooks"] if key != "Audiobooks"]
@@ -595,7 +597,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
                 if a.startswith(f"{x} ("):
                     z = f"{z} {{{{Ab|{a}}}}}"
                     break
-        final.append([z, prep_date(d), i.index, fix_numbers(z), ("German" in z or i.target in GERMAN_MAPPING) if key == "Audiobooks" else False])
+        final.append([z, prep_date(d), i.index, fix_numbers(z), False])
 
     start_date = DATES.get(page.title())
     section = None
@@ -618,10 +620,6 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
                 if not section:
                     section = "Abridged"
                     lines.append("\n==Abridged==")
-            elif key == "Audiobooks" and "German" in txt:
-                if not section:
-                    section = "German"
-                    lines.append("\n==German==")
             elif d.startswith("1") or d.startswith("2"):
                 if post_found:
                     pass
@@ -629,7 +627,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
                     start_date = None
                     section = d[:4]
                     lines.append(f"\n=={section}==")
-                elif start_date and (not section or section == "Abridged" or section == "German"):
+                elif start_date and (not section or section == "Abridged"):
                     section = f"Pre-{start_date}"
                     lines.append(f"=={section}==")
                 elif not start_date and d[:4] != section:

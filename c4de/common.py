@@ -1,4 +1,6 @@
 import re
+import time
+
 import requests
 import traceback
 from json import JSONDecodeError
@@ -26,9 +28,17 @@ def log(text, *args):
     print(f"[{datetime.now().isoformat()}] {text}", *args)
 
 
-def error_log(text, *args):
+ERROR_SKIP = ["RemoteDisconnected", "ConnectionError", "ReadTimeout"]
+
+
+def error_log(text, *args, tb=True):
+    if any((e if isinstance(e, str) else str(e)) in text for e in ERROR_SKIP):
+        log(f"ERROR: {text}")
+        return
+
     log(f"ERROR: {text}", *args)
-    traceback.print_exc()
+    if tb:
+        traceback.print_exc()
 
 
 def to_duration(now):
@@ -448,20 +458,31 @@ def build_analysis_response(site, nom_type):
     return lines
 
 
-def archive_url(url, force_new=False, timeout=30, enabled=True):
+def archive_url(url, force_new=False, timeout=30, enabled=True, skip=False, start=None):
     if not enabled:
         return False, "Wayback Machine is currently read-only"
 
     if not force_new:
         try:
-            r = requests.get(f"https://web.archive.org/web/{url}", timeout=30)
+            x = f"{start}/" if start else ""
+            r = requests.get(f"https://web.archive.org/web/{x}{url}", timeout=timeout)
             if re.search("/web/([0-9]+)/", r.url):
-                log(f"URL is archived already: {url}")
-                return True, r.url.split("/web/", 1)[1].split("/", 1)[0]
-        except (TimeoutError, ConnectionError, requests.exceptions.ConnectionError, urllib3.exceptions.MaxRetryError):
+                z = r.url.split("/web/", 1)[1].split("/", 1)[0]
+                if z != start:
+                    log(f"URL is archived already: {z} -> {url}")
+                    return True, r.url.split("/web/", 1)[1].split("/", 1)[0]
+            else:
+                log(f"No archive has been recorded for {url}")
+                if skip:
+                    return False, "No archive has been recorded for this site"
+        except (TimeoutError, ConnectionError, requests.exceptions.ReadTimeout, requests.exceptions.ConnectionError, urllib3.exceptions.MaxRetryError):
             log(f"ERROR: Timeout/connection error while attempting to archive {url}")
+            time.sleep(15)
         except Exception as e:
             error_log(url, type(e), e)
+
+    if skip:
+        return False, "Skipping archive for initial reporting"
 
     err_msg = None
     try:

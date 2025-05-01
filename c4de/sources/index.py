@@ -18,6 +18,8 @@ def build_alternate(i: ItemId):
     x.canon_index = i.master.canon_index
     x.legends_index = i.master.legends_index
     x.extra = i.current.extra
+    i.current.original = i.master.original.replace(f"|site_url={i.master.special}", "").replace(f"|sw_url={i.master.special}", "")
+    i.use_original_text = True
     return ItemId(x, x, False, False)
 
 
@@ -48,6 +50,17 @@ def prepare_results(results: AnalysisResults) -> Tuple[List[ItemId], List[ItemId
                 missing.append(ItemId(i, i, False))
 
     return found, missing
+
+
+def prepare_ordered_list(results: AnalysisResults):
+    found, missing = prepare_results(results)
+    found = sorted(found, key=lambda a: (a.master.date, a.master.mode == "DB", a.master.sort_index(results.canon), a.sort_text()))
+    found += missing
+
+    by_date = []
+    for item in found:
+        by_date.append(f"#{item.master.date}: {item.master.original}")
+    return by_date
 
 
 def add_link(d, links: set):

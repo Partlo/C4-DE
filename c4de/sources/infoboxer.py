@@ -231,42 +231,57 @@ REMAP = {
 }
 
 
-def handle_infobox_on_page(text, page: Page, all_infoboxes, log=True):
+def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None, add=False):
     extract = True
 
     data, pre, post, on_own_line, found, scroll_box = parse_infobox(text, all_infoboxes)
     if scroll_box:
         print(f"Scroll box found in infobox; cannot parse {page.title()}")
         return text, found
+    if not found and add and template:
+        if template.lower() not in all_infoboxes:
+            return text, found
+        data = {}
+        ix = 0
+        for i, ln in enumerate(pre):
+            if not ln.startswith("{{") and not ln.startswith("{{Quote") and not ln.startswith("{{Dialogue"):
+                ix = i
+                break
+        post = pre[ix + 1:]
+        pre = pre[0:ix + 1]
+        found = template
+
     if not found or found.lower() not in all_infoboxes:
-        if log:
-            print(f"ERROR: no infobox found, or infobox below body text; cannot parse {page.title()}")
+        print(f"ERROR: no infobox found, or infobox below body text; cannot parse {page.title()}")
         return text, None
     elif found.lower().startswith("year"):
         return text, found
 
+    if template and template.lower() in all_infoboxes and template != found:
+        print(f"Converting {found} template to {template}")
+        found = template
+
     infobox = all_infoboxes.get(found.lower())
     if not infobox:
-        if log:
-            print(f"ERROR: no infobox found for {found} on {page.title()}")
+        print(f"ERROR: no infobox found for {found} on {page.title()}")
         return text
     if "pronouns" not in data:
         r = re.search("Category:Individuals with (.*?) pronous", text)
         data["pronouns"] = r.group(1) if r else ""
 
+    extra = [k for k in infobox.optional if k not in infobox.params]
+    params = [*extra, *infobox.params]
     i = -1
-    for f in infobox.params:
+    for f in params:
         i += 1
         v = data.get(f)
         if not v or v == "new":
-            if f == "not_appearance":
-                continue
             if f == "title":
                 v = data.get("name") or page.title()
             if f in REMAP.keys():
                 # if data.get(REMAP[f]) != "new":
                 v = data.get(REMAP[f]) or v
-            elif f in REMAP.values():
+            if f in REMAP.values() and not v:
                 # x = [k for k, v in REMAP.items() if v == f and data.get(k) and data.get(k) != "new"]
                 x = [k for k, v in REMAP.items() if v == f and data.get(k)]
                 v = data.get(x[0] if x else '') or v
@@ -275,7 +290,7 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, log=True):
                               text)
                 if x:
                     v = x.group(3)
-            if f == "published in" and found.lower().replace("_", " ") != "iu media":
+            if f == "published in" and not v and found.lower().replace("_", " ") != "iu media":
                 v = data.get("issue") or ''
                 if re.search("\[\[(.*?) ([0-9]+)\|\\2( of .*?)?]]", v):
                     v = re.sub("\[\[(.*?) ([0-9]+)\|\\2( of .*?)?]]", "[[\\1 \\2|''\\1'' \\2]]", v)
@@ -289,7 +304,7 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, log=True):
                             text)
                     if x:
                         v = x.groupdict()['t']
-            if f in infobox.optional and f not in data and not v and f not in ["reprinted in"]:
+            if f in infobox.optional and f not in data and not v:
                 continue
             elif f in infobox.combo and f not in data and not v and any(i in data for i in infobox.groups[infobox.combo[f]] if i != f):
                 continue
@@ -305,15 +320,15 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, log=True):
                 data["release date"] = extract_date(parent.get())
 
     current = found.replace(" ", "_") if "{{" + found.lower().replace(" ", "_") in text.lower() else found
-    new_infobox = ["{{" + current]
+    new_infobox = ["{{" + current.replace(" ", "_")]
     i = -1
-    for f in infobox.params:
+    for f in params:
         i += 1
         v = data.get(f)
-        if v and (i + 1) < len(infobox.params) and f"|{infobox.params[i + 1]}=" in v and infobox.params[i + 1] not in data:
-            print(f"Separating {f} line from {infobox.params[i + 1]}")
-            v, x = v.split(f"|{infobox.params[i + 1]}=", 1)
-            data[infobox.params[i + 1]] = x
+        if v and (i + 1) < len(params) and f"|{params[i + 1]}=" in v and not data.get(params[i + 1]):
+            print(f"Separating {f} line from {params[i + 1]}")
+            v, x = v.split(f"|{params[i + 1]}=", 1)
+            data[params[i + 1]] = x
 
         if f in infobox.combo and not v and any(i in data for i in infobox.groups[infobox.combo[f]] if i != f):
             continue
@@ -328,6 +343,10 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, log=True):
         #     new_infobox[-1] += "}}"
 
     new_text = "\n".join([*pre, *new_infobox, *post])
+    original = page.get()
+    if "no_image=1" in original:
+        new_text = new_text.replace("|image=\n", "|no_image=1\n")
+
     if new_text.replace("\n}}", "}}") != page.get().replace("\n}}", "}}"):
         print(f"Found changes for {found} infobox")
     return "\n".join([*pre, *new_infobox, *post]), found.lower() if found else None

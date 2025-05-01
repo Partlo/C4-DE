@@ -5,12 +5,12 @@ from pywikibot import Page
 from typing import List, Tuple, Union, Dict, Optional
 
 from c4de.common import is_redirect
-from c4de.sources.parsing import BY_INDEX, BY_DATE, UNCHANGED, is_number, is_official_link, build_card_text, \
+from c4de.sources.parsing import BY_INDEX, BY_DATE, UNCHANGED, is_official_link, build_card_text, \
     build_initial_components, build_page_components, is_official_product_page
 from c4de.sources.determine import determine_id_for_item
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, AnalysisResults, \
     SectionItemIds, FinishedSection, NewComponents, UnknownItems
-from c4de.sources.engine import AUDIOBOOK_MAPPING, GERMAN_MAPPING, SERIES_MAPPING, EXPANSION, MANGA, LIST_AT_START
+from c4de.sources.engine import AUDIOBOOK_MAPPING, MANGA, LIST_AT_START, LIST_AT_END
 from c4de.sources.external import is_external_link, prepare_basic_url, prepare_official_link, determine_link_order
 from c4de.sources.extract import swap_parameters
 
@@ -109,7 +109,7 @@ def find_matching_audiobook(a: ItemId, existing: list, appearances: FullListData
         z = a.master.target
     elif a.master.target.endswith(")") and not a.master.target.endswith("webcomic)"):
         z = a.master.target.rsplit("(", 1)[0].strip()
-    elif a.master.parent in AUDIOBOOK_MAPPING or a.master.parent in GERMAN_MAPPING:
+    elif a.master.parent in AUDIOBOOK_MAPPING:
         z = a.master.parent
 
     if not z:
@@ -118,8 +118,8 @@ def find_matching_audiobook(a: ItemId, existing: list, appearances: FullListData
     results = []
     if z in AUDIOBOOK_MAPPING:
         to_check = [AUDIOBOOK_MAPPING[z]]
-    elif z in GERMAN_MAPPING:
-        to_check = [GERMAN_MAPPING[z]]
+    # elif z in GERMAN_MAPPING:
+    #     to_check = [GERMAN_MAPPING[z]]
     else:
         to_check = [f"{z} (audiobook)", f"{z} (unabridged audiobook)", f"{z} (abridged audiobook)", f"{z} (script)",
                     f"{z} (audio)", f" (audio drama)", f" (German audio drama)"]
@@ -145,14 +145,16 @@ def find_matching_parent_audiobook(a: ItemId, existing: list, appearances: FullL
         z = a.master.parent
     elif a.master.parent.endswith(")"):
         z = a.master.parent.rsplit("(", 1)[0].strip()
-    elif a.master.parent in AUDIOBOOK_MAPPING or a.master.parent in GERMAN_MAPPING:
+    # elif a.master.parent in AUDIOBOOK_MAPPING or a.master.parent in GERMAN_MAPPING:
+    elif a.master.parent in AUDIOBOOK_MAPPING:
         z = a.master.parent
 
     if not z:
         return []
 
     results = []
-    audiobook_name = AUDIOBOOK_MAPPING.get(z, f"{z} (audiobook)") or GERMAN_MAPPING.get(z, f"{z}")
+    audiobook_name = AUDIOBOOK_MAPPING.get(z, f"{z} (audiobook)")
+    # audiobook_name = AUDIOBOOK_MAPPING.get(z, f"{z} (audiobook)") or GERMAN_MAPPING.get(z, f"{z}")
     if z and a.master.target in appearances.target:
         for t in appearances.target[a.master.target]:
             if t.parent == audiobook_name and f"{a.master.target}|{audiobook_name}" not in existing:
@@ -368,8 +370,8 @@ def _cards() -> Dict[str, List[ItemId]]:
     return {}
 
 
-def should_expand(t):
-    return t and (t in SERIES_MAPPING or t in EXPANSION)  # and not ("Crimson Empire" in t or "Dark Empire" in t)
+# def should_expand(t):
+#     return t and (t in SERIES_MAPPING or t in EXPANSION)  # and not ("Crimson Empire" in t or "Dark Empire" in t)
 
 
 def add_to_list(items, key, item):
@@ -400,7 +402,6 @@ def build_item_ids_for_section(page: Page, real, name, original: List[Item], dat
     any_expanded = []
     unexpanded = 0
     other_extra = False
-    is_time_or_year = "SeriesListing" in page.get() and any(c.title(with_ns=False) == "Time periods" or c.title().startswith("Years in ") for c in page.categories())
     for i, o in enumerate(original):
         o.index = i
         d = determine_id_for_item(o, page, data.unique, data.target, other.unique, other.target, remap, canon, log)
@@ -420,52 +421,35 @@ def build_item_ids_for_section(page: Page, real, name, original: List[Item], dat
             wrong.append(d)
             continue
 
-        if d and should_expand(d.master.target):
+        if d and d.master.target and d.master.target.replace(" (trade paperback)", "") in MANGA:
             if not page_links:
                 for p in page.getReferences(namespaces=0):
                     if p.title() in TEMP_REMAP:
                         if TEMP_REMAP[p.title()] not in page_links:
                             page_links.append(TEMP_REMAP[p.title()])
-                        continue
                     page_links.append(p.title())
 
-            found_issues = []
-            if d.master.target in MANGA:
+            expanded = 0
+            if d.master.target.replace(" (trade paperback)", "") in MANGA:
                 for vol, parts in MANGA[d.master.target].items():
                     if any(p in page_links for p in parts):
-                        found_issues.append(vol)
-            else:
-                if d.master.target in EXPANSION:
-                    issues = EXPANSION[d.master.target]
-                else:
-                    n, i1, i2 = SERIES_MAPPING[d.master.target]
-                    issues = [f"{n} {i}" for i in range(i1, i2 + 1)]
-
-                for p in (issues if is_time_or_year else page_links):
-                    if p in issues and p not in data.target:
-                        print(f"ERROR: {p} not in target mapping")
-                    elif p in issues:
-                        found_issues.append(p)
-
-            expanded = 0
-            for p in found_issues:
-                x = data.target[p][0].copy()
-                x.index = o.index
-                x.extra = o.extra
-                x.expanded = True
-                if expanded:
-                    x.extra = re.sub("\{\{1stm.*?}}", "{{Mo}}", x.extra).strip()
-                    x.extra = re.sub("\{\{1st.*?}}", "", x.extra).strip()
-                x.extra_date = o.extra_date
-                expanded += 1
-                any_expanded.append(ItemId(x, data.target[p][0], False))
+                        x = data.target[vol][0].copy()
+                        x.index = o.index
+                        x.extra = o.extra
+                        x.expanded = True
+                        if expanded:
+                            x.extra = re.sub("\{\{1stm.*?}}", "{{Mo}}", x.extra).strip()
+                            x.extra = re.sub("\{\{1st.*?}}", "", x.extra).strip()
+                        x.extra_date = o.extra_date
+                        expanded += 1
+                        any_expanded.append(ItemId(x, data.target[vol][0], False))
             if expanded:
                 print(f"Expanded series/arc listing of {d.master.target} to {expanded} issues")
                 continue
             else:
                 print(f"Unable to expand series/arc listing of {d.master.target} on {page.title()}")
                 unexpanded += 1
-        elif d and d.master.from_extra and not d.master.reprint and d.master.target not in SERIES_MAPPING and d.master.target not in EXPANSION and not d.master.non_canon and not d.master.collection_type:
+        elif d and d.master.from_extra and not d.master.reprint and not d.master.non_canon and not d.master.collection_type:
             other_extra = True
 
         if d and (o.template == FC or o.target == "Star Wars: Force Collection"):
@@ -495,13 +479,13 @@ def build_item_ids_for_section(page: Page, real, name, original: List[Item], dat
         elif d and d.from_other_data and "databank" not in (o.extra or '').lower() \
                 and d.current.template not in DO_NOT_MOVE \
                 and d.current.target != 'Star Wars: Datapad (Galactic Starcruiser)'\
-                and not real and (d.master.reprint or d.master.target in SERIES_MAPPING or d.master.target in EXPANSION or not d.master.from_extra):
+                and not real and (d.master.reprint or not d.master.from_extra):
             if log:
                 print(f"({name}) Listed in wrong section: {o.original} -> {d.master.is_appearance} {d.master.full_id()}")
             wrong.append(d)
-        elif d and not real and d.master.german_ad:
-            found.append(d)
-        elif d and not real and d.master.audiobook and not d.master.abridged and collapse_audiobooks:
+        # elif d and not real and d.master.german_ad:
+        #     found.append(d)
+        elif d and not real and d.master.is_audiobook and not d.master.abridged and collapse_audiobooks:
             continue    # ignore audiobooks
         elif d and not real and d.master.non_canon and not name.startswith("Non-canon") \
                 and d.master.target != "Star Tours: The Adventures Continue" and not page.title().endswith("/LEGO"):
@@ -939,8 +923,6 @@ def build_flags(o: ItemId, sl, section_name, is_file=False):
             return ""
         elif o.master.collection_type == "DVD":
             return ""
-        elif sl and not o.master.non_canon and o.master.target not in SERIES_MAPPING and o.master.target not in EXPANSION:
-            return f"{{{{SeriesListing|l=2}}}} "
         else:
             return f"{{{{SeriesListing{sl}}}}} "
     elif o.current.unknown or o.master.unknown:
@@ -1054,41 +1036,38 @@ def compile_found(section: SectionItemIds, mode, canon):
             u = f"{o.current.template}|{o.current.url}"
             if "|oldversion=" in o.current.original:
                 u += re.search("(\|oldversion=.*?)(\||}|$)", o.current.original).group(1)
-            if u in urls:
+            if u == "TORweb|holonet/galactic history":
+                pass
+            elif u in urls:
                 print(f"Skipping duplicate entry: {u}")
             else:
                 urls[u] = o
 
-        if mode == BY_INDEX:
-            if section.is_appearances and o.master.timeline_index(canon) is None:
-                group.append(o)
-            elif not section.is_appearances and o.master.index is None:
-                group.append(o)
-            else:
-                new_found.append(o)
-                if group:
-                    missing.append((previous, group))
-                    group = []
-                previous = o
-        elif o.current.old_version or (o.current.template == "TCWA" and mode == BY_DATE):
+        if should_group(section, mode, o, canon):
             group.append(o)
-        elif o.current.override and not o.current.override_date:
-            group.append(o)
-        elif o.master.has_date():
-            if o.current.index is None and "audiobook" not in o.master.original and "(audio)" not in o.master.original\
-                    and "(audio drama)" not in o.master.original:
-                print(f"No index? {o.current.original}, {o.master.original}")
+        else:
             new_found.append(o)
             if group:
                 missing.append((previous, group))
                 group = []
             previous = o
-        else:
-            group.append(o)
     if group:
         missing.append((previous, group))
 
     return new_found, group, missing, source_names
+
+
+def should_group(section, mode, o, canon):
+    if mode == BY_INDEX and section.is_appearances:
+        return (o.master.timeline_index(canon) if section.is_appearances else o.master.index) is None
+    elif o.current.old_version or (o.current.override and not o.current.override_date):
+        return True
+    elif o.master.has_date():
+        if o.current.index is None and "audiobook" not in o.master.original and "(audio)" not in o.master.original \
+                and "(audio drama)" not in o.master.original:
+            print(f"No index? {o.current.original}, {o.master.original}")
+        return False
+    return True
 
 
 def handle_sorting(mode, new_found: List[ItemId], missing: List[Tuple[ItemId, List[ItemId]]], canon: bool, use_index: bool, log: bool):
@@ -1107,7 +1086,7 @@ def handle_sorting(mode, new_found: List[ItemId], missing: List[Tuple[ItemId, Li
             results += items
         return results
 
-    start, special, jtc, end = [], [], [], []
+    start, special, end = [], [], []
     for previous, items in missing:
         try:
             index = found.index(previous)
@@ -1116,10 +1095,8 @@ def handle_sorting(mode, new_found: List[ItemId], missing: List[Tuple[ItemId, Li
 
         z = 0
         for m in items:
-            if m.master.date == "Canceled" or m.current.target == "Star Wars: Galaxy of Heroes":
+            if m.master.date == "Canceled" or m.current.target in LIST_AT_END:
                 end.append(m)
-            elif m.current.template == "JTC":
-                jtc.append(m)
             elif m.current.target in LIST_AT_START:
                 special.append(m)
             elif previous is None:
@@ -1133,8 +1110,6 @@ def handle_sorting(mode, new_found: List[ItemId], missing: List[Tuple[ItemId, Li
                 found.insert(index + z, m)
     if special:
         start = sorted(special, key=lambda a: a.master.original) + start
-    if jtc:
-        start += jtc
 
     return start + found + end
 

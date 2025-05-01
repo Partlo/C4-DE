@@ -1,3 +1,4 @@
+import time
 from typing import Dict, List
 import xml.etree.ElementTree as ET
 import feedparser
@@ -315,7 +316,7 @@ def check_blog_list(site, url, feed_url, cache: Dict[str, List[str]]):
     try:
         x = requests.get(feed_url, timeout=15).text
     except Exception as e:
-        error_log(e)
+        error_log(type(e))
     if not x:
         return []
 
@@ -350,7 +351,7 @@ def check_unlimited(site, url, feed_url, cache: Dict[str, List[str]]):
     try:
         x = requests.get(feed_url, timeout=15).json()
     except Exception as e:
-        error_log(e)
+        error_log(type(e))
     if not (x and x.get('data')):
         print(f"No response from Unlimited: {feed_url} --> {x}")
         return []
@@ -387,7 +388,7 @@ def check_hunters_news(site, url, feed_url, cache: Dict[str, List[str]]):
     try:
         x = requests.get(feed_url, timeout=15).text
     except Exception as e:
-        error_log(e)
+        error_log(type(e))
     if not x:
         return []
 
@@ -425,7 +426,7 @@ def check_ea_news(site, url, feed_url, cache: Dict[str, List[str]]):
     try:
         x = requests.get(feed_url, timeout=15).text
     except Exception as e:
-        error_log(e)
+        error_log(type(e))
     if not x:
         return []
 
@@ -462,7 +463,7 @@ def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, che
     try:
         x = requests.get(feed_url, timeout=15).text
     except Exception as e:
-        error_log(e)
+        error_log(type(e))
     if not x:
         return []
 
@@ -700,30 +701,39 @@ def build_site_map(full: bool):
     results = set()
     for e in directory:
         for i in e.findall(f'{t}loc'):
-            part = ET.fromstring(requests.get(i.text).text)
-            for u in part.findall(f"{t}url"):
-                for loc in u.findall(f"{t}loc"):
-                    if full:
-                        results.add(loc.text.split("starwars.com/", 1)[-1])
-                        continue
+            try:
+                try:
+                    m = requests.get(i.text)
+                except Exception:
+                    time.sleep(2)
+                    m = requests.get(i.text)
 
-                    if any(loc.text.endswith(f".com/{s}") for s in SKIPS):
-                        continue
-                    elif any(loc.text.endswith(f".com/{s}") for s in FULL_SKIP):
-                        continue
-                    elif any(s in loc.text for s in PREFIXES):
-                        continue
-                    elif any(s in loc.text for s in GALLERIES):
-                        continue
-                    elif "/series/" in loc.text and re.match(".*?/series/[a-z0-9-]+$", loc.text):
-                        continue
-                    elif "/archived-201" in loc.text or "/archived-202" in loc.text:
-                        continue
-                    elif "/databank/" in loc.text and re.search("/databank/[a-z0-9-]+-all", loc.text):
-                        continue
-                    elif loc.text.endswith("-gallery") or loc.text.endswith("news/contributor"):
-                        continue
-                    results.add(loc.text.split("starwars.com/", 1)[-1])
+                part = ET.fromstring(m.text)
+                for u in part.findall(f"{t}url"):
+                    for loc in u.findall(f"{t}loc"):
+                        if full:
+                            results.add(loc.text.split("starwars.com/", 1)[-1])
+                            continue
+
+                        if any(loc.text.endswith(f".com/{s}") for s in SKIPS):
+                            continue
+                        elif any(loc.text.endswith(f".com/{s}") for s in FULL_SKIP):
+                            continue
+                        elif any(s in loc.text for s in PREFIXES):
+                            continue
+                        elif any(s in loc.text for s in GALLERIES):
+                            continue
+                        elif "/series/" in loc.text and re.match(".*?/series/[a-z0-9-]+$", loc.text):
+                            continue
+                        elif "/archived-201" in loc.text or "/archived-202" in loc.text:
+                            continue
+                        elif "/databank/" in loc.text and re.search("/databank/[a-z0-9-]+-all", loc.text):
+                            continue
+                        elif loc.text.endswith("-gallery") or loc.text.endswith("news/contributor"):
+                            continue
+                        results.add(loc.text.split("starwars.com/", 1)[-1])
+            except Exception as e:
+                error_log(f"Encountered {str(type(e))} while checking {i.text}", tb=False)
     return results
 
 

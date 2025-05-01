@@ -44,8 +44,8 @@ def archive_senate_hall_thread(site, page: Page, offset):
 def remove_spoiler_tags_from_page(site, page, tv_dates, tv_default, limit=30, offset=5):
     text = page.get()
 
-    text = re.sub("(\{\{(Movie|Show|TV)?[Ss]poiler\|([^\n]+?)\}\})\{\{", "\\1{{", text)
-    line = re.search("\n\{\{(Movie|Show|TV)?[Ss]poiler\|(.*?)\}\}.*?\n", text)
+    text = re.sub("(\{\{(Movie|Show|TV)?[Ss]poiler\|([^\n]+?)}})\{\{", "\\1{{", text)
+    line = re.search("\n\{\{(Movie|Show|TV)?[Ss]poiler\|(.*?)}}.*?\n", text)
     if not line:
         print(f"Cannot find spoiler tag on {page.title()}")
         return "no-tag"
@@ -142,7 +142,7 @@ def remove_expired_tv_spoiler(text, fields: list, named: dict, tv_dates: dict, t
     show = named.get("show", tv_default)
     while i < len(fields):
         f1 = fields[i]
-        release_date = datetime.strptime(tv_dates[show][int(f1)], "%Y-%m-%d")
+        release_date = datetime.strptime(tv_dates[show][f1], "%Y-%m-%d")
         if release_date and release_date < now:
             log(f"{f1} has a spoiler expiration date of {release_date}; removing from template")
             i += 2
@@ -159,7 +159,7 @@ def remove_expired_tv_spoiler(text, fields: list, named: dict, tv_dates: dict, t
         i += 2
 
     if not fields_to_keep:
-        return "no-fields", re.sub("\{\{TVspoiler.*?\}\}.*?\n", "", text)
+        return "no-fields", re.sub("\{\{TVspoiler.*?}}.*?\n", "", text)
 
     new_text = "|".join(fields_to_keep)
     for q in quotes_to_keep:
@@ -170,7 +170,7 @@ def remove_expired_tv_spoiler(text, fields: list, named: dict, tv_dates: dict, t
         new_time = (min(release_dates) + timedelta(days=limit)).strftime("%Y-%m-%d")
 
     new_text = "{{TVspoiler|" + new_text + "}}\n"
-    return new_time, re.sub("\{\{TVspoiler\|.*?\}\}.*?\n", new_text, text)
+    return new_time, re.sub("\{\{TVspoiler\|.*?}}.*?\n", new_text, text)
 
 
 def extract_release_date(site, name, limit):
@@ -415,19 +415,6 @@ def clean_up_archive_dates(site, t=None):
 MAINTENANCE_CATS = ["High-priority template and page issues", "Low-priority template and page issues",
                     "ArchiveAccess tracking categories", "Tracking maintenance categories"]
 ARCHIVEDATE_CATS = ["Custom archivedate usages", "Same archivedate usages", "Unarchived URLs"]
-MAINSPACE_ONLY = ["Pages with broken file links"]
-
-
-def is_empty_maintenance_category(c: Category):
-    if c.isEmptyCategory():
-        return True
-    elif c.title(with_ns=False) in MAINSPACE_ONLY:
-        return len(list(c.articles(namespaces=0, total=5))) == 0
-    else:
-        for p in c.articles():
-            if p.namespace().id != 2 and p.namespace().id % 2 == 0:
-                return False
-    return True
 
 
 def mark_as_empty(text):
@@ -452,7 +439,7 @@ def clean_up_archive_categories(site):
             if c.title() in done or c.title().endswith("/Empty"):
                 continue
             done.append(c.title())
-            if not is_empty_maintenance_category(c):
+            if not c.isEmptyCategory():
                 text = mark_as_non_empty(c.get())
                 if text != c.get():
                     c.put(text, "Marking as non-empty")
@@ -461,7 +448,7 @@ def clean_up_archive_categories(site):
             if c.title() in done or c.title().endswith("/Empty"):
                 continue
             done.append(c.title())
-            if is_empty_maintenance_category(c):
+            if c.isEmptyCategory():
                 text = mark_as_empty(c.get())
                 if text != c.get():
                     c.put(text, "Marking as empty")

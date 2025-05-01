@@ -321,7 +321,7 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
     new_txt = re.sub("(\{\{DEFAULTSORT:.*?}})\n\n+\[\[[Cc]ategory", "\\1\n[[Category", new_txt)
     new_txt = re.sub("(?<![\n=}])\n==", "\n\n==", re.sub("\n\n+", "\n\n", new_txt)).strip()
     new_txt = re.sub("(stub|Endgame)}}\n==", "\\1}}\n\n==", new_txt)
-    new_txt = new_txt.replace("\n\n}}", "\n}}").replace("{{Shortstory|", "{{StoryCite|").replace("\n\n{{More", "\n{{More")
+    new_txt = new_txt.replace("\n\n}}", "\n}}").replace("\n\n{{More", "\n{{More")
 
     # print(f"rebuild: {(datetime.now() - now).microseconds / 1000} microseconds")
     replace = True
@@ -426,10 +426,10 @@ def build_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appe
 
 def build_new_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appearances: FullListData,
                    sources: FullListData, bad_cats: list, remap: dict, include_date: bool, checked: list, log=True,
-                   use_index=True, collapse_audiobooks=True, manual: str = None, extra=None):
+                   use_index=True, collapse_audiobooks=True, manual: str = None, extra=None, keep_pages=False):
     new_txt, analysis, unknown, unknown_items = build_text(
         target, infoboxes, types, disambigs, appearances, sources, bad_cats, remap, include_date, checked, log,
-        use_index, collapse_audiobooks, manual, extra, keep_pages=False)
+        use_index, collapse_audiobooks, manual, extra, keep_pages=keep_pages)
 
     record_local_unknown(unknown, unknown_items, target)
     return new_txt

@@ -78,7 +78,7 @@ def remove(s, x: list):
 
 
 def match_header(header: str, infobox):
-    i = infobox.replace("_", " ").lower()
+    i = (infobox or '').replace("_", " ").lower()
     h = header.lower().strip().replace("'", "").replace("-", " ")
     if i == "book series" and h == "novels":
         return "Contents"
