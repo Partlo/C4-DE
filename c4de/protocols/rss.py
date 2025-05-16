@@ -14,10 +14,8 @@ from c4de.common import error_log, log
 
 
 FEED_URLS = [
-    "https://starwars.fandom.com/wiki/Special:NewPages?feed=rss&namespace=4",
-    "https://starwars.fandom.com/wiki/Special:NewPages?feed=rss&namespace=100",
-    "https://community.fandom.com/wiki/Special:NewPages?feed=rss&namespace=500",
-    "https://starwars.fandom.com/wiki/Special:RecentChanges?feed=rss"
+    "https://starwars.fandom.com/wiki/Special:NewPages?feed=rss&offset=&limit=25&namespace=100",
+    "https://community.fandom.com/wiki/Special:NewPages?feed=rss&offset=&limit=25&namespace=500"
 ]
 
 ANNOUNCEMENTS = "announcements"
@@ -30,38 +28,26 @@ def fix_title(title: str):
     return title
 
 
-def check_new_pages_rss_feed(site, url, cache: Dict[str, List[str]]):
+def check_new_pages_rss_feed(url, cache: Dict[str, List[str]]):
     d = feedparser.parse(url)
-    is_new = "NewPages" in url
 
     entries_to_report = []
     for e in d.entries:
         try:
             pt, ch, message, z = None, None, None, None
-            if is_new:
-                if e.title.startswith("Forum:SH:"):
-                    pt, ch, message = "Senate Hall", ANNOUNCEMENTS, f"📣 **New Senate Hall thread**: [{fix_title(e.title)}](<{e.link}>)"
-                elif e.title.startswith("Forum:NB:"):
-                    pt, ch, message = "Administrator's Noticeboard", ANNOUNCEMENTS, f"📢 **New Administrators' noticeboard thread**: [{fix_title(e.title)}](<{e.link}>)"
-                elif e.title.startswith("Forum:CT:"):
-                    pt, ch, message = "Consensus Track", ANNOUNCEMENTS, f"📢 **New Consensus track vote**: [{fix_title(e.title)}](<{e.link}>)"
-                elif e.title.startswith("Forum:TC:") or e.title.startswith("Wookieepedia:Trash compactor"):
-                    pt, ch, message = "Trash Compactor", ANNOUNCEMENTS, f"🗑️ **New Trash Compactor thread**: [{fix_title(e.title)}](<{e.link}>)"
-                elif e.title.startswith("User blog:"):
-                    if "Category:Staff blogs" in e.description or "Category:Technical Updates" in e.description or "{{blog_footer}}" in e.description.lower() or "{{blog footer}}" in e.description.lower():
-                        pt, ch, message = "Fandom Blog", ANNOUNCEMENTS, f"<:fandom:872166055693393940>**New Fandom Staff blog post**\n<{e.link}>"
-            elif re.match("^<p>.*? deleted page.*?</p>", e.description):
-                continue
-            elif e.title.startswith("Wookieepedia:Trash compactor") and re.match("^<p>.*?delete.*?</p>", e.description.lower()):
-                continue
-            elif e.title.startswith("Forum:TC:") and re.match("^<p>.*?delete.*?</p>", e.description.lower()):
-                continue
-            # elif did_edit_add_deletion_template(site, e.title, e.description) or "<p>CSD</p>" in e.description or "<p>delete</p>" in e.description.lower():
-            #     pt, ch, message = "CSD", ADMIN_REQUESTS, f"❗ **{e.author}** requested deletion of [**{e.title}**](<{e.link}>)"
-            #     d = e.title
-            # elif re.match("^<p>.*?CSD.*?</p>", e.description) or re.match("^<p>.*?delete[^d].*?</p>", e.description.lower()):
-            #     pt, ch, message = "CSD", ADMIN_REQUESTS, f"❓ **{e.author}** used 'delete' or 'CSD' in edit summary on [**{e.title}**](<{e.link}>); may be false positive"
-            #     d = e.title
+            if e.title.startswith("Forum:SH:"):
+                pt, ch, message = "Senate Hall", ANNOUNCEMENTS, f"📣 **New Senate Hall thread**: [{fix_title(e.title)}](<{e.link}>)"
+            elif e.title.startswith("Forum:NB:"):
+                pt, ch, message = "Administrator's Noticeboard", ANNOUNCEMENTS, f"📢 **New Administrators' noticeboard thread**: [{fix_title(e.title)}](<{e.link}>)"
+            elif e.title.startswith("Forum:SMTNB:"):
+                pt, ch, message = "Social Media Team Noticeboard", ANNOUNCEMENTS, f"📢 **New Social Media Team noticeboard thread**: [{fix_title(e.title)}](<{e.link}>)"
+            elif e.title.startswith("Forum:CT:"):
+                pt, ch, message = "Consensus Track", ANNOUNCEMENTS, f"📢 **New Consensus track vote**: [{fix_title(e.title)}](<{e.link}>)"
+            elif e.title.startswith("Forum:TC:"):
+                pt, ch, message = "Trash Compactor", ANNOUNCEMENTS, f"🗑️ **New Trash Compactor thread**: [{fix_title(e.title)}](<{e.link}>)"
+            elif e.title.startswith("User blog:"):
+                if "Category:Staff blogs" in e.description or "Category:Technical Updates" in e.description or "{{blog_footer}}" in e.description.lower() or "{{blog footer}}" in e.description.lower():
+                    pt, ch, message = "Fandom Blog", ANNOUNCEMENTS, f"<:fandom:872166055693393940>**New Fandom Staff blog post**\n<{e.link}>"
             else:
                 continue
 
@@ -134,7 +120,7 @@ def check_wookieepedia_feeds(site: Site, cache: Dict[str, List[str]]):
 
     for url in FEED_URLS:
         try:
-            entries = check_new_pages_rss_feed(site, url, cache)
+            entries = check_new_pages_rss_feed(url, cache)
             for cm in entries:
                 messages.append(cm)
         except Exception as e:
@@ -594,7 +580,7 @@ def check_review_board_nominations(site: Site):
         if board not in noms:
             continue
 
-        for u in re.findall("====\{\{U\|(.*?)\}\}.*?====", section):
+        for u in re.findall("====\{\{U\|(.*?)}}.*?====", section):
             if u != "USERNAME":
                 noms[board].append(u)
 
@@ -606,7 +592,7 @@ def check_review_board_nominations(site: Site):
         if board not in interested:
             continue
 
-        for u in re.findall("(\[\[User:|{{U\|)(?P<user>.*?)(\|.*?)?(\]\]|\}\})", section):
+        for u in re.findall("(\[\[User:|{{U\|)(?P<user>.*?)(\|.*?)?(]]|}})", section):
             if u[1] != "USERNAME":
                 interested[board][u[1]] = datetime.now().strftime("%Y-%m-%d")
 
@@ -654,7 +640,7 @@ def check_policy(site: Site):
         else:
             if current not in updates:
                 updates[current] = []
-            match = re.search("'''CT:?''':?[ ]+\[\[(?P<link>.*?)\]\][ ]+.*?'''(?P<result>.*?)'''", line)
+            match = re.search("'''CT:?''':?[ ]+\[\[(?P<link>.*?)]][ ]+.*?'''(?P<result>.*?)'''", line)
             if match:
                 x = {k: v.replace("‎", "") for k, v in match.groupdict().items()}
                 updates[current].append(x)
@@ -885,7 +871,7 @@ def handle_site_map(sitemap: set, urls, skip, updated_db_entries, guides):
             title = title.replace("’", "'").replace('&#39;', "'").replace('&quot;', '"')
             s = "Databank" if x.startswith("databank/") else "StarWars.com"
             if s == "Databank" and ("- " in title or "|" in title):
-                title = re.sub(" ?[-\|] (The Acolyte|Star Wars Databank|Databank)", "", title)
+                title = re.sub(" ?[-|] (The Acolyte|Star Wars Databank|Databank)", "", title)
             if u in updated_db_entries:
                 updated_db_entries.pop(u)
             diff.append({"site": s, "url": u, "title": title, "date": datetime.now().strftime('%Y-%m-%d')})

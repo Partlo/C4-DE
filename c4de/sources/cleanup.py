@@ -51,6 +51,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, keep_page_num
     if not before:
         before = target.get(force=True)
     before = before.replace("\u202c", "")
+    before = re.sub("(\{\{WebCite[^\n}]*?)\|title=(.*?}})", "\\1|text=\\2", before)
     # print(f"retrieval: {(datetime.now() - now).microseconds / 1000} microseconds")
     if "]]{{" in before or "}}{{" in before:
         before = re.sub(
@@ -73,9 +74,9 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, keep_page_num
             before = before.replace(f"|title2={y}", "")
 
     # now = datetime.now()
-    infobox = None
+    infobox, original = None, None
     if all_infoboxes and not target.title().startswith("User:") and not target.title().startswith("File:"):
-        before, infobox = handle_infobox_on_page(before, target, all_infoboxes, False)
+        before, infobox, original = handle_infobox_on_page(before, target, all_infoboxes, add=False)
     # print(f"infobox: {(datetime.now() - now).microseconds / 1000} microseconds")
 
     # fixing bad references
@@ -87,9 +88,10 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, keep_page_num
     before = re.sub("<ref name ?=([^'\">]+?) ?>", "<ref name=\"\\1\">", before)
 
     before = re.sub("=+ ?([Rr]eferences?|[Nn]otes? (and )?[Rr]ef.*?) ?=+", "==Notes and references==", before)
-    before = re.sub("= ?([Cc]ollections?|Collected [Ii]n) ?=", "=Collections=", before)
+    before = re.sub("= ?([Cc]ollections?|Collected [Ii]n) ?=", "=Collected in=", before)
     before = re.sub("=+ ?'*Non-canon(ical)? ([Aa]ppearances|[Ss]ources)'* ?=+", "===Non-canon \\2===", before)
     before = re.sub("\n===(Merchandis(e|ing)(.*?)|Adaptations?|Tie[ -]ins?( media)?)===", "\n==Adaptations==", before)
+    before = re.sub("(\n===?.*?)<ref name=.*?(/>|</ref>)(.*?==+) ?\n", "\\1\\3\n", before)
     if "<references" in before.lower():
         before = re.sub("<[Rr]efe?rences ?/ ?>", "{{Reflist}}", before)
 
@@ -115,6 +117,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, keep_page_num
     before = re.sub("([*#]\{\{[^}\n]+)\n([^{\n]+}})", "\\1\\2", before)
     before = re.sub("\{\{([^\n{}\[]+?)]]", "{{\\1}}", before)
     before = re.sub("\*\{\{\{([A-Z])", "*{{\\1", before)
+    before = re.sub("(<ref( name=\".*?\")?>)\*", "\\1", before)
 
     before = re.sub("(\[\[[^\n\[{|]+)\|(an?) ([^\n|\[{]+?)]]", "\\2 \\1|\\3]]", before)
 
@@ -136,6 +139,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, keep_page_num
     # temp fixes
     before = re.sub("(\{\{([A-z _0-9]+)\|.*?}}) (\{\{1st[a-z]*)\|\{\{\\2.*?}}( \{.*?)?\n", "\\1 \\3}}\\4\n", before)
     before = re.sub("\{\{InsiderCite\|(1?[0-9]|2[012])\|", "{{LucasFanClubCite|\\1|", before)
+    before = re.sub(">'*\[\[(.*? (Magazine|Insider|Journal))]]'* ([0-9]+)(, pa?ge?.*?)?</ref>", ">[[\\1 \\3|''\\1'' \\3]]</ref>", before)
 
     while re.search("\[\[Category:[^\n|\]_]+_", before):
         before = re.sub("(\[\[Category:[^\n|\]_]+)_", "\\1 ", before)
@@ -161,7 +165,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, keep_page_num
     if "‎" in before:
         before = before.replace("‎", "")
         print(f"Found ‎ in {target.title()}")
-    return before, infobox
+    return before, infobox, original
 
 
 def clear_page_numbers(before):

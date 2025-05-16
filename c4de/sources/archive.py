@@ -55,7 +55,7 @@ def build_missing_and_new(page, types, archives, new_data, skip):
             if " " in t1:
                 text = text.replace("{{" + t1.replace(" ", "_") + "|", "{{" + t2 + "|")
             continue
-        if not tx.title().startswith("Template:") or tx.title(with_ns=False) in skip or tx.title(with_ns=False) == "YouTube":
+        if not tx.title().startswith("Template:") or tx.title(with_ns=False) in skip:
             continue
         actual.append(tx)
     for tx in actual:
@@ -73,10 +73,13 @@ def build_missing_and_new(page, types, archives, new_data, skip):
             skip.append(tx.title(with_ns=False))
             continue
         if youtube:
-            zx = [(i[0], i[4]) for i in re.findall("(\{\{" + template + "\|((channel|name|text|wplink|link|series)=.*?\|)*?(video=)?([^|\n}=]+?)(&t=.*?)?(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
+            zx = [(i[0], i[4]) for i in re.findall("(\{\{" + template + "\|((subdomain|channel|username|name|text|wplink|link|series|parameter)=.*?\|)*?(video=)?([^|\n}=]+?)([&?].*?)?(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
             for i in re.findall("(\{\{" + template + "\|(.*?\|)?channel=([^|\n}=]+?)(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text):
                 if "video=" not in i[0]:
                     zx.append((i[0], i[2]))
+            if not zx:
+                for z in re.findall("\{\{YouTube\|.*?}}", text):
+                    print(z)
         elif template == "Databank":
             zx = [(i[0], i[2]) for i in re.findall("(\{\{Databank\|(url=)?([^|\n}]+?)(\|.*?)(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
         else:
@@ -162,7 +165,6 @@ def handle_if_statement(ux):
     return result
 
 
-# TODO: handle baseUrl in toy template
 def build_to_check(site, data):
     to_check = {}
     for t, urls in data.items():
@@ -173,18 +175,39 @@ def build_to_check(site, data):
                     to_check[t][k] = f"https://www.youtube.com/watch?v={k}"
         else:
             tx = Page(site, f"Template:{t}").get()
-            y = re.search("\|base_url=(.*?)\n", tx)
-            z = re.search("\|target_url=(.*?)\{\{\{(url|1)", tx)
-            if y and z:
+            if "ToyCitation" in tx:
+                x = re.search("\|baseUrl=(.*?)\n", tx)
+                y = re.search("\|link=(.*?[^\]])\n", tx)
+                z = re.search("\|url=(.*?)\n", tx)
                 for k, v in urls.items():
-                    ux = y.group(1)
                     if not (v and v.get('value')):
+                        if "|link=" in v['full'] and x and y:
+                            ux = x.group(1) + "/" + y.group(1)
+                        elif z:
+                            ux = z.group(1)
+                        else:
+                            print(f"unknown: {t} -> {x}, {y}, {z}, {v['full']}")
+                            continue
+
                         for px in re.findall("\{\{\{(.*?)(?=[|}])", ux):
                             ux = handle_parameters(ux, v['full'], px)
-                        ux = handle_if_statement(ux)
-                        new_url = f"{ux}/{k}" if not (ux.endswith("/") or k.startswith("/")) else f"{ux}{k}"
+                            print(ux, px)
+                        new_url = handle_if_statement(ux)
                         print(k, new_url)
                         to_check[t][k] = new_url
+            else:
+                y = re.search("\|base_url=(.*?)\n", tx)
+                z = re.search("\|target_url=(.*?)\{\{\{(url|1)", tx)
+                if y and z:
+                    for k, v in urls.items():
+                        ux = y.group(1)
+                        if not (v and v.get('value')):
+                            for px in re.findall("\{\{\{(.*?)(?=[|}])", ux):
+                                ux = handle_parameters(ux, v['full'], px)
+                            ux = handle_if_statement(ux)
+                            new_url = f"{ux}/{k}" if not (ux.endswith("/") or k.startswith("/")) else f"{ux}{k}"
+                            print(k, new_url)
+                            to_check[t][k] = new_url
     return to_check
 
 

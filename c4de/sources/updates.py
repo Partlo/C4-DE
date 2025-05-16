@@ -6,72 +6,20 @@ import re
 from datetime import datetime
 from typing import List, Tuple, Dict
 
-from c4de.sources.engine import extract_item, FullListData, build_template_types
+from c4de.dates import extract_release_date, prep_date, build_date
+from c4de.sources.engine import extract_item, FullListData, load_template_types
+from c4de.sources.infoboxer import NEW_NAMES, load_infoboxes
 
 
-def list_all_infoboxes(site):
-    results = []
-    for p in Category(site, "Category:Infobox templates").articles(recurse=True):
-        if "/preload" in p.title():
-            continue
-        results.append(p.title(with_ns=False).lower().replace("_", " "))
-    return results
+SET_INFOBOXES = ["CardGame", "TabletopGame", "TradingCardSet", "ExpansionPack"]
+SOURCE_INFOBOXES = ["ActivityBook", "MagazineIssue", "ReferenceMagazine", "MagazineArticle", "MagazineDepartment",
+                    "Music", "ToyLine", "ReferenceBook", "WebArticle"]
+APP_INFOBOXES = ["ComicBook", "ComicStory", "VideoGame", "GraphicNovel", "Audiobook", "ShortStory", "TelevisionEpisode"]
+INFOBOX_SKIP = ["Character", "RealCompany", "Person", "WebArticle", "Website"]
+SERIES_SKIP = ["MagazineDepartment", "MagazineSeries"]
 
-
-def parse_date_string(d, title):
-    if d and d.lower() != "none" and d.lower() != "future" and d.lower() != "canceled":
-        t, z = None, None
-        for x, df in {"day": "%B %d %Y", "month": "%B %Y", "year": "%Y"}.items():
-            try:
-                z = datetime.strptime(d.strip(), df)
-                t = x
-                return t, z
-            except Exception:
-                pass
-        if not z:
-            print(f"Unrecognized date string on {title}: [{d}]")
-    return None, None
-
-
-def extract_release_date(title, text):
-    date_strs = []
-    m = re.search("\|(publish date|publication date|first aired|airdate|start date|first date|release date|released|published)=(?P<d1>.*?)(?P<r1><ref.*?)?\n(\*(?P<d2>.*?)(?P<r2><ref.*?)?\n)?(\*(?P<d3>.*?)(?P<r3><ref.*?)?\n)?", text)
-    if m:
-        for i in range(1, 4):
-            if m.groupdict()[f"d{i}"]:
-                d = m.groupdict()[f"d{i}"]
-                d = re.sub("\[\[([A-z]+)( [0-9]+)?\|[A-z]+\.?( [0-9]+)?]]", "\\1\\2", d).replace("c. ", "")
-                d = d.replace("[", "").replace("]", "").replace("*", "").strip().replace(',', '')
-                if "{{c|reprint" in d.lower() or "(reprint" in d.lower() or d.lower().startswith("cancel") or d.lower().startswith("future"):
-                    continue
-                d = re.sub("\{\{C\|.*?}}", "", d)
-                d = re.sub("([A-z]+ ?[0-9]*)(-|&[mn]dash;)([A-z]+ ?[0-9]*) ", "\\1 ", d)
-                d = re.sub("&[mn]dash; ?[A-z]+ [0-9|]+", "", d)
-                d = re.sub("\([A-Z]+\)", "", d)
-                d = re.sub("([A-z]+ ?[0-9]*) ([0-9]{4})( .*?)$", "\\1 \\2", d)
-                d = d.replace("Late ", "").replace("Early ", "")
-                d = re.sub("  +", " ", d)
-                d = d.split("<br")[0]
-                date_strs.append((d.split("-")[0], m.groupdict().get(f"r{i}")))
-
-    page_dates = []
-    for d, r in date_strs:
-        if d and d.lower() != "none" and d.lower() != "future" and d.lower() != "canceled":
-            t, z = parse_date_string(d, title)
-            if t and z:
-                page_dates.append((t, z, r))
-    return page_dates, date_strs
-
-
-SOURCE_INFOBOXES = ["activity book", "magazine", "magazine article", "magazine department", "music", "toy line",
-                    "reference book", "web article"]
-APP_INFOBOXES = ["comic book", "comic story", "video game", "graphic novel", "audiobook", "short story"]
-SERIES_INFOBOXES = ["comic series", "comic story arc", "book series", "television series", "television season"]
 APP_CATEGORIES = ["Future audiobooks", "Future films", "Future short stories", "Future novels",
                   "Future television episodes"]
-
-INFOBOX_SKIP = ["character", "oou company", "person", "web article", "website"]
-SERIES_SKIP = ["magazine department", "magazine series"]
 
 
 def determine_app_or_source(text, category, infobox):
@@ -79,17 +27,19 @@ def determine_app_or_source(text, category, infobox):
         return "Extra"
     elif "|is_appearance=1" in text:
         return "Appearances"
+    elif category == "Future trade paperbacks" or infobox == "ComicCollection" or ":Book collections" in text:
+        return "Collections"
+    elif "series" in infobox.lower() or "season" in infobox.lower() or infobox == "ComicArc":
+        return "Series"
+    elif infobox == "Soundtrack":
+        return "Soundtracks"
     elif infobox in INFOBOX_SKIP:
         return "SKIP"
-    elif category == "Future trade paperbacks" or infobox == "comic collection" or ":Book collections" in text:
-        return "Collections"
-    elif infobox.lower() == "card game" or infobox == "miniatures game":
+    elif infobox in SET_INFOBOXES:
         return "CardSets"
-    elif infobox.lower() in SERIES_INFOBOXES:
-        return "Series"
-    elif infobox.lower() in APP_INFOBOXES:
+    elif infobox in APP_INFOBOXES:
         return "Appearances"
-    elif infobox.lower() in SOURCE_INFOBOXES:
+    elif infobox in SOURCE_INFOBOXES:
         return "Sources"
     elif (category or "").replace("Category:", "") in APP_CATEGORIES:
         return "Appearances"
@@ -102,23 +52,33 @@ def identify_infobox(t, infoboxes):
     for i in infoboxes:
         if f"{{{{{i.lower()}\n" in t.lower() or f"{{{{{i.lower()}|" in t.lower():
             return i
-        elif f"{{{{{i.replace(' ', '_').lower()}\n" in t.lower() or f"{{{{{i.replace(' ', '_').lower()}|" in t.lower():
+    tx = re.sub("\{\{([A-z]+)[ _]([A-z]+)[ _]?([A-z]+?)(?=[|\n])", "{{\\1\\2\\3", t).lower()
+    for i in infoboxes:
+        if f"{{{{{i.lower()}\n" in tx or f"{{{{{i.lower()}|" in tx:
             return i
+    for k, v in NEW_NAMES.items():
+        if f"{{{{{k.lower()}\n" in tx or f"{{{{{k.lower()}|" in tx:
+            return v
     return None
 
 
 def analyze_page(page, text, category, infobox):
     dates, _ = extract_release_date(page.title(), text)
+    if dates:
+        now = datetime.now()
+        if all(now > d[1] for d in dates):
+            print(f"Skipping past ({dates[0][1].strftime('%Y-%m-%d')}) media: {page.title()}")
+            return None
     c = re.search("{{Top.*?\|(can|leg|ncc|ncl|new|pre|btr|old|imp|reb|njo|lgc|inf)[|}]", text)
     ct = c.group(1) if c else None
     if ct in ["pre", "btr", "old", "imp", "reb", "new", "njo", "lgc", "inf"]:
         ct = "leg"
-    t = determine_app_or_source(text, (category or '').replace("Category:", ""), (infobox or '').replace("_", " "))
+    t = determine_app_or_source(text, (category or '').replace("Category:", ""), infobox or '')
     if "audiobook)" in page.title():
         t = "Audiobooks"
     elif "soundtrack" in page.title().lower():
         t = "Soundtracks"
-    print(t, page.title(), (category or '').replace("Category:", ""), (infobox or '').replace("_", " "))
+    print(t, page.title(), (category or '').replace("Category:", ""), infobox)
     return FutureProduct(page, category, dates, infobox, ct, t)
 
 
@@ -132,11 +92,13 @@ class FutureProduct:
         self.item_type = item_type
 
 
+MONTHS = {10: "A", 11: "B", 12: "C"}
+
+
 def get_future_products_list(site: Site, infoboxes=None):
     cat = Category(site, "Future products")
-    infoboxes = infoboxes or list_all_infoboxes(site)
+    infoboxes = infoboxes or load_infoboxes(site)
     results = []
-    collections = []
     unique = set()
     for page in cat.articles():
         if page.title().startswith("List of") or page.title().startswith("Timeline of"):
@@ -146,26 +108,33 @@ def get_future_products_list(site: Site, infoboxes=None):
         t = page.get()
         infobox = identify_infobox(t, infoboxes)
         if should_check_product(infobox, t, page, cat.title()):
-            results.append(analyze_page(page, t, None, infobox))
-            unique.add(page.title())
+            x = analyze_page(page, t, None, infobox)
+            if x:
+                results.append(x)
+                unique.add(page.title())
 
+    now = datetime.now()
+    start = MONTHS.get(now.month, str(now.month))
     for c in cat.subcategories():
         if "trade paperbacks" in c.title():
             continue
-        for page in c.articles():
+        for page in c.articles(startprefix=start if c.title(with_ns=False) == f"{now.year} releases" else None):
             if page.title().startswith("List of") or page.title().startswith("Timeline of"):
-                continue
-            elif c.title() == "Category:Future events" and len(page.title()) == 4 and page.title().startswith("20"):
-                continue
-            elif c.title() == "Category:Official Star Wars conventions":
                 continue
             elif page.title() in unique:
                 continue
+            elif c.title() == "Category:Future events":
+                if len(page.title()) == 4 and page.title().startswith("20"):
+                    continue
+                elif any(x.title() == "Category:Official Star Wars conventions" for x in page.categories()):
+                    continue
             t = page.get()
             infobox = identify_infobox(t, infoboxes)
             if should_check_product(infobox, t, page, c.title()):
-                results.append(analyze_page(page, t, c.title(), infobox))
-                unique.add(page.title())
+                x = analyze_page(page, t, c.title(), infobox)
+                if x:
+                    results.append(x)
+                    unique.add(page.title())
     return results
 
 
@@ -281,7 +250,7 @@ def build_tracked(a, d, tracked):
 
 
 def search_for_missing(site, appearances, sources, infoboxes=None, check_dates=False) -> Tuple[List[FutureProduct], list, List[FutureProduct]]:
-    infoboxes = infoboxes or list_all_infoboxes(site)
+    infoboxes = infoboxes or load_infoboxes(site)
     tracked = set()
     for a, d in appearances.target.items():
         build_tracked(a, d, tracked)
@@ -328,7 +297,7 @@ def should_check_product(inf, t, p: Page, ct):
     elif "{{Author-stub" in t or "{{Bio-stub" in t or "{{Author-stub" in t:
         # print(f"Skipping person article: {p.title()} in {c.title()}")
         return False
-    elif inf in ["toy line", "magazine"] and p.title().startswith("LEGO"):
+    elif inf in ["ToyLine", "MagazineIssue"] and p.title().startswith("LEGO"):
         return False
     elif f"[[{ct}| " in t or f"[[{ct}|*" in t or f"[[Category:{p.title()}| " in t:
         # print(f"Skipping root page {p.title()} for {c.title()}")
@@ -379,9 +348,11 @@ def check_category(c: Category, cats_checked, pages_checked, tracked, infoboxes,
                     continue
                 inf = identify_infobox(t, infoboxes) or 'article'
                 if should_check_product(inf, t, p, c.title()):
-                    print(f"Found {inf}: {pt}, {pt in appearances.target}, {p.title() in appearances.target} {pt in sources.target}, {p.title() in sources.target}")
-                    counts["found"] += 1
-                    not_found.append(analyze_page(p, t, c.title(), inf))
+                    x = analyze_page(p, t, c.title(), inf)
+                    if x:
+                        print(f"Found {inf}: {pt}, {pt in appearances.target}, {p.title() in appearances.target} {pt in sources.target}, {p.title() in sources.target}")
+                        counts["found"] += 1
+                        not_found.append(x)
         except Exception as e:
             print(p.title(), e)
     for k, v in dates_mismatch.items():
@@ -406,7 +377,7 @@ def build_item_type(item_type, i: FutureProduct):
 
 
 def handle_results(site, results: List[FutureProduct], collections: List[FutureProduct], save=True):
-    types = build_template_types(site)
+    types = load_template_types(site)
     extra_page = Page(site, "Wookieepedia:Appearances/Extra")
     extra = parse_page(extra_page, types)
     series_page = Page(site, "Wookieepedia:Appearances/Series")
@@ -419,12 +390,6 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
     audio = parse_page(audio_page, types)
     col_page = Page(site, "Wookieepedia:Appearances/Collections")
     cols = parse_page(col_page, types)
-    # l_src_page1 = Page(site, "Wookieepedia:Sources/Legends/General/2010s")
-    # l_srcs1 = parse_page(l_src_page1, types)
-    # l_src_page2 = Page(site, "Wookieepedia:Sources/Legends/General/2000s")
-    # l_srcs2 = parse_page(l_src_page2, types)
-    # l_src_page3 = Page(site, "Wookieepedia:Sources/Legends/General/1977-2000")
-    # l_srcs3 = parse_page(l_src_page3, types)
     l_src_page = Page(site, "Wookieepedia:Sources/Legends/General")
     l_srcs = parse_page(l_src_page, types)
     c_src_page = Page(site, "Wookieepedia:Sources/Canon/General")
@@ -456,7 +421,6 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
         #             z = "Sources|True|2"
         #         else:
         #             z = "Sources|True|1"
-
         found = False
         for t, data in master_data.items():
             if i.page.title() in data.target:
@@ -514,24 +478,10 @@ DATES = {"Wookieepedia:Appearances/Legends": "1977",
          "Wookieepedia:Sources/Canon/CardSets": "2013"}
 
 
-def prep_date(d):
-    return re.sub("-([0-9])$", "-0\\1", re.sub("-([0-9])([:-])", "-0\\1\\2", d))
-
-
-def build_date(dates):
-    if dates and dates[0][0] == "day":
-        return dates[0][1].strftime('%Y-%m-%d')
-    elif dates and dates[0][0] == "month":
-        return f"{dates[0][1].strftime('%Y-%m')}-XX"
-    elif dates and dates[0][0] == "year":
-        return f"{dates[0][1].strftime('%Y')}-XX-XX"
-    return "Future"
-
-
 def build_final_new_items(new_items: List[FutureProduct], audiobooks: List[str]):
     final = []
     for i in new_items:
-        if i.infobox in ["short story", "magazine article", "magazine department"]:
+        if i.infobox in ["ShortStory", "MagazineArticle", "MagazineDepartment"]:
             t = f'"[[{i.page.title()}]]"'
             pt = i.page.get()
             x = re.search("\|published in=.*?\[\[(.*?)(\|.*?)?]]", pt)

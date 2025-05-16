@@ -2,11 +2,6 @@ from typing import List, Dict, Tuple
 import re
 import copy
 
-SELF_CITE = ["torweb", "twitter", "sonycite", "hunters", "ilm", "ilmxlab", "ffgweb", "facebookcite", "ea", "disney",
-             "darkhorse", "d23", "dpb", "cite web", "blog", "blogspot", "amgweb", "asmodee", "marvel", "lucasfilm",
-             "swkids", "dhboards", "dailyswcite", "disneynow", "disneyplus", "endorexpress", "faraway", "gamespot",
-             "holonetnews", "jcfcite", "lucasartscite", "mobygames", "swkids", "sonyforumscite", "suvudu", "wizardscite"]
-
 
 SORT_MODES = {
     "General": 0,
@@ -28,7 +23,8 @@ class Item:
     def __init__(self, original: str, mode: str, is_app: bool, *, invalid=False, target: str = None, text: str = None,
                  parent: str = None, template: str = None, url: str = None, issue: str = None, subset: str=None,
                  card: str = None, special=None, collapsed=False, format_text: str = None, no_issue=False, ref_magazine=False,
-                 full_url: str=None, publisher_listing=False, check_both=False, date="", archivedate=""):
+                 full_url: str=None, publisher_listing=False, check_both=False, date="", archivedate="",
+                 alternate_url=None):
         self.master_page = None
         self.is_appearance = is_app
         self.tv = mode == "TV"
@@ -57,6 +53,7 @@ class Item:
             self.text = None
 
         self.format_text = format_text
+        self.set_format_text = None
         self.no_issue = no_issue
         self.old_version = self.original and ("oldversion" in self.original or "|old=true" in self.original)
 
@@ -71,6 +68,7 @@ class Item:
         self.abridged = False
         self.is_audiobook = False
         self.german_ad = False
+        self.is_true_appearance = False
         self.reprint = False
         self.has_content = False
         self.publisher_listing = publisher_listing
@@ -97,7 +95,7 @@ class Item:
         self.followed_redirect = False
         self.original_target = None
         self.full_url = full_url
-        self.alternate_url = None
+        self.alternate_url = alternate_url
         self.date_ref = None
         self.extra_date = None
         self.ab = ''
@@ -111,6 +109,9 @@ class Item:
     def copy(self):
         return copy.copy(self)
 
+    def title_format_text(self):
+        return self.set_format_text or self.format_text
+
     def timeline_index(self, canon):
         return self.canon_index if canon else self.legends_index
 
@@ -119,7 +120,7 @@ class Item:
 
     def card_sort_text(self):
         if self.card and "#" in self.card:
-            return re.sub("#([0-9])\)", "#0\\1)", self.card.replace("''", "").replace('"', ''))
+            return re.sub("#([0-9])([):])", "#0\\1\\2", self.card.replace("''", "").replace('"', ''))
         elif self.card:
             return self.card.replace("''", "").replace('"', '')
         else:
@@ -165,13 +166,11 @@ class Item:
         return f"{i}|True" if self.old_version else i
 
     def can_self_cite(self):
-        if self.mode == "YT":
-            return True
-        elif self.template.lower() in SELF_CITE:
-            return True
-        elif self.template == "SW" and self.url.startswith("news/"):
-            return True
-        return self.self_cite
+        return self.mode == "YT" or self.template == "Web" or self.self_cite
+
+    def mark_as_publisher(self):
+        self.mode = "Publisher"
+        self.publisher_listing = True
 
 
 REF_MAGAZINE_ORDERING = {
@@ -228,7 +227,7 @@ class ItemId:
             x = z.index(self.current.target) if self.current.target in z else 9
             return f"{self.current.index} {x} {self.current.original}"
         return (self.current.text if self.current.mode == "DB" else self.current.original).replace("''", "")\
-            .replace('"', '').replace("|", " |").replace("}}", " }}").lower()
+            .replace('"', '').replace("|", " |").replace("}}", " }}").lower().split(" (novel")[0]
 
 
 class AnalysisConfig:
@@ -254,9 +253,10 @@ class PageComponents:
     """
     :type collections: SectionComponents
     :type sections: dict[str, SectionLeaf]
+    :type links: SectionComponents
     """
     def __init__(self, original: str, canon: bool, non_canon: bool, unlicensed: bool, real: bool, mode, media, infobox,
-                 flag: list, page_name):
+                 original_infobox, flag: list, page_name):
         self.before = ""
         self.final = ""
         self.original = original
@@ -267,6 +267,7 @@ class PageComponents:
         self.app_mode = mode
         self.media = media
         self.infobox = infobox
+        self.original_infobox = original_infobox
         self.flag = flag
         self.page_name = page_name
 
@@ -278,9 +279,11 @@ class PageComponents:
 
         self.collections = SectionComponents([], [], [], '')
         self.sections = {}
+        self.nav_templates = []
+        self.redirects_fixed = set()
 
     def get_navs(self):
-        return [*self.apps.nav, *self.nca.nav, *self.src.nav, *self.ncs.nav, *self.links.nav]
+        return [*self.nav_templates, *self.apps.nav, *self.nca.nav, *self.src.nav, *self.ncs.nav, *self.links.nav]
 
 
 class AnalysisResults:
@@ -337,7 +340,7 @@ class SectionLeaf:
     :type subsections: dict[str, SectionLeaf]
     :type other: list[SectionLeaf]
     """
-    def __init__(self, name, header: str, num: int, level: int, lines=None):
+    def __init__(self, name, header: str, num: int, level: int, lines=None, duplicate=False):
         self.name = name
         self.header_line = header
         self.num = num
@@ -348,7 +351,14 @@ class SectionLeaf:
         self.invalid = False
         self.remove = False
         self.flag = False
+        self.duplicate = duplicate
         self.other = []
+
+    def has_subsections(self, *terms):
+        return any(s in self.subsections for s in terms)
+
+    def is_empty_section(self):
+        return len(self.lines) == 0 and not self.subsections
 
     def build_text(self, header=None, image=None, media_cat=None):
         header_line = header or self.name
@@ -372,7 +382,7 @@ class SectionLeaf:
         return lines, added_media_cat
 
     def build_gallery(self, image=None):
-        before, images, after = [], [], []
+        before, images, filenames, after = [], [], [], []
         gallery_start = False
         add_image = image is not None
         for ln in self.lines:
@@ -380,6 +390,10 @@ class SectionLeaf:
                 before.append(ln)
                 gallery_start = True
             elif "file:" in ln.lower():
+                fx = ln.split("|")[0].replace(" ", "_")
+                if fx in filenames:
+                    continue
+                filenames.append(fx)
                 images.append(ln)
                 if image and image.lower() in ln.lower().replace(" ", "_"):
                     add_image = False

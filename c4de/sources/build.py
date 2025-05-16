@@ -3,7 +3,8 @@ import re
 from datetime import datetime
 from pywikibot import Page, Category, showDiff
 
-from c4de.common import error_log, fix_redirects, do_final_replacements, sort_top_template, to_duration
+from c4de.common import error_log, fix_redirects, do_final_replacements, sort_top_template, to_duration, \
+    report_duration, MULTIPLE_ISSUE_CONVERSION
 from c4de.protocols.cleanup import clean_archive_usages
 from c4de.sources.analysis import analyze_section_results
 from c4de.sources.determine import determine_id_for_item
@@ -57,33 +58,32 @@ def build_section_from_pieces(section: SectionComponents, items: FinishedSection
 
 
 def check_for_media_cat(section: SectionComponents):
-    return any("{{mediacat" in i.lower() or "{{imagecat" in i.lower() for i in section.preceding) or \
-           "{{mediacat" in section.after.lower() or "{{imagecat" in section.after.lower()
+    return any("{{mediacat" in i.lower() for i in section.preceding) or "{{mediacat" in section.after.lower()
 
 
-def find_media_categories(page: Page):
+def find_media_categories(page: Page, media, check_audio):
     cc = page.title().replace("/Legends", "")
     lc = f"{page.title()[0].lower()}{cc[1:]}"
     image_cat = ""
     audio_cat = ""
-    for t in ["of", "of the", "from", "from the"]:
+    for t in (["from", "from the"] if media else ["of", "of the"]):
         if not image_cat:
             if Category(page.site, f"Category:Images {t} {cc}").exists():
                 image_cat = f"|imagecat=Images {t} {cc}"
             elif Category(page.site, f"Category:Images {t} {lc}").exists():
                 image_cat = f"|imagecat=Images {t} {lc}"
-            if Category(page.site, f"Category:Images {t} {cc}s").exists():
+            elif Category(page.site, f"Category:Images {t} {cc}s").exists():
                 image_cat = f"|imagecat=Images {t} {cc}s"
             elif Category(page.site, f"Category:Images {t} {lc}s").exists():
                 image_cat = f"|imagecat=Images {t} {lc}s"
-        if not audio_cat:
+        if check_audio and not audio_cat:
             if Category(page.site, f"Category:Audio files {t} {cc}").exists():
                 audio_cat = f"|soundcat=Audio files {t} {cc}"
-            if Category(page.site, f"Category:Audio files {t} {lc}").exists():
+            elif Category(page.site, f"Category:Audio files {t} {lc}").exists():
                 audio_cat = f"|soundcat=Audio files {t} {lc}"
-            if Category(page.site, f"Category:Audio files {t} {cc}s").exists():
+            elif Category(page.site, f"Category:Audio files {t} {cc}s").exists():
                 audio_cat = f"|soundcat=Audio files {t} {cc}s"
-            if Category(page.site, f"Category:Audio files {t} {lc}s").exists():
+            elif Category(page.site, f"Category:Audio files {t} {lc}s").exists():
                 audio_cat = f"|soundcat=Audio files {t} {lc}s"
     return image_cat, audio_cat
 
@@ -209,23 +209,20 @@ def build_iu_intro(page: Page, results: PageComponents, appearances: FullListDat
     return pieces
 
 
-def build_final_text(page: Page, results: PageComponents, types, disambigs: list, remap: dict, redirects: dict,
-                     appearances: FullListData, sources: FullListData, components: NewComponents, log: bool):
-    image = None
-    if results.media:
-        pieces, image = prepare_media_infobox_and_intro(page, results, components, redirects, disambigs, remap,
-                                                        appearances, sources)
-    else:
-        pieces = build_iu_intro(page, results, appearances, sources, types)
-    pieces.append("")
+NO_AUDIO = ["ComicBook", "ComicCollection", "ComicStory", "ComicSeries", "GraphicNovel"]
+NO_MEDIA = ["MagazineArticle", "ShortStory"]
 
-    otx = page.get()
-    if "{{mediacat" in otx.lower() or "{{imagecat" in otx.lower():
+
+def build_final_text(pieces, image, otx, page: Page, results: PageComponents, disambigs: list, remap: dict,
+                     redirects: dict, sources: FullListData, components: NewComponents, log: bool):
+
+    pieces.append("")
+    if "{{mediacat" in otx.lower() or results.infobox in NO_MEDIA:
         media_cat = None
     else:
-        ic, ac = find_media_categories(page)
+        ic, ac = find_media_categories(page, media=results.media, check_audio=results.infobox not in NO_AUDIO)
         media_cat = f"{{{{Mediacat{ic}{ac}}}}}" if (ic or ac) else None
-        if not results.real and results.canon:
+        if not results.real and not results.media and results.canon:
             media_cat = None
 
     section = sorted([components.links, components.nca, components.apps, components.ncs, components.src], key=lambda a: a.rows)[-1]
@@ -257,7 +254,6 @@ def build_final_text(page: Page, results: PageComponents, types, disambigs: list
         elif key not in results.sections:
             continue
         else:
-            # TODO: mediacat
             section = results.sections[key]
             if log:
                 print(f"Creating {key} section with {len(section.lines)} lines and {len(section.subsections)} / {len(section.other)} subsections")
@@ -265,7 +261,7 @@ def build_final_text(page: Page, results: PageComponents, types, disambigs: list
             lines, _ = section.build_text(header_line)
             subsections = sorted([(k, v) for k, v in section.subsections.items()], key=lambda a: (a[1].master_num, a[1].num))
             for subheader, subsection in subsections:
-                if subheader == "Collections":
+                if subheader == "Collections" or subheader == "Collected in":
                     tx, added_cat = build_section_from_pieces(results.collections, components.collections, log,
                                                               media_cat if components.collections.rows > 0 else None)
                     txt = [tx]
@@ -282,7 +278,8 @@ def build_final_text(page: Page, results: PageComponents, types, disambigs: list
                 txt, _ = other.build_text()
                 lines += txt
 
-            lines.append("")
+            if not (lines and not lines[-1].strip()):
+                lines.append("")
 
             text = "\n".join(lines)
             if key == "Appearances" and "{{incomplete" in text:
@@ -292,7 +289,8 @@ def build_final_text(page: Page, results: PageComponents, types, disambigs: list
 
             if "onlyinclude" in text:
                 text = re.sub("}}\n\n+</onlyinclude>\n+", "}}\n</onlyinclude>\n\n", text)
-            text = fix_redirects(redirects, text, key, remap, disambigs, overwrite=key == "Appearances", canon=results.canon)
+            if key not in results.redirects_fixed:
+                text = fix_redirects(redirects, text, f"Final-{key}", disambigs, remap, canon=results.canon)
 
             # pieces.append(do_final_replacements(text, True))
             pieces.append(text)
@@ -303,9 +301,12 @@ def build_final_text(page: Page, results: PageComponents, types, disambigs: list
 
 def final_steps(page: Page, results: PageComponents, components: NewComponents, pieces: list, disambigs: list,
                 remap: dict, redirects: dict, media_cat, sources: FullListData):
-    for i in components.navs:
-        pieces.append(i)
     if components.navs:
+        pieces.append("")
+        pieces.append("")
+        for i in components.navs:
+            if i not in pieces:
+                pieces.append(i)
         pieces.append("")
 
     if results.final:
@@ -316,17 +317,24 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
     if results.canon and not results.real and "/Legends" in new_txt:
         new_txt = handle_legends_links(new_txt, page.title())
     new_txt = clean_archive_usages(page, new_txt, sources.archive_data)
-    # print(f"archive: {(datetime.now() - now).microseconds / 1000} microseconds")
+    # print(f"archive: {(datetime.now() - now).total_seconds()} seconds")
 
     new_txt = re.sub("(\{\{DEFAULTSORT:.*?}})\n\n+\[\[[Cc]ategory", "\\1\n[[Category", new_txt)
     new_txt = re.sub("(?<![\n=}])\n==", "\n\n==", re.sub("\n\n+", "\n\n", new_txt)).strip()
     new_txt = re.sub("(stub|Endgame)}}\n==", "\\1}}\n\n==", new_txt)
     new_txt = new_txt.replace("\n\n}}", "\n}}").replace("\n\n{{More", "\n{{More")
+    if "{{Multiple" in new_txt:
+        if "{{Plot}}" in new_txt and re.search("==Plot summary==\n\{\{Plot}}", new_txt):
+            new_txt = re.sub("(\{\{Multiple.?[Ii]ssues.*?)\|plot(\|.*?)?}}", "\\1\\2}}", new_txt)
 
-    # print(f"rebuild: {(datetime.now() - now).microseconds / 1000} microseconds")
+        x = re.search("\{\{Multiple.?[Ii]ssues\|([^|{}\n]+)}}", new_txt)
+        if x:
+            new_txt = new_txt.replace(x.group(0), "{{" + MULTIPLE_ISSUE_CONVERSION.get(x.group(1), x.group(1).capitalize()) + "}}")
+
+    # print(f"regex: {(datetime.now() - now).total_seconds()} seconds")
     replace = True
     if redirects:
-        new_txt = fix_redirects(redirects, new_txt, "Body", remap, disambigs)
+        new_txt = fix_redirects(redirects, new_txt, "Final Body", remap, disambigs)
     if "{{WP}}" in new_txt:
         new_txt = new_txt.replace("{{WP}}", f"{{{{WP|{page.title()}}}}}")
     elif "{{WP|{{PAGENAME}}" in new_txt:
@@ -335,7 +343,7 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
 
     # now = datetime.now()
     t = do_final_replacements(new_txt, replace)
-    # print(f"replace: {(datetime.now() - now).microseconds / 1000} microseconds")
+    # print(f"replace: {(datetime.now() - now).total_seconds()} seconds")
     return t
 
 
@@ -393,23 +401,33 @@ def build_final(final, media_cat, redirects):
 def build_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appearances: FullListData,
                sources: FullListData, bad_cats: list, remap: dict, include_date: bool, checked: list, log=True,
                use_index=True, collapse_audiobooks=True, manual: str = None, extra=None, time=False, keep_pages=False):
-    now = datetime.now()
+    start = datetime.now()
+    now = start
     text, redirects, results = build_initial_components(target, disambigs, infoboxes, bad_cats, manual, keep_pages)
+
     if time:
-        print(f"initial: {to_duration(now)} seconds")
+        now = report_duration("initial", now, start)
     unknown = build_page_components(target, text, redirects, results, types, disambigs, appearances, sources,
                                     remap, log, extra=extra)
+    if results.media:
+        pieces, image = prepare_media_infobox_and_intro(target, results, redirects, disambigs, types, remap, appearances, sources)
+    else:
+        pieces, image = build_iu_intro(target, results, appearances, sources, types), None
+
     if time:
-        print(f"components: {to_duration(now)} seconds")
+        now = report_duration("components", now, start)
     if results.real and collapse_audiobooks:
         collapse_audiobooks = False
 
     components, unknown_items, analysis = analyze_section_results(
         target, results, appearances, sources, remap, use_index, include_date, collapse_audiobooks, checked, log)
     if time:
-        print(f"components: {to_duration(now)} seconds")
+        now = report_duration("analysis", now, start)
 
-    new_txt = build_final_text(target, results, types, disambigs, remap, redirects, appearances, sources, components, log)
+    new_txt = build_final_text(pieces, image, text, target, results, disambigs, remap, redirects, sources, components, log)
+    if time:
+        report_duration("final", now, start)
+
     if re.search("\{\{[FCG]Anom.*?\|index=.*?}}", target.get()):
         index, old_id = create_index(target.site, target, analysis, appearances.target, sources.target, True)
         if index and "{{Indexpage" not in new_txt:
@@ -419,8 +437,6 @@ def build_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appe
                 new_txt = new_txt.replace("==Sources==", "==Sources==\n{{Indexpage}}")
         new_txt = remove_index_param(new_txt)
 
-    if time:
-        print(f"final: {to_duration(now)} seconds")
     return new_txt, analysis, unknown, unknown_items
 
 
@@ -432,7 +448,7 @@ def build_new_text(target: Page, infoboxes: dict, types: dict, disambigs: list, 
         use_index, collapse_audiobooks, manual, extra, keep_pages=keep_pages)
 
     record_local_unknown(unknown, unknown_items, target)
-    return new_txt
+    return new_txt, unknown, unknown_items
 
 
 def remove_index_param(t):

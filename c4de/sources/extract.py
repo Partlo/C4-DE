@@ -413,13 +413,14 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
             m = re.search("{{[^|\[}\n]+\|(([a-z_]+)=.*?\|)?(?P<video>.*?)(&.*?)?\|(text=)?(?P<text>.*?)(\|.*?)?}}", s)
         if m:
             u = re.search("\|((sw|site)_url|livestream|original)=(.*?)(\|.*?)?}}", s)
+            alt = u.group(3) if u and u.group(1) in ["livestream", "original"] else None
             t = m.groupdict().get('text')
             if 'text' not in m.groupdict():
                 txt = re.search("\|text=(.*?)(\|.*?)?}}", s)
                 t = txt.group(1) if txt else ''
             i = re.search("\|int=(.*?)(\|.*?)?}}", s)
             return Item(z, mode, a, target=i.group(1) if i else None, template=template, url=m.group('video'), text=t,
-                        special=u.group(3) if u else None)
+                        special=u.group(3) if u else None, alternate_url=alt)
     elif template == "Databank":
         m = re.search("{{Databank\|(url=|entry=)?(.*?)\|(title=)?(.*?)(\|.*?)?}}", s)
         if m and m.group(1):
@@ -479,7 +480,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         if parent == article and m.group('text'):
             article = f"{parent}#{m.group('text')}"
         format_text = m.group('text') or ''
-        if "nolink=1" in format_text:
+        if "nolink=1" in format_text or "reprint=" in format_text:
             format_text = ""
         return Item(z, mode, a, target=article, template=template, issue=m.group('issue'), format_text=format_text,
                     no_issue=m.group('issue') is None, parent=parent)

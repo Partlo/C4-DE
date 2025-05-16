@@ -1,13 +1,12 @@
-from pywikibot import Site, Page, Category, showDiff
-from datetime import datetime
-from typing import Tuple, List, Optional
+from pywikibot import Page, showDiff
+from typing import Tuple, List
 import codecs
 import re
 
 from c4de.common import fix_redirects, build_redirects
+from c4de.dates import parse_date_string, build_date, build_date_and_ref
 from c4de.protocols.cleanup import clean_archive_usages
 from c4de.sources.domain import Item, ItemId, AnalysisResults
-from c4de.sources.updates import extract_release_date, parse_date_string, build_date
 
 
 def build_alternate(i: ItemId):
@@ -59,140 +58,8 @@ def prepare_ordered_list(results: AnalysisResults):
 
     by_date = []
     for item in found:
-        by_date.append(f"#{item.master.date}: {item.master.original}")
+        by_date.append(f"#{item.master.date}: {item.master.original} {item.current.extra}".strip())
     return by_date
-
-
-def add_link(d, links: set):
-    if d in links:
-        return d
-    links.add(d)
-    return f"[[{d}]]"
-
-
-def convert_date_str(date, links: set):
-    if date and date.endswith("E"):
-        date = date[:-1]
-
-    if not (date and date[0].isnumeric()):
-        return date, None
-    elif date.endswith("-XX-XX"):
-        return date[:4], datetime(int(date[:4]), 1, 1)
-    elif date.endswith("-XX"):
-        try:
-            d = datetime.strptime(date, "%Y-%m-XX")
-            m = add_link(d.strftime("%B"), links)
-            y = add_link(d.strftime("%Y"), links)
-            return f"{m} {y}", d
-        except Exception as e:
-            print(f"Encountered {type(e)} while parsing {date}: {e}")
-        return date, None
-    else:
-        try:
-            d = datetime.strptime(re.sub("[A-Z]", "", date), "%Y-%m-%d")
-            m = add_link(d.strftime("%B %d").replace(" 0", " "), links)
-            y = add_link(d.strftime("%Y"), links)
-            return f"{m}, {y}", d
-        except Exception as e:
-            print(f"Encountered {type(e)} while parsing {date}: {e}")
-        return date, None
-
-
-def get_reference_for_release_date(site, target, formatted, date, refs: dict, contents: dict):
-    try:
-        if not date:
-            print(f"No release date found for {target}")
-            return ''
-        t = target.replace('"', '')
-        if t in refs:
-            return f'<ref name="{t}" />'
-
-        ref_text, other_date = extract_release_date_reference(site, target, date)
-        if ref_text and ref_text.count("[[") == 0 and ref_text.count("{{") == 0:
-            tx = t.split(" (")[0]
-            if ref_text.replace("''", "").startswith(tx):
-                ref_text = formatted
-
-        if ref_text and ref_text in contents:
-            return f'<ref name="{contents[ref_text]}" />'
-        elif ref_text:
-            if other_date:
-                print(f"Could not find exact match for {date}; using closest date match: {other_date}")
-            refs[t] = ref_text
-            contents[ref_text] = t
-            return f'<ref name="{t}">{ref_text}</ref>'
-    except Exception as e:
-        print(f"Encountered {type(e)} while extracting release date for {target}: {e}")
-    return ''
-
-
-def extract_release_date_reference(site, target, date: datetime) -> Tuple[Optional[str], Optional[str]]:
-    page = Page(site, target)
-    if page.exists() and page.isRedirectPage():
-        page = page.getRedirectTarget()
-    if not page.exists():
-        return '', None
-    text = page.get()
-    dates, date_strs = extract_release_date(page.title(), text)
-    dates = [d for d in dates if d and d[1]]
-    if not dates:
-        return '', None
-    elif len(dates) == 1:
-        return extract_reference(dates[0][2], text), None
-    else:
-        y1, y2, d1, d2 = None, None, None, None
-        for t, d, r in dates:
-            if d == date:
-                return extract_reference(r, text), None
-            if d.year == date.year:
-                y1 = r
-                d1 = d
-                if d.month == date.month:
-                    y2 = r
-                    d2 = r
-        if y1:
-            return extract_reference(y1, text), d1
-        if y2:
-            return extract_reference(y2, text), d2
-        return None, None
-
-
-def extract_reference(line, text):
-    if line:
-        m = re.search("<ref name=\".*?\" *?>(.*?)</ref>", line)
-        if m:
-            return m.group(1)
-        m = re.search("<ref name=\"(.*?)\" ?/>", line)
-        if m:
-            x = re.search("<ref name=\"" + m.group(1) + "\" ?>(.*?)</ref>", text)
-            if x:
-                return x.group(1)
-    return None
-
-
-def build_date_and_ref(i: Item, site, links: set, refs: dict, contents: dict, ref_name=None, existing: dict=None):
-    date_str, parsed_date = convert_date_str(re.sub("XX[A-Z]", "XX", i.date), links)
-    date_ref = ''
-    if date_str and not i.mode == "Toys":
-        if i.target:
-            date_ref = get_reference_for_release_date(site, i.target, i.original, parsed_date, refs, contents)
-        if i.parent and not date_ref:
-            date_ref = get_reference_for_release_date(site, i.parent, i.original, parsed_date, refs, contents)
-        if not date_ref and existing and existing.get(i.original):
-            _, date_ref = existing[i.original]
-        if not date_ref and i.url and i.can_self_cite():
-            if not ref_name:
-                ref_name = f"{i.template}: {i.text}".replace('"', '')
-            if ref_name in refs:
-                date_ref = f'<ref name="{ref_name}" />'
-            else:
-                refs[ref_name] = i.original
-                date_ref = f'<ref name="{ref_name}">{refs[ref_name]}</ref>'
-    if not (date_str and date_ref) and existing and i.original in existing:
-        exd, exr = existing[i.original]
-        date_str = date_str if date_str else exd
-        date_ref = date_ref if date_ref else exr
-    return date_str, date_ref or ''
 
 
 def clean(x):

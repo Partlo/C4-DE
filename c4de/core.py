@@ -203,14 +203,6 @@ class C4DE_Bot(commands.Bot):
 
         self.get_user_ids()
 
-        try:
-            info = report_version_info(self.site, self.version)
-            if info:
-                await self.text_channel(ANNOUNCEMENTS).send(info)
-                await self.text_channel(COMMANDS).send(info)
-        except Exception as e:
-            error_log(type(e), e)
-
         if not self.ready:
             if self.rss_only:
                 self.check_senate_hall_threads.start()
@@ -228,6 +220,14 @@ class C4DE_Bot(commands.Bot):
                 self.check_external_rss.start()
                 self.check_altaya.start()
             else:
+                try:
+                    info = report_version_info(self.site, self.version)
+                    if info:
+                        await self.text_channel(ANNOUNCEMENTS).send(info)
+                        await self.text_channel(COMMANDS).send(info)
+                except Exception as e:
+                    error_log(type(e), e)
+
                 self.check_empty_usage_categories.start()
                 self.check_future_products.start()
                 self.run_canon_legends_switch.start()
@@ -264,13 +264,14 @@ class C4DE_Bot(commands.Bot):
     def get_user_ids(self):
         results = {}
         for user in self.text_channel(MAIN).guild.members:
-            results[user.display_name.lower()] = user.id
+            results[user.display_name.lower().replace("_", "").replace(" ", "")] = user.id
         return results
 
     def get_user_id(self, editor, user_ids=None):
         if not user_ids:
             user_ids = self.get_user_ids()
-        user_id = user_ids.get(self.admin_users.get(editor, editor.lower()), user_ids.get(editor.lower()))
+        z = editor.replace("_", "").replace(" ", "")
+        user_id = user_ids.get(self.admin_users.get(editor, z.lower()), user_ids.get(z.lower()))
         return f"<@{user_id}>" if user_id else editor
 
     async def report_error(self, command, text, *args):
@@ -328,7 +329,7 @@ class C4DE_Bot(commands.Bot):
         elif isinstance(message.channel, DMChannel):
             await self.handle_direct_message(message)
             return
-        elif message.author.id == 863199002614956043 and (message.channel.name == NOM_CHANNEL or message.channel.name == REVIEW_CHANNEL):
+        elif not self.rss_only and message.author.id == 863199002614956043 and (message.channel.name == NOM_CHANNEL or message.channel.name == REVIEW_CHANNEL):
             nom = self.is_new_nomination_message(message)
             if nom:
                 await self.handle_new_nomination(message, nom)
@@ -667,10 +668,12 @@ class C4DE_Bot(commands.Bot):
         self.auto_cats = reload_auto_categories(self.site)
 
     def reload_maintenance_categories(self):
-        self.maintenance_cats = []
+        self.maintenance_cats = [c.title() for c in Category(self.site, f"Category:Articles with maintenance templates").subcategories()]
         for cx in ["High", "Medium", "Low"]:
             self.maintenance_cats += [c.title() for c in Category(self.site, f"Category:{cx}-priority template and page issues").subcategories()]
             self.maintenance_cats += [c.title() for c in Category(self.site, f"Category:{cx}-priority template and page issues/Empty").subcategories()]
+
+        self.maintenance_cats = [c for c in self.maintenance_cats if not c.startswith("Unrecognized listing")]
 
     async def handle_initial_redirect_request(self, message: Message, command: dict):
         redirect_name = command['redirect']
@@ -1239,7 +1242,7 @@ class C4DE_Bot(commands.Bot):
     def fix_double_redirects(self):
         for x in self.site.double_redirects(total=250):
             try:
-                if x.namespace().id == 0:
+                if x.namespace().id == 0 or x.namespace().id == 10:
                     y = x.getRedirectTarget().getRedirectTarget()
                     if y.isRedirectPage():
                         y = y.getRedirectTarget()
@@ -1671,53 +1674,55 @@ class C4DE_Bot(commands.Bot):
 
     async def handle_archive_url_command(self, message: Message, command: dict):
         await message.add_reaction(TIMER)
+        success = False
         try:
             template = command["template"]
-            target_site = None
-            for site, data in self.rss_data["sites"].items():
-                if template and data["template"] == template:
-                    target_site = site
-                elif data["baseUrl"] and data["baseUrl"].split("//", 1)[-1].split("www.", 1)[-1] in command["url"]:
-                    target_site = site
-                    template = template or data["template"]
-                if target_site:
-                    break
+            youtube = "youtube.com" in command['url']
+            if youtube:
+                template = "YouTube"
+                target = re.search("[?&](videoId|v|playlist)=(.*?)(&.*?)?$", command['url'])
+                target = target.group(2) if target else None
+            else:
+                target_site, site_data = None, {}
+                for site, data in self.rss_data["sites"].items():
+                    if template and data["template"] == template:
+                        target_site = site
+                    elif data["baseUrl"] and data["baseUrl"].split("//", 1)[-1].split("www.", 1)[-1] in command["url"]:
+                        target_site = site
+                        template = template or data["template"]
+                    if target_site:
+                        break
 
-            site_data = self.rss_data["sites"].get(target_site)
-            if not site_data:
-                u = command['url'].split('//', 1)[-1].split('/', 1)[0]
-                site_data = {"baseUrl": f"https://{u}", "template": template, "emoji": "HanShrug", "channels": [], "title": "(.*?)"}
+                site_data = self.rss_data["sites"].get(target_site)
+                if site_data:
+                    target = command['url'].replace(site_data['baseUrl'] + "/", "")
+                else:
+                    target = command['url'].split('//', 1)[-1].split('/', 1)[-1]
 
             r = requests.get(command["url"])
             if r.status_code != 200:
-                await message.add_reaction(EXCLAMATION)
-                return
-            title = check_title_formatting(r.text, site_data.get("title", "(.*?)"), "")
-            m = {"site": target_site, "title": title, "url": r.url, "content": "", "date": command.get('date') or datetime.now().strftime('%Y-%m-%d')}
+                print(r.status_code, r.url, command['url'])
+                # await message.add_reaction(EXCLAMATION)
+                # return
 
-            if template:
-                archive = self.parse_archive("Databank" if target_site == "Databank" else template)
-                youtube = "videoId=" in command["url"]
-                if youtube:
-                    target = command["url"].split("videoId=", 1)[-1].split("&")[0]
-                else:
-                    target = m["url"].replace(site_data["baseUrl"] + "/", "")
-
+            if template and target:
+                archive = self.parse_archive(template)
                 if target.endswith("/"):
                     target = target[:-1]
-                if m['site'] == "Databank":
+                if template == "Databank":
                     target = target.replace("databank/", "")
                 already_archived = archive and archive.get(target)
                 if already_archived:
-                    log(f"URL already archived and recorded: {m['url']}")
+                    log(f"URL already archived and recorded: {command['url']}")
                     success, include_archivedate, archivedate = True, False, archive[target]
                 else:
-                    log(f"Archiving URL: {m['url']}")
-                    success, archivedate = archive_url(m["url"], timeout=60 if youtube else 30, enabled=self.should_archive)
+                    log(f"Archiving URL: {command['url']}")
+                    success, archivedate = archive_url(command['url'], timeout=60 if youtube else 30, enabled=self.should_archive)
 
                 if success and not already_archived:
                     self.add_urls_to_archive(template, target, archivedate)
-            await message.add_reaction(THUMBS_UP)
+
+            await message.add_reaction(THUMBS_UP if success else THUMBS_DOWN)
         except Exception as e:
             traceback.print_exc()
             error_log(type(e), e.args)
@@ -1750,7 +1755,7 @@ class C4DE_Bot(commands.Bot):
             title = check_title_formatting(r.text, site_data.get("title", "(.*?)"), "")
             m = {"site": target_site, "title": title, "url": r.url, "content": "", "date": command.get('date') or datetime.now().strftime('%Y-%m-%d')}
 
-            archive = self.parse_archive("Databank" if target_site == "Databank" else template)
+            archive = self.parse_archive(template)
             msg, d, template = await self.prepare_new_rss_message(m, site_data["baseUrl"], site_data, False, archive)
 
             if target_site == "Databank":

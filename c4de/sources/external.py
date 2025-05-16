@@ -10,11 +10,12 @@ PRODUCT_DOMAINS = ["phrcomics", "advancedgraphics", "advancedgraphics.com", "bla
                    "comiccollectorlive", "comics\.org", "phrcomics", "the616comics", "thecomiccornerstore", "thecomicmint",
                    "universal-music.de", "unknowncomicbooks", "frankiescomics", "geekgusher", "hachettebookgroup",
                    "jedi-bibliothek", "kiddinx-shop", "lizzie.audio", "luxor.cz", "midtowncomics", "mikemayhewstudio"]
-PRODUCTS = ["LEGOWebCite", "Marvel", "DarkHorse", "IDW", "Penguin", "FFGweb", "AMGweb", "SWUweb"]
+PRODUCTS = ["LEGOWeb", "Marvel", "DarkHorse", "IDW", "Penguin", "FantasyFlightGames", "AtomicMassGames", "UnlimitedWeb"]
 PRODUCT_CHECKS = {
-    "AMGweb": {"S": ["character/"], "E": []},
-    "FFGweb": {"S": [], "E": ["-showcase"]}
+    "AtomicMassGames": {"S": ["character/"], "E": []},
+    "FantasyFlightGames": {"S": [], "E": ["-showcase"]}
 }
+COMMERCIAL_TO_BE_REMOVED = ["Amazon", "Previews"]
 
 
 def prepare_official_link(o: Item):
@@ -60,7 +61,7 @@ def is_publisher(d: ItemId, o: Item):
     return False
 
 
-def is_commercial(d: ItemId, o: Item):
+def is_commercial(o: Item):
     if o.template in PRODUCT_CHECKS and o.url and (any(o.url.lower().endswith(s) for s in PRODUCT_CHECKS[o.template]["E"]) or
                                                    any(o.url.lower().startswith(s) for s in PRODUCT_CHECKS[o.template]["S"])):
         return True
@@ -146,10 +147,10 @@ def is_external_link(d: ItemId, o: Item, unknown):
     elif "Folio" not in o.original and o.url and ("images-cdn" in o.url or (("subdomain=dmedmedia" in o.original or "subdomain=press" in o.original) and "news/" not in o.original)):
         o.mode = "CDN"
         return True
-    elif is_publisher(d, o):
+    elif o.mode == "Publisher" or is_publisher(d, o):
         o.mode = "Publisher"
         return True
-    elif is_commercial(d, o):
+    elif is_commercial(o):
         o.mode = "Commercial"
         return True
     elif o.template == "Blog" and "listing=true" in o.original:

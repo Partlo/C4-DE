@@ -170,6 +170,7 @@ def determine_id_for_item(o: Item, page: Page, data: Dict[str, Item], by_target:
 
     if o.is_card_or_toy():
         set_name = o.parent or o.target
+        set_name = "Star Wars: The Legacy Collection" if set_name == "Star Wars: Legacy Collection" else set_name
         if o.card or o.special:
             if o.mode == "Toys":
                 print(f"{o.mode} {o.template} with {o.card}/{o.special} card/special fell through specific logic")
@@ -331,7 +332,10 @@ def match_miniatures(o: Item, set_name, data_sets: Dict[bool, dict], canon, ref,
 def match_cards(o: Item, x: Item, set_name, other: bool, exact: list, start: list):
     check = True
     m = None
-    if any(t and (t == set_name or t.replace(" - ", " ") == set_name.replace(" - ", " ")) for t in
+    if o.template == "SideshowCite":
+        check = False
+        m = match_card(o, x, other, start)
+    if not m and any(t and (t == set_name or t.replace(" - ", " ") == set_name.replace(" - ", " ")) for t in
            (x.target, x.parent)):
         check = False
         m = match_card(o, x, other, exact)
@@ -373,7 +377,6 @@ def match_fact_file(o: Item, by_target: Dict[str, List[Item]], other_targets: Di
             x = match_fact_file_issue(o, other_targets[f"FFData|{i}"], True, False)
             if x:
                 return x
-    print(o.issue, o.original, f"FFData|{o.issue}" in by_target, f"FFData|{o.issue}" in other_targets)
     o.unknown = True
     return ItemId(o, o, True, False)
 
@@ -688,6 +691,8 @@ def do_urls_match(url, template, d: Item, replace_page, log=False):
     elif d_url and clean_language_prefix(d_url) == clean_language_prefix(url):
         return 2
     elif d_url and matches_up_to_string(d_url.lower(), url.lower(), "&month=", True):
+        return 2
+    elif d_url and matches_up_to_string(d_url.lower(), url.lower(), "?var=", False):
         return 2
     elif d_url and "index.html" in d_url and re.search("indexp[0-9]\.html", url):
         if replace_page and d_url == re.sub("indexp[0-9]+\.html", "index.html", url):

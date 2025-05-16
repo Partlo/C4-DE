@@ -5,14 +5,16 @@ from pywikibot import Page
 from typing import List, Tuple, Union, Dict, Optional
 
 from c4de.common import is_redirect
-from c4de.sources.parsing import BY_INDEX, BY_DATE, UNCHANGED, is_official_link, build_card_text, \
-    build_initial_components, build_page_components, is_official_product_page
+from c4de.dates import convert_date_str
 from c4de.sources.determine import determine_id_for_item
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, AnalysisResults, \
     SectionItemIds, FinishedSection, NewComponents, UnknownItems
 from c4de.sources.engine import AUDIOBOOK_MAPPING, MANGA, LIST_AT_START, LIST_AT_END
-from c4de.sources.external import is_external_link, prepare_basic_url, prepare_official_link, determine_link_order
+from c4de.sources.external import is_external_link, prepare_basic_url, prepare_official_link, determine_link_order, \
+    COMMERCIAL_TO_BE_REMOVED
 from c4de.sources.extract import swap_parameters
+from c4de.sources.parsing import BY_INDEX, BY_DATE, UNCHANGED, is_official_link, build_card_text, \
+    build_initial_components, build_page_components, is_official_product_page
 
 
 KEEP_TEMPLATES = ["CalendarCite"]
@@ -284,19 +286,19 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
     # now = datetime.now()
     new_src = build_item_ids_for_section(
         target, results.real, "Sources", results.src.items, sources, appearances, None, remap,
-        unknown_src, results.canon, [], collapse_audiobooks, log)
+        unknown_src, results.canon, results.infobox, [], collapse_audiobooks, log)
     new_ncs = build_item_ids_for_section(
         target, results.real, "Non-canon sources", results.ncs.items, sources, appearances, None, remap,
-        unknown_src, results.canon, [], collapse_audiobooks, log)
+        unknown_src, results.canon, results.infobox, [], collapse_audiobooks, log)
     new_apps = build_item_ids_for_section(
         target, results.real, "Appearances", results.apps.items, appearances, sources, new_src, remap,
-        unknown_apps, results.canon, checked, collapse_audiobooks, log)
+        unknown_apps, results.canon, results.infobox, checked, collapse_audiobooks, log)
     new_nca = build_item_ids_for_section(
         target, results.real, "Non-canon appearances", results.nca.items, appearances, sources, new_ncs, remap,
-        unknown_apps, results.canon, checked, collapse_audiobooks, log)
+        unknown_apps, results.canon, results.infobox, checked, collapse_audiobooks, log)
     new_col = build_item_ids_for_section(
         target, results.real, "Collections", results.collections.items, sources, appearances, None, remap,
-        unknown_src, results.canon, [], collapse_audiobooks, log)
+        unknown_src, results.canon, results.infobox, [], collapse_audiobooks, log)
     # print(f"item IDs: {(datetime.now() - now).microseconds / 1000} microseconds")
 
     handle_non_canon_items(results, new_apps, new_nca, new_src, new_ncs, log)
@@ -335,7 +337,7 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
         target.title(), "==Appearances==", new_apps, results, results.app_mode, include_date, log,
         use_index, mismatch, both_continuities, unknown_final, targets, collapse_audiobooks)
     new_nca, final_nca = build_new_section(
-        target.title(), "===Non-canon appearances===", new_nca, results, BY_DATE, include_date, log,
+        target.title(), "===Non-canon appearances===", new_nca, results, BY_DATE, True, log,
         use_index, mismatch, both_continuities, unknown_final, targets, collapse_audiobooks)
     new_src, final_sources = build_new_section(
         target.title(), "==Sources==", new_src, results, BY_DATE, True, log,
@@ -344,7 +346,7 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
         target.title(), "===Non-canon sources===", new_ncs, results, BY_DATE, True, log,
         use_index, mismatch, both_continuities, unknown_final, targets, collapse_audiobooks)
     new_col, final_col = build_new_section(
-        target.title(), "===Collections===", new_col, results, BY_DATE, True, log,
+        target.title(), "===Collected in===", new_col, results, BY_DATE, True, log,
         use_index, mismatch, both_continuities, unknown_final, targets, collapse_audiobooks)
 
     reprints = prepare_reprints(appearances, sources, [*final_apps, *final_ncs, *final_ncs, *final_sources])
@@ -386,11 +388,12 @@ TEMP_REMAP = {
     "Duel of the Droids": "Downfall of a Droid (short story)",
     "Lair of Grievous": "Lair of Grievous (short story)"
 }
+VALID_COLLECTIONS = ["MagazineArticle", "ComicStory", "ShortStory"]
 
 
 def build_item_ids_for_section(page: Page, real, name, original: List[Item], data: FullListData, other: FullListData,
                                src: Optional[SectionItemIds], remap: dict, unknown: List[Union[str, Item]], canon: bool,
-                               checked: list, collapse_audiobooks=True, log=True) -> SectionItemIds:
+                               infobox: str, checked: list, collapse_audiobooks=True, log=True) -> SectionItemIds:
 
     found = []
     wrong = []
@@ -402,6 +405,7 @@ def build_item_ids_for_section(page: Page, real, name, original: List[Item], dat
     any_expanded = []
     unexpanded = 0
     other_extra = False
+    already = set(o.target for o in original if o.target)
     for i, o in enumerate(original):
         o.index = i
         d = determine_id_for_item(o, page, data.unique, data.target, other.unique, other.target, remap, canon, log)
@@ -430,19 +434,18 @@ def build_item_ids_for_section(page: Page, real, name, original: List[Item], dat
                     page_links.append(p.title())
 
             expanded = 0
-            if d.master.target.replace(" (trade paperback)", "") in MANGA:
-                for vol, parts in MANGA[d.master.target].items():
-                    if any(p in page_links for p in parts):
-                        x = data.target[vol][0].copy()
-                        x.index = o.index
-                        x.extra = o.extra
-                        x.expanded = True
-                        if expanded:
-                            x.extra = re.sub("\{\{1stm.*?}}", "{{Mo}}", x.extra).strip()
-                            x.extra = re.sub("\{\{1st.*?}}", "", x.extra).strip()
-                        x.extra_date = o.extra_date
-                        expanded += 1
-                        any_expanded.append(ItemId(x, data.target[vol][0], False))
+            for vol, parts in MANGA[d.master.target.replace(" (trade paperback)", "")].items():
+                if any(p in page_links or p in already for p in parts):
+                    x = data.target[vol][0].copy()
+                    x.index = o.index
+                    x.extra = o.extra
+                    x.expanded = True
+                    if expanded:
+                        x.extra = re.sub("\{\{1stm.*?}}", "{{Mo}}", x.extra).strip()
+                        x.extra = re.sub("\{\{1st.*?}}", "", x.extra).strip()
+                    x.extra_date = o.extra_date
+                    expanded += 1
+                    any_expanded.append(ItemId(x, data.target[vol][0], False))
             if expanded:
                 print(f"Expanded series/arc listing of {d.master.target} to {expanded} issues")
                 continue
@@ -470,7 +473,9 @@ def build_item_ids_for_section(page: Page, real, name, original: List[Item], dat
             found.append(d)
         elif d and name == "Collections":
             if not d.master.master_page == "Appearances/Collections" or d.current.unknown:
-                unknown.append(o)
+                if infobox not in VALID_COLLECTIONS:
+                    print(infobox, d.current.unknown, d.master.master_page, d.master.target, d.current.original)
+                    unknown.append(o)
             found.append(d)
         elif d and name == "Appearances" and d.master.master_page == "Appearances/Collections" and d.master.has_content:
             wrong.append(d)
@@ -674,10 +679,15 @@ def build_new_external_links(page: Page, results: PageComponents, original: List
                              other: FullListData, remap: dict, canon: bool, log: bool) \
         -> Tuple[FinishedSection, list, List[ItemId]]:
     found = []
+    commercial = []
     done = []
     unknown = []
     wrong = []
+    has_publisher = False
     for i, o in enumerate(original):
+        if o.template == "DarkHorse" and ("|text=Preview" in o.original or "/preview" in o.original or "preview" in (o.text or '').lower()):
+            continue
+
         if o.mode == "Basic":
             t, zx = prepare_basic_url(o)
             unknown.append(zx.replace("*", ""))
@@ -703,16 +713,25 @@ def build_new_external_links(page: Page, results: PageComponents, original: List
             wrong.append(d)
             continue
 
+        if not d and "|date=" in o.original:
+            x = re.search("\|date=([0-9]+-[0-9]+-[0-9]+)", o.original)
+            if x:
+                o.date = x.group(1)
+                o.original_date = x.group(1)
+
         is_external_link(d, o, [])
         is_wrong = False
-        if is_official_product_page(o, results.real):
+        if o.template == "ToppsDigital" or (o.template == "ToppsWeb" and o.url.startswith("blog")):
+            is_wrong = True
+        elif is_official_product_page(o, results.real) or o.mode == "Publisher":
+            has_publisher = True
             is_wrong = False
         elif d and d.master.is_internal_mode() and not d.master.external:
             is_wrong = True
         elif d and d.master.mode == "General" and "Web" not in d.master.master_page:
             is_wrong = True
 
-        if is_wrong:
+        if is_wrong and d:
             wrong.append(d)
         elif d:
             zn = d.current.original if d.use_original_text else d.master.original
@@ -727,11 +746,13 @@ def build_new_external_links(page: Page, results: PageComponents, original: List
             z = f"{zn} {d.current.extra}"
             if d.master.mode == "Minis" and d.master.card:
                 z = re.sub("\|link=.*?(\|.*?)?}}", "\\1}}", re.sub(" ?\{\{[Cc]\|[Rr]eissued.*?}}", "", z))
+            if "|int=" in z and d.master.target == page.title():
+                z = re.sub("\|int=.*?(\|.*?)?}}", "\\1}}", z)
             z = z if z.startswith("*") else f"*{z}"
             if z not in done:
                 found.append((o.mode, d.master, z))
                 done.append(z)
-        elif o.mode == "Web" and o.url and not o.external:
+        elif is_wrong or (o.mode == "Web" and o.url and not o.external):
             o.unknown = True
             wrong.append(ItemId(o, o, True, False))
         else:
@@ -743,12 +764,34 @@ def build_new_external_links(page: Page, results: PageComponents, original: List
             u = ""
             z = f"*{u}{zn} {o.extra}".strip()
             if z not in done:
+                if o.template in COMMERCIAL_TO_BE_REMOVED:
+                    commercial.append(z)
                 found.append((o.mode, o, z))
                 done.append(z)
+
+    if commercial:
+        include_commercial = True
+        if results.media and not has_publisher:
+            x = data.target.get(page.title(), other.target.get(page.title()))
+            if x and not x[0].future:
+                include_commercial = False
+        if include_commercial:
+            found = [(a, b, c) for a, b, c in found if c not in commercial]
 
     finished = sorted(found, key=lambda a: determine_link_order(a[0], a[1], a[2].replace("}}", "").replace("|", " |") if a[2] else a[2]))
 
     return FinishedSection("==External links==", 0, "\n".join(f[2].strip() for f in finished)), unknown, wrong
+
+
+def prepare_date_string(s):
+    _, parsed = convert_date_str(s, set(), False)
+    if parsed:
+        if "-XX-XX" in s:
+            return f"{parsed.year}"
+        elif "-XX" in s:
+            return parsed.strftime("%B %Y")
+        return parsed.strftime("%B %d, %Y").replace(" 0", " ")
+    return None
 
 
 def build_new_section(title, name, section: SectionItemIds, results: PageComponents, mode: str, include_date: bool,
@@ -776,10 +819,19 @@ def build_new_section(title, name, section: SectionItemIds, results: PageCompone
             print(f"No date: {o.current.mode} {o.current.original}, {o.master.original} : {o.current.target} -> {o.current.full_id() in section.group_ids}, {o.current.full_id()}")
             o.unknown = True
             unknown_final.append(o)
-        elif "Collections" in section.name:
+        elif "Collect" in section.name:
+            if o.master.target == "Classic Star Wars Box Set":
+                continue
+            # TODO: handle multi-issue reprints
             flag = build_flags(o, sl, section.name)
+            d = build_date_text(o, include_date).replace("E -->", " -->")
             zt = o.current.original if o.use_original_text else o.master.original
-            zn = f"{flag}{zt}{o.current.extra}"
+            if f"{d}{zt}" in final_without_extra:
+                continue
+            final_without_extra.append(f"{d}{zt}")
+            zn = f"{d}{flag}{zt} {o.current.extra}".replace("  ", " ").strip()
+            zn = zn.replace("{{C|unlicensed}}", "").strip()
+            zn = re.sub(" ?\((Jan|Feb|Mar|Apr|May|June|July|Aug|Sept|Oct|Nov|Dec)[a-z]* ([0-9]+, )?([0-9]{4})\)", "", zn)
             final_items.append(o)
             new_text.append(f"*{zn}")
             rows += 1
@@ -795,18 +847,20 @@ def build_new_section(title, name, section: SectionItemIds, results: PageCompone
         d = build_date_text(o, include_date).replace("E -->", " -->")
         if o.current.unique_id() in section.group_ids:
             rows += build_card_block(o, d, section, sl, final_without_extra, final_items, new_text)
-        elif not results.real and o.master.reprint and o.master.target in targets:
+        elif not results.real and o.master.reprint and not o.master.has_content and o.master.target in targets:
             print(f"Skipping duplicate {o.master.target} reprint with template {o.master.template} and parent {o.master.parent}")
         elif not results.real and o.master.master_page == "Web/Repost":
             print(f"Skipping reposted video: {o.master.original}")
             continue
-        elif not results.real and o.master.reprint and o.master.original_printing:
+        elif not results.real and o.master.reprint and not o.master.has_content and o.master.original_printing:
             print(f"Replacing reprint of {o.master.target} with original version")
             rows += build_item_text(ItemId(o.current, o.master.original_printing, False),
                                     d, sl, final_without_extra, final_items, new_text, section.name,
                                     collapse_audiobooks, section.mark_as_non_canon, results.unlicensed, log)
         else:
-            if o.master.reprint and not results.real:
+            if o.master.reprint and not results.real and o.master.has_content:
+                print(f"Including content reprint version of {o.master.target}")
+            elif o.master.reprint and not results.real:
                 print(f"Unexpected state: {o.master.target} reprint with template {o.master.template} and parent {o.master.parent} but no original-printing")
             rows += build_item_text(o, d, sl, final_without_extra, final_items, new_text, section.name,
                                     collapse_audiobooks, section.mark_as_non_canon, results.unlicensed, log)
@@ -915,7 +969,7 @@ def build_flags(o: ItemId, sl, section_name, is_file=False):
         return ""
     elif o.master.from_extra and "{{co}}" not in (o.current.extra or '').lower() \
             and "cover only" not in (o.current.extra or '').lower() and o.current.template != "HomeVideoCite":
-        if o.master.future or is_file or o.master.has_content or section_name == "Collections":
+        if o.master.future or is_file or o.master.has_content or "Collect" in section_name:
             return ""
         elif o.current.extra and "{{c|cut}}" in o.current.extra.lower():
             return ""
@@ -933,7 +987,7 @@ def build_flags(o: ItemId, sl, section_name, is_file=False):
 
 def build_item_text(o: ItemId, d: str, sl: str, final_without_extra: list, final_items: List[ItemId],
                     new_text: list, section_name, collapse_audiobooks: bool, nc: str, unlicensed: bool,
-                    log: bool, is_file=False):
+                    log: bool, is_file=False, skip_parent=False):
     zt = o.current.original if o.use_original_text else o.master.original
     if not zt.strip():
         return 0
@@ -988,7 +1042,9 @@ def build_item_text(o: ItemId, d: str, sl: str, final_without_extra: list, final
             z += " {{C|canceled}}"
         if (o.master.mode == "Minis" or o.master.template == "SWIA") and o.master.card:
             z = re.sub("\|link=.*?(\|.*?)?}}", "\\1}}", re.sub(" ?\{\{[Cc]\|[Rr]eissued.*?}}", "", z))
-        z = z.replace("–", "&ndash;").replace("—", "&mdash;").replace("  ", " ").replace("|parent=1", "")
+        z = z.replace("–", "&ndash;").replace("—", "&mdash;").replace("  ", " ")
+        if not skip_parent:
+            z = z.replace("|parent=1", "")
         # z = re.sub("\|stext=(.*?)\|\\1\|", "|stext=\\1|", z)
         final_items.append(o)
         final_without_extra.append(zn)

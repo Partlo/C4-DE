@@ -227,3 +227,7 @@
 **Cleanup of old series-mapping and other defunct logic
 **Added archival scripts, still under refinement
 **Added create-list command for non-Index timeline sorting
+*'''4.6.0''': May 16, 2025
+**Major overhauls of media parsing logic
+**General bug fixes
+**Handling reprints with unique content

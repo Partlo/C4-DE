@@ -4,6 +4,7 @@ import traceback
 import time
 from datetime import datetime
 
+from c4de.sources.domain import Item, ItemId
 from pywikibot import Site, Page, handle_args, pagegenerators, showDiff, input_choice, Timestamp
 from pywikibot.exceptions import APIMWError
 
@@ -16,9 +17,13 @@ from c4de.sources.infoboxer import load_infoboxes
 STATUS = ["Category:Wookieepedia Featured articles", "Category:Wookieepedia Good articles", "Category:Wookieepedia Comprehensive articles"]
 
 
-def to_duration(now):
+def to_duration(now: datetime):
     d = datetime.now() - now
-    return f"{d.seconds}.{d.microseconds}"
+    return f"{d.total_seconds()}"
+
+
+def remove_the(x):
+    return x[(4 if x.startswith("The ") else 0):]
 
 
 def analyze(*args):
@@ -112,7 +117,8 @@ def analyze(*args):
                 quit()
 
         if start_on:
-            if page.title().lower() >= start_on.lower() and not page.title().startswith("Wookieepedia:"):
+
+            if remove_the(page.title()).lower() >= start_on.lower() and not page.title().startswith("Wookieepedia:"):
                 print(f"Found: {page.title()}")
                 start_on = None
             else:
@@ -123,12 +129,12 @@ def analyze(*args):
         if skip_start and skip_end:
             if skip_start.lower() <= page.title().lower() <= skip_end.lower():
                 continue
-        if legends:
-            if not any(c.title(with_ns=False) == "Legends articles" for c in page.categories()):
-                continue
-        elif canon:
-            if not any(c.title(with_ns=False) == "Canon articles" for c in page.categories()):
-                continue
+        # if legends:
+        #     if not any(c.title(with_ns=False) == "Legends articles" for c in page.categories()):
+        #         continue
+        # elif canon:
+        #     if not any(c.title(with_ns=False) == "Canon articles" for c in page.categories()):
+        #         continue
         try:
             now = datetime.now()
             bf = bot
@@ -149,8 +155,8 @@ def analyze(*args):
                         print(f"Reloaded revision {r['revid']} for {page.title()}")
                         break
             extra = []
-            text = build_new_text(page, infoboxes, types, [], appearances, sources, cats, remap, include_date,
-                                  checked, log=log, collapse_audiobooks=True, manual=old_revision, extra=extra, keep_pages=False)
+            text, u1, u2 = build_new_text(page, infoboxes, types, [], appearances, sources, cats, remap, include_date,
+                                          checked, log=log, collapse_audiobooks=True, manual=old_revision, extra=extra, keep_pages=False)
             if text is None:
                 continue
 
@@ -175,8 +181,8 @@ def analyze(*args):
                 print(f"Skipping {page.title()}; infobox newline is only change -> {to_duration(now)} seconds")
                 continue
 
-            match = re.sub("\{\{1stID\|.*?}}", "{{1stID}}", re.sub("<!--.*?-->", "", z1.replace("ncomplete list", "ncompleteList").replace("ncomplete_list", "ncompleteList").replace("–", "&ndash;").replace("—", "&mdash;").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]"))) == \
-                    re.sub("\{\{1stID\|.*?}}", "{{1stID}}", re.sub("<!--.*?-->", "", z2.replace("ncomplete list", "ncompleteList").replace("ncomplete_list", "ncompleteList").replace("–", "&ndash;").replace("—", "&mdash;").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]")))
+            match = re.sub("\{\{1stID\|.*?}}", "{{1stID}}", re.sub("<!--.*?-->", "", z1.replace("ncomplete list", "ncompleteList").replace("ncomplete_list", "ncompleteList").replace("–", "&ndash;").replace("—", "&mdash;").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]"))).replace("=Collections=", "=Collected in=") == \
+                    re.sub("\{\{1stID\|.*?}}", "{{1stID}}", re.sub("<!--.*?-->", "", z2.replace("ncomplete list", "ncompleteList").replace("ncomplete_list", "ncompleteList").replace("–", "&ndash;").replace("—", "&mdash;").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]"))).replace("=Collections=", "=Collected in=")
 
             override = old_text.count("nterlang") > text.count("nterlang") or old_text.count("ategory:") > text.count("ategory:")
             if not override and match and always_comment:
@@ -188,13 +194,30 @@ def analyze(*args):
             #     continue
 
             # showDiff(old_text, text, context=1)
-            z1 = re.sub("\|stext=.*?(\|.*?)?}}", "\\1}}", z1).replace("Journal|", "JournalCite|")
-            z2 = re.sub("\|stext=.*?(\|.*?)?}}", "\\1}}", z2).replace("Journal|", "JournalCite|")
+            z1 = re.sub("\|stext=.*?(\|.*?)?}}", "\\1}}", z1).replace("Journal|", "JournalCite|").replace("=Collections=", "=Collected in=")
+            z2 = re.sub("\|stext=.*?(\|.*?)?}}", "\\1}}", z2).replace("Journal|", "JournalCite|").replace("=Collections=", "=Collected in=")
 
             if include_date:
                 showDiff(z2, z1, context=1)
             else:
                 showDiff(re.sub("<!--.*?-->", "", z2), re.sub("<!--.*?-->", "", z1), context=1)
+            zx = []
+            for u in u1:
+                print(f"Unknown: {u}")
+                zx.append(u)
+            for n, x in {"Appearance": u2.apps, "Source": u2.src, "Final": u2.final_items}.items():
+                if x:
+                    for o in x:
+                        if isinstance(o, ItemId):
+                            y = o.current.original
+                        elif isinstance(o, Item):
+                            y = o.original
+                        else:
+                            y = o
+                        if y not in zx:
+                            print(f"Unknown {n}: {y}")
+                        zx.append(y)
+
             print(f"{page.title()} -> {dx} seconds")
             if not override and always:
                 page.put(text, media_msg if media else message, botflag=match or bf)

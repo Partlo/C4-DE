@@ -29,7 +29,7 @@ MANGA = {
     "Star Wars: The Mandalorian: The Manga": {
         "The Mandalorian: The Manga, Vol. 1": ["Chapter 1: The Mandalorian"],
         "The Mandalorian: The Manga, Vol. 2": ["Chapter 2: The Child", "Chapter 3: The Sin"],
-        "The Mandalorian: The Manga, Vol. 3": ["Chapter 4: Sanctuary," "Chapter 5: The Gunslinger", "Chapter 6: The Prisoner"],
+        "The Mandalorian: The Manga, Vol. 3": ["Chapter 4: Sanctuary", "Chapter 5: The Gunslinger", "Chapter 6: The Prisoner"],
         "The Mandalorian: The Manga, Vol. 4": ["Chapter 6: The Prisoner", "Chapter 7: The Reckoning", "Chapter 8: Redemption"],
     }
 }
@@ -168,7 +168,7 @@ def load_appearances(site, log, canon_only=False, legends_only=False):
                     i += 1
                     data.append({"index": i, "page": f"Appearances/{sp}", "date": x.group(1), "item": x.group(4),
                                  "canon": "Canon" in sp, "extra": sp in other, "audiobook": "Audiobook" in sp,
-                                 "collectionType": collection_type})
+                                 "collectionType": collection_type, "master": sp == "Legends" or sp == "Canon"})
                 else:
                     print(f"{p.title()}: Cannot parse line: {line}")
         if log:
@@ -276,7 +276,7 @@ def load_source_lists(site, log):
         p = Page(site, f"Wookieepedia:Sources/Web/{template}")
         i = 0
         for line in p.get().splitlines():
-            if "/Header}}" in line:
+            if "/Header}}" in line or not line.strip():
                 continue
             x = re.search("\*((?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? )?(?P<t>{{.*?)( {{C\|(original|alternate): (?P<a>.*?)}})?$", line)
             if x:
@@ -342,7 +342,7 @@ def store_data(x: Item, i: dict, old: str, extra: str, parenthetical: str, alter
     x.extra = extra or ''
     x.parenthetical = parenthetical
     x.reprint = is_reprint
-    x.alternate_url = alternate
+    x.alternate_url = x.alternate_url or alternate
     x.unlicensed = "Unlicensed" in i['page'] or "{{c|unlicensed" in old.lower() or "{{un}}" in old.lower()
     x.non_canon = "{{c|non-canon" in old.lower() or "{{nc" in old.lower()
 
@@ -379,6 +379,21 @@ def record_reprints(reprints, x):
 
 def load_full_sources(site, types, log) -> FullListData:
     sources = load_source_lists(site, log)
+    set_formatting = {}
+    for ln in Page(site, "Module:FormattedTextLookup/Cards").get().splitlines():
+        x = re.search("\[['\"](.*?)['\"]] ?= ?\"(.*?)\"", ln)
+        if x:
+            set_formatting[x.group(1)] = x.group(2)
+    for ln in Page(site, "Module:CardMiniDB/shared").get().splitlines():
+        x = re.search("\[['\"](.*?)['\"]] ?= ?\"('*)?\[\[(.*?)]]('*)?\"", ln)
+        if x and "|Core Set" not in ln:
+            link, _, fmt = x.group(2).partition("|")
+            if fmt:
+                set_formatting[link] = fmt
+            else:
+                set_formatting[link] = x.group(2) + link + x.group(4)
+    print(f"Loaded formatting text for {len(set_formatting)} sets")
+
     count = 0
     unique_sources = {}
     full_sources = {}
@@ -392,7 +407,7 @@ def load_full_sources(site, types, log) -> FullListData:
         item = i['item']
         old = f"{i['item']}"
         try:
-            is_reprint = "{{c|republish" in old.lower() or i["page"] == "Reprint"
+            is_reprint = "{{c|republish" in old.lower() or i["page"].endswith("Reprint")
             item, parenthetical = remove_capture(item, re.compile("(\|p=(.*?))(?=(\|.*?)?}})"), 1, 2)
             item, extra = remove_capture(item, re.compile("({{C\|([Aa]bridged|[Rr]epublished|[Uu]nlicensed|[Nn]on[ -]?canon)}}|{{[Uu]n}}|{{[Nn]cs?}})"), 1)
             x = extract_item(remove_templates(item), False, i['page'], types, master=True)
@@ -408,10 +423,13 @@ def load_full_sources(site, types, log) -> FullListData:
                 x.date_ref = i.get('ref')
                 x.extra_date = i.get('extraDate')
 
+                if x.target in set_formatting:
+                    x.set_format_text = set_formatting[x.target]
+
                 if x.master_page.endswith("CardSets") and x.parenthetical:
                     if x.template not in card_suffixes:
                         card_suffixes[x.template] = {}
-                    card_suffixes[x.template][x.target] = f"{x.target} ({parenthetical})"
+                    card_suffixes[x.template][x.target.replace(f" ({parenthetical})", "")] = x.target
                 elif x.is_card_or_mini() and x.card:
                     if x.template in card_suffixes and x.parent in card_suffixes[x.template]:
                         x.parent = card_suffixes[x.template][x.parent]
@@ -493,7 +511,7 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 store_data(x, i, old, extra, parenthetical, alternate, is_reprint, today)
 
                 x.is_appearance = "{{c|source}}" not in old.lower()
-                x.has_content = has_content and ("Collections" in i['page'] or "Series" in i['page'] or "Extra" in i['page'])
+                x.has_content = has_content and any(s in i['page'] for s in ["Collections", "Series", "Extra", "Reprint"])
                 x.ab = ab
                 x.repr = reprint
                 x.crp = "{{crp}}" in old.lower()
@@ -501,6 +519,9 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 x.abridged = "abridged audiobook" in x.original and "unabridged" not in x.original
                 x.is_audiobook = not ab and ("audiobook)" in x.original or x.target in AUDIOBOOK_MAPPING.values() or i['audiobook'])
                 x.german_ad = x.target and "German audio drama" in x.target
+                x.is_true_appearance = i["master"]
+                if x.template == "SchAdv" or x.template == "EpIAdv":
+                    x.original = f"''[[{x.target}]]''"
 
                 full_appearances[x.full_id()] = x
                 unique_appearances[x.unique_id()] = x
