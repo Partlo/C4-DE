@@ -591,16 +591,16 @@ def match_specific_target(o: Item, target: str, by_target: Dict[str, List[Item]]
         if o.template in ["Tales", "TCWUKCite", "IDWAdventuresCite-2017"] and "(" not in target and target not in by_target:
             targets.append(f"{target} (comic)")
 
-        m = re.search("^(Polyhedron|Challenge|Casus Belli|Valkyrie|Inphobia) ([0-9]+)$", target)
-        if m:
-            x = m.group(1).replace(" ", "") + "Cite"
-            for dct in [by_target, other_targets or {}]:
-                for t, d in dct.items():
-                    for i in d:
-                        if i.parent == target:
-                            return ItemId(o, i, False, False)
-                        elif i.template == x and i.issue == m.group(2):
-                            return ItemId(o, i, False, False)
+        # m = re.search("^(Polyhedron|Challenge|Casus Belli|Valkyrie|Inphobia) ([0-9]+)$", target)
+        # if m:
+        #     x = m.group(1).replace(" ", "") + "Cite"
+        #     for dct in [by_target, other_targets or {}]:
+        #         for t, d in dct.items():
+        #             for i in d:
+        #                 if i.parent == target:
+        #                     return ItemId(o, i, False, False)
+        #                 elif i.template == x and i.issue == m.group(2):
+        #                     return ItemId(o, i, False, False)
 
     for t in targets:
         x = match_by_target(t, o, by_target, other_targets, log)
@@ -699,14 +699,16 @@ def do_urls_match(url, template, d: Item, replace_page, log=False):
             return 2
         elif d_url == re.sub("indexp([0-9]+)\.html", "index.html?page=\\1", url):
             return 2
-    elif d_url and template == "SWArchive" and match_news_format(d_url, url, ):
+    elif d_url and template == "SWArchive" and match_news_format(d_url, url):
         return 2
     elif d_url and matches_up_to_string(d_url.lower(), url.lower(), "/index.html", False):
         return 1
+    elif d_url and template == "SWArchive" and d_url.lower().replace(".html", "").startswith(url.lower().replace(".html", "")):
+        return 2
     elif d_url and template == "SW" and d.template == "SW" and url.startswith("tv-shows/") and \
             d_url.startswith("series") and d_url == url.replace("tv-shows/", "series/"):
         return 2
-    elif d_url and matches_up_to_string(d_url.lower(), url.lower(), "?page=", False):
+    elif d_url and not d_url.startswith("content.jsp?page=") and matches_up_to_string(d_url.lower(), url.lower(), "?page=", False):
         return 2
     elif template == "SonyCite" and d.template == "SonyCite" and (url.startswith("players/") or url.startswith("en_US/players/")):
         nu = url.replace("en_US/players/", "").replace("players/", "")

@@ -105,9 +105,10 @@ def prep_title_parameter(repl, val, p=""):
         repl[f"title{p}"] = val
 
 
-def handle_title_format(fmt):
-    replacement = {}
+def handle_title_format(actual, fmt):
+    replacement = None
     if fmt:
+        replacement = {}
         if fmt.startswith('"') and fmt.endswith('"'):
             fmt = fmt[1:-1]
         if "(" in fmt and fmt.endswith(")"):
@@ -117,25 +118,24 @@ def handle_title_format(fmt):
         paren = paren[:-1] if paren.endswith(")") else paren
         prep_title_parameter(replacement, title)
         if paren:
-            prep_title_parameter(replacement, paren,"2")
+            prep_title_parameter(replacement, paren, "2")
     return replacement
 
 
-def sort_top_template(t, add_ref=False, fmt=None):
+def sort_top_template(title, t, add_ref=False, fmt=None):
     if t and add_ref and "|ref" not in t:
         t = t.replace("{{Top|", "{{Top|ref|")
     px = re.search("^(.*?\{\{Top\|)(.*?)(}}.*?)$", t)
-    replacement = handle_title_format(fmt)
-    if px and "|" in px.group(2):
-        new_params = []
-        for k, v in replacement.items():
-            new_params.append((k, v))
-        unknown = []
-        for p in px.group(2).split("|"):
+    replacement = handle_title_format(title, fmt)
+    new_params = [(k, v) for k, v in (replacement or {}).items()]
+    unknown = []
+    if px:
+        p1, p2 = px.group(1), px.group(3)
+        for p in (px.group(2) or '').split("|"):
             v = ""
             if "=" in p:
                 p, v = p.split("=", 1)
-            if replacement and p in ["title", "title2", "italics", "italics2"]:
+            if replacement is not None and p in ["title", "italics"]:
                 continue
             if p in new_params or p in unknown:
                 continue
@@ -143,10 +143,13 @@ def sort_top_template(t, add_ref=False, fmt=None):
                 new_params.append((p, v))
             else:
                 unknown.append((p, v))
-        params = sorted(new_params, key=lambda a: FULL_ORDER.index(a[0]))
-        new_text = "|".join(f"{a}={b}" if b else a for a, b in [*params, *unknown])
-        return px.group(1) + new_text + px.group(3)
-    return t
+    elif new_params:
+        p1, p2 = "{{Top|", "}}"
+    else:
+        return t
+    params = sorted(new_params, key=lambda a: FULL_ORDER.index(a[0]))
+    new_text = "|".join(f"{a}={b}" if b else a for a, b in [*params, *unknown])
+    return p1 + new_text + p2
 
 
 def build_redirects(page: Page, manual: str = None):
@@ -161,10 +164,14 @@ def build_redirects(page: Page, manual: str = None):
     for r in page.imagelinks():
         pages.append(r)
         pagenames.append(r.title())
-    if manual:
+    if manual and isinstance(manual, str):
         for _, x, _ in re.findall("\[\[(?!(Category:))(.*?)(\|.*?)?]]", manual):
             if x not in pagenames:
                 pages.append(Page(page.site, x))
+                pagenames.append(x)
+        for _, x in re.findall("\{\{([Tt]emplate)?:?([^\n|{}[\]]+)", manual):
+            if f"Template:{x}" not in pagenames:
+                pages.append(Page(page.site, f"Template:{x}"))
                 pagenames.append(x)
         # for _, x, _ in re.findall("\|(title=|set=)(.*?)(\|.*?)?}}", manual):
         #     if x not in pagenames:
@@ -263,10 +270,11 @@ def handle_multiple_issues(text: Union[List[str], str]):
         for x in params:
             current = current.replace("MultipleIssues", f"MultipleIssues|{x}")
         for ln in lines:
+            if not ("{{Top|" in ln or "{{Top}}" in ln or "{{Otheruses" in ln or "{{Youmay" in ln):
+                if current not in new_lines:
+                    new_lines.append(current)
             if ln not in to_remove:
                 new_lines.append(ln)
-                if "{{Top|" in ln or "{{Top}}" in ln:
-                    new_lines.append(current)
         return new_lines
     return lines
 
@@ -307,7 +315,7 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
             if r == "Star Wars Galaxies: An Empire Divided":
                 y = appearances.get(r) if appearances else (sources.get(r) if sources else y)
 
-            if y and y[0].template and "set=" not in y[0].original:
+            if y and y[0].template and not y[0].tv and y[0].template != "SWIA" and y[0].template != "StoryCite" and "set=" not in y[0].original and "(comic" not in y[0].target and "story)" not in y[0].target:
                 rep = f"''[[{y[0].target}]]''"
                 if y[0].format_text:
                     rep = f"[[{y[0].target}|{y[0].format_text}]]"
@@ -572,7 +580,7 @@ def archive_url(url, force_new=False, timeout=30, enabled=True, skip=False, star
             r = requests.get(f"https://web.archive.org/web/{x}{url}", timeout=timeout)
             if re.search("/web/([0-9]+)/", r.url):
                 z = r.url.split("/web/", 1)[1].split("/", 1)[0]
-                if z != start:
+                if z != start and not (start and start[:4] == z[:4]):
                     log(f"URL is archived already: {z} -> {url}")
                     return True, r.url.split("/web/", 1)[1].split("/", 1)[0]
             else:

@@ -20,6 +20,8 @@ from discord.ext import commands, tasks
 from asyncio.exceptions import TimeoutError
 import ssl
 
+from c4de.sources.parsing import fix_template_redirects
+
 ssl._create_default_https_context = ssl._create_unverified_context
 
 from pywikibot import Site, Page, Category, User, FilePage
@@ -35,7 +37,7 @@ from c4de.protocols.edelweiss import run_edelweiss_protocol, calculate_isbns_for
 from c4de.protocols.rss import check_rss_feed, check_latest_url, check_wookieepedia_feeds, check_sw_news_page, \
     check_review_board_nominations, check_policy, check_consensus_duration, check_user_rights_nominations, \
     check_blog_list, check_ea_news, check_unlimited, check_ubisoft_news, compare_site_map, handle_site_map, \
-    check_target_url, compile_tracked_urls, check_title_formatting, check_hunters_news
+    check_target_url, compile_tracked_urls, check_title_formatting, check_hunters_news, check_ilm
 
 from c4de.sources.analysis import get_analysis_from_page
 from c4de.sources.archive import create_archive_categories
@@ -912,6 +914,7 @@ class C4DE_Bot(commands.Bot):
     @tasks.loop(minutes=30)
     async def check_for_sources_rebuild(self):
         try:
+            log("Checking for source changes")
             if self.have_sources_changed():
                 await self.build_sources()
         except Exception as e:
@@ -976,9 +979,10 @@ class C4DE_Bot(commands.Bot):
             old_text = target.get()
 
             await message.add_reaction(TIMER)
+            old_text, redirects = fix_template_redirects(target, old_text)
             results = analyze_target_page(target, self.infoboxes, self.templates, self.disambigs, self.appearances,
-                                          self.sources, self.auto_cats, self.remap,
-                                          save=True, include_date=False, use_index=True)
+                                          self.sources, self.auto_cats, self.remap, old_text=old_text,
+                                          save=True, include_date=False, use_index=True, redirects=redirects)
             mc = "\n".join([f"- {c.title()}" for c in target.categories() if c.title() in self.maintenance_cats])
             await message.remove_reaction(TIMER, self.user)
             await message.add_reaction(self.emoji_by_name("bb8thumbsup"))
@@ -1785,6 +1789,8 @@ class C4DE_Bot(commands.Bot):
             messages = check_unlimited(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
         elif site_data["template"] == "AtomicMassGames":
             messages = check_blog_list(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
+        elif site_data["template"] == "ILM":
+            messages = check_ilm(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
         elif site_data["template"] == "Ubisoft":
             messages = check_ubisoft_news(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
         elif site_data["template"] == "Hunters":

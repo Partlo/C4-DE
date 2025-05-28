@@ -296,18 +296,23 @@ def parse_archive(site, template):
     return archive
 
 
-def clean_archive_usages(page: Page, text, data: FullListData = None):
-    txt, _ = _clean_archive_usages(page, text, data.archive_data if data else {})
+def clean_archive_usages(page: Page, text, data: FullListData = None, redo=False):
+    txt, _ = _clean_archive_usages(page, text, data.archive_data if data else {}, redo)
     return txt
 
 YEARLY = ['news/happy-star-wars-day', 'news/star-wars-black-friday-and-cyber-week-deals', 'news/star-wars-day-deals', 'news/star-wars-day-merchandise', 'news/star-wars-day-video-game-deals', 'news/star-wars-fathers-day-gift-guide', 'news/star-wars-halloween-shopping-guide', 'news/star-wars-holiday-gift-guide', 'news/star-wars-mothers-day-gift-guide', 'news/star-wars-reads', 'news/star-wars-valentines-day-gift-guide']
 
 
-def _clean_archive_usages(page: Page, text, archive_data: dict):
+def _clean_archive_usages(page: Page, text, archive_data: dict, redo=False):
     templates_to_check = set()
-    for c in page.categories():
-        if c.title().endswith("same archivedate value") or c.title().endswith("with custom archivedate"):
-            templates_to_check.add(re.search("^(.*?) usages with.*?$", c.title(with_ns=False)).group(1))
+    if redo:
+        for x in re.findall("\{\{([^\n|{}]+?)\|[^\n{}]+?\|archive(url|date)=.*?}}", text):
+            if x[0] != "WebCite":
+                templates_to_check.add(x[0])
+    else:
+        for c in page.categories():
+            if c.title().endswith("same archivedate value") or c.title().endswith("with custom archivedate"):
+                templates_to_check.add(re.search("^(.*?) usages with.*?$", c.title(with_ns=False)).group(1))
     if not templates_to_check:
         return text, archive_data
 
@@ -319,30 +324,14 @@ def _clean_archive_usages(page: Page, text, archive_data: dict):
         templates_to_check.add("StarWarsShow")
     chunks = text.split("</ref>")
     for t in templates_to_check:
-        tx = "SWYouTube" if t in ["ThisWeek", "HighRepublicShow", "StarWarsShow"] else t
-        tx = "LEGOYouTube" if tx == "LegoMiniMovie" else tx
-        tx = "Blogspot" if tx == "DailyswCite" else tx
-        if tx not in archive_data:
-            archive_data[tx] = parse_archive(page.site, tx)
-        archive = archive_data.get(tx) or {}
+        if t not in archive_data:
+            archive_data[t] = parse_archive(page.site, t)
+        archive = archive_data.get(t) or {}
         if not archive:
             continue
 
         for c in chunks:
-            if archive and t == "Rebelscum":
-                for x in re.findall("(\{\{KennerCite\|(.*?\|)?link=(h?t?t?.*?rebelscum\.com/)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?\|archive(date|url)=([^\n{}|]+?) ?)(\|[^\n{}]*?)?}})", c):
-                    if "oldversion" in x[0] or x[3].lower() not in archive:
-                        continue
-                    # elif "nolive=" in x[0] and x[7] != archive[x[3].lower()]:
-                    #     continue
-                    text = text.replace(x[5], "").replace(f"link={x[2]}{x[3]}", f"link={x[3]}")
-                for x in re.findall("(\{\{[A-z0-9 _]+\|(.*?\|)?(url|a?l?t?link)=([^\n{}|]*?rebelscum[^\n{}|]*?)/?(\|[^\n{}]*?)?( ?\|archive(date|url)=[^\n{}|]*? ?)(\|[^\n{}]*?)?}})", c):
-                    if "nolive=" in x[0] or "oldversion" in x[0]:
-                        continue
-                    if re.sub("(https?://)?w*\.?rebelscum\.com/", "", x[3].lower()) not in archive:
-                        continue
-                    text = text.replace(x[5], "")
-            elif archive and tx == "Blogspot":
+            if archive and t == "Blogspot":
                 for x in re.findall("(\{\{" + t + "\|(.*?\|)?(url|id|a?l?t?link)=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
                     if "oldversion" in x[0] or (x[3].lower() not in archive and f"search/label/{x[3]}".lower() not in archive):
                         continue
@@ -354,7 +343,15 @@ def _clean_archive_usages(page: Page, text, archive_data: dict):
                         continue
                     text = text.replace(x[5], "")
             elif archive and "YouTube" in t:
-                for x in re.findall("(\{\{" + t + "\|(video=)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                for x in re.findall("(\{\{.*?\|video=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    if "oldversion" in x[0] or x[1].lower() not in archive:
+                        continue
+                    text = text.replace(x[3], "")
+                for x in re.findall("(\{\{.*?YouTube\|(channel=)([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    if "oldversion" in x[0] or "video=" in x[0] or x[2].lower() not in archive:
+                        continue
+                    text = text.replace(x[4], "")
+                for x in re.findall("(\{\{.*?YouTube\|(video=)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
                     if "oldversion" in x[0] or x[2].lower() not in archive:
                         continue
                     text = text.replace(x[4], "")
@@ -374,6 +371,10 @@ def _clean_archive_usages(page: Page, text, archive_data: dict):
                     #     continue
                     text = text.replace(x[4], "")
             elif archive:
+                for x in re.findall("(\{\{" + t + "\|(subdomain=|username=)([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    if "oldversion" in x[0] or "|url=" in x[0] or x[2].lower() not in archive:
+                        continue
+                    text = text.replace(x[4], "")
                 for x in re.findall("(\{\{" + t + "\|(.*?\|)?(url|id|a?l?t?link)=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
                     if "oldversion" in x[0] or x[3].lower() not in archive or x[3].lower() in YEARLY:
                         continue
@@ -386,6 +387,23 @@ def _clean_archive_usages(page: Page, text, archive_data: dict):
                     # elif "nolive=" in x[0] and x[7] != archive[x[1].lower()]:
                     #     continue
                     text = text.replace(x[4], "")
+                if t == "Rebelscum":
+                    for x in re.findall(
+                            "(\{\{KennerCite\|(.*?\|)?link=(h?t?t?.*?rebelscum\.com/)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?\|archive(date|url)=([^\n{}|]+?) ?)(\|[^\n{}]*?)?}})",
+                            c):
+                        if "oldversion" in x[0] or x[3].lower() not in archive:
+                            continue
+                        # elif "nolive=" in x[0] and x[7] != archive[x[3].lower()]:
+                        #     continue
+                        text = text.replace(x[5], "").replace(f"link={x[2]}{x[3]}", f"link={x[3]}")
+                    for x in re.findall(
+                            "(\{\{[A-z0-9 _]+\|(.*?\|)?(url|a?l?t?link)=([^\n{}|]*?rebelscum[^\n{}|]*?)/?(\|[^\n{}]*?)?( ?\|archive(date|url)=[^\n{}|]*? ?)(\|[^\n{}]*?)?}})",
+                            c):
+                        if "nolive=" in x[0] or "oldversion" in x[0]:
+                            continue
+                        if re.sub("(https?://)?w*\.?rebelscum\.com/", "", x[3].lower()) not in archive:
+                            continue
+                        text = text.replace(x[5], "")
     return text, archive_data
 
 
@@ -412,7 +430,7 @@ def clean_up_archive_dates(site, t=None):
         page.put(text, "Clearing stored archivedates")
 
 
-MAINTENANCE_CATS = ["High-priority template and page issues", "Low-priority template and page issues",
+MAINTENANCE_CATS = ["High-priority template and page issues", "Low-priority template and page issues", "File maintenance",
                     "ArchiveAccess tracking categories", "Tracking maintenance categories"]
 ARCHIVEDATE_CATS = ["Custom archivedate usages", "Same archivedate usages", "Unarchived URLs"]
 

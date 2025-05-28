@@ -8,7 +8,7 @@ import requests
 import html
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
-from pywikibot import Site, Page, Category
+from pywikibot import Site, Page, Category, User
 
 from c4de.common import error_log, log
 
@@ -150,7 +150,67 @@ def check_wookieepedia_feeds(site: Site, cache: Dict[str, List[str]]):
     for e in entries:
         messages.append(("images-and-audio", f"📷  **Wookieepedia:Image requests** was edited by **{e.author}**: [view change](<{e.link}>)", None))
 
+    blocks, block_cache = check_autoblocks(cache)
+    logs, log_cache = check_abuse_log(site, cache)
+    cache["Autoblock"] = block_cache
+    cache["AbuseLog"] = log_cache
+    for x in [*blocks, *logs]:
+        messages.append(("abuse-logs", x, None))
+
     return messages, to_delete
+
+
+def check_autoblocks(cache):
+    results = []
+    new_cache = []
+    try:
+        r = requests.get("https://starwars.fandom.com/api.php?action=query&format=json&list=blocks&formatversion=2&bklimit=20&bkprop=id%7Cuser%7Cby%7Ctimestamp%7Cexpiry%7Creason%7Crange%7Cflags&bkshow=")
+        for x in r.json()['query']['blocks']:
+            if not x.get("automatic"):
+                continue
+            if str(x['id']) not in cache["Autoblock"]:
+                results.append(f"Autoblock #{x['id']}: {x['reason']}")
+            new_cache.append(str(x['id']))
+    except Exception as e:
+        error_log(f"Encountered {str(e)} while checking block log", e)
+    return results, new_cache
+
+
+def check_abuse_log(site, cache):
+    results = []
+    new_cache = []
+    try:
+        r = requests.get("https://starwars.fandom.com/api.php?action=query&format=json&list=abusefilters%7Cabuselog&formatversion=2&abflimit=200&aflfilter=&afllimit=100&aflprop=ids%7Cuser%7Ctitle%7Caction%7Cresult%7Ctimestamp%7Chidden%7Crevid%7Cfilter")
+        filter_ids, filter_names = {}, {}
+        for i in r.json()['query']['abusefilters']:
+            filter_ids[i['description']] = str(i['id'])
+            filter_names[str(i['id'])] = i['description']
+        records = {}
+        window = (datetime.now() - timedelta(days=1)).isoformat()
+        for x in r.json()['query']['abuselog']:
+            if x['result'] != "disallow" or x['timestamp'] <= window:
+                continue
+            filter_id = str(x['filter_id'] or filter_ids.get(x['filter']))
+            if f"{filter_id}: {x['user']}" in cache["AbuseLog"]:
+                new_cache.append(f"{filter_id}: {x['user']}")
+                continue
+
+            if x['user'] not in records:
+                records[x['user']] = {}
+            if filter_id not in records[x['user']]:
+                records[x['user']][filter_id] = []
+            records[x['user']][filter_id].append(x)
+
+        for user, fx in records.items():
+            total = sum(len(fx[f]) for f in fx)
+            if total >= 5:
+                u = User(site, user).full_url()
+                for fid, lx in fx.items():
+                    results.append(f"[{user}](<{u}>) has triggered [filter #{fid}](<https://starwars.fandom.com/wiki/Special:AbuseLog?wpSearchFilter={fid}>) ({filter_names.get(fid, 'Unknown?')}) {len(lx)} times in the last day")
+                    new_cache.append(f"{fid}: {user}")
+    except Exception as e:
+        error_log(f"Encountered {str(e)} while checking block log", e)
+    return results, new_cache
 
 
 def parse_bot_request_diff(description):
@@ -332,6 +392,48 @@ def check_blog_list(site, url, feed_url, cache: Dict[str, List[str]]):
     return results
 
 
+def check_ilm(site, url, feed_url, cache: Dict[str, List[str]]):
+    x = None
+    try:
+        x = requests.get(feed_url, timeout=15).text
+    except Exception as e:
+        error_log(type(e))
+    if not x:
+        return []
+
+    soup = BeautifulSoup(x, "html.parser")
+    results = []
+    i = 0
+    for article in soup.find_all("article"):
+        if i == 3:
+            break
+        i += 1
+        h3 = article.find("h3", class_="entry-title")
+        if not h3:
+            continue
+        link = h3.find("a")
+        if not link:
+            continue
+        u = link.get('href')
+        if u.endswith("/"):
+            u = u[:-1]
+        if site not in cache:
+            cache[site] = []
+        if cache[site] and u in cache[site]:
+            continue
+
+        d = article.find("span", class_="published")
+        date = d.text.strip() if d else None
+        try:
+            date = datetime.strptime(date, "%B %d, %Y").strftime("%Y-%m-%d")
+        except Exception:
+            pass
+        results.append({"site": site, "title": link.text.strip() if link else None, "url": u, "content": "", "date": date})
+        cache[site].append(u)
+
+    return list(reversed(results))
+
+
 def check_unlimited(site, url, feed_url, cache: Dict[str, List[str]]):
     x = None
     try:
@@ -505,7 +607,7 @@ def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, che
         elif content and "the high republic show" in content.lower():
             template = "HighRepublicShow"
 
-        entries_to_report.append({"site": site, "title": title, "url": e.link, "content": content,
+        entries_to_report.append({"site": site, "title": title, "url": e.link, "content": content, "date": e.get("date", "").split("T")[0],
                                   "videoId": e.get("yt_videoid"), "template": template})
         cache[site].append(e.link)
 
@@ -563,6 +665,7 @@ def check_title_formatting(text, title_regex, title):
     title = re.sub(r"<span[^>]*?>(.*?)( )?</span>", r"\1\2", title)
     title = title.replace("“", '"').replace("”", '"').replace("’", "'").replace("‘", "'")
     title = title.replace("|", "&#124;").replace("–", "&ndash;").replace("—", "&mdash;")
+    title = title.replace("[", "&#91;").replace("]", "&#93;")
     # title = re.sub(" &#124; ?D[Ii][Ss][Nn][Ee][Yy] ?(\+|Plus)[ ]*(& Disney Junior)?[ ]*$", "", title)
     # title = re.sub(" (&#124; )?@?StarWarsKids *?x *?@?disneyjunior", "", title)
     if title.strip().endswith("&#124;"):
@@ -725,7 +828,7 @@ def build_site_map(full: bool):
 
 def compile_tracked_urls(site):
     urls = []
-    for y in range(1990, datetime.now().year + 1):
+    for y in [*range(1990, datetime.now().year + 1), "External"]:
         p = Page(site, f"Wookieepedia:Sources/Web/{y}")
         if p.exists():
             for line in p.get().splitlines():

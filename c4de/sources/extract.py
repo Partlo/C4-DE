@@ -123,7 +123,10 @@ PREFIXES = {
     "VaderImmortal": "Vader Immortal – Episode <x>",
     "DisneyGallery": "<x> (Disney Gallery: The Mandalorian)",
     "GroguCutest": "Episode <x> (Grogu Cutest In The Galaxy)",
-    "RebuildTheGalaxy": "<x> (Rebuild the Galaxy)"
+    "RebuildTheGalaxy": "<x> (Rebuild the Galaxy)",
+    "Tales": "Star Wars Tales <x>",
+    "IDWAdventuresCite-2017": "Star Wars Adventures (2017) <x>",
+    "IDWAdventuresCite-2020": "Star Wars Adventures (2020) <x>",
 }
 
 GAME_TEMPLATES = {
@@ -216,7 +219,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
 
     :rtype: Item
     """
-    z = z.replace("|1=", "|").replace("|s=y", "").replace("{{'s}}", "'s").replace("{{'}}", "'").replace("{{!}}", "|").replace("…", "&hellip;")
+    z = z.replace("|1=", "|").replace("|s=y", "").replace("{{'s}}", "'s").replace("{{'}}", "'").replace("{{!}}", "|").replace("…", "&hellip;").replace("{{=}}", "=")
     if "SeriesListing" in z or "UnknownListing" in z:
         z = re.sub("\{\{(Series|Unknown)Listing.*?}} ?", "", z)
     z = re.sub("{{([A-z]+)]]", "{{\\1}}", re.sub("\|[a-z ]+=\|", "|", z)).replace(" ", " ")
@@ -328,6 +331,9 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     if template.startswith("IDWAdventures") and "annual=" in s:
         m = re.search("\|annual=(.*?)\|(.*?\|)?story=\[*?(.*?)[|}]", s)
         return Item(z, mode, a, target=m.group(3), template=template, parent=f"Star Wars Adventures Annual {m.group(1)}")
+    elif template == "OST":
+        m = re.search("\{\{OST\|(.*?)(\|.*?)?}}", s)
+        return Item(z, mode, a, target=m.group(1), template=template)
     # HoloNet News
     elif template == "Hnn":
         m = re.search("\{\{Hnn\|([0-9]+)(\|(.*?)\|(.*?))?}", s)
@@ -476,7 +482,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     if m and template != "StoryCite" and template != "SimpleCite":
         p = determine_parent_magazine(m, template, types)
         article = fix_insider_departments(m.group('article'), template)
-        parent = f"{p} {m.group('issue')}" if p and m.group('issue') else None
+        parent = p.replace("<x>", m.group('issue')) if p and m.group('issue') else None
         if parent == article and m.group('text'):
             article = f"{parent}#{m.group('text')}"
         format_text = m.group('text') or ''
@@ -510,7 +516,8 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     if not m:
         m = re.search("{{(?P<template>.*?)\|(.*?\|)?(adventure|story)=(?P<story>.*?)\|(.*?\|)?issue1=(?P<issue>[0-9]+)\|(.*?\|)?series=(?P<series>.*?)(\|.*?)?}", s)
     if m:
-        return Item(z, mode, a, target=m.group('story'), template=template, parent=f"{m.group('series')} {m.group('issue')}")
+        m2 = re.search("\|issue2=([0-9]+)", s)
+        return Item(z, mode, a, target=m.group('story'), template=template, parent=f"{m.group('series')} {m.group('issue')}", issue=m.group('issue'), issue2=m2.group(1) if m2 else None)
 
     # Extract book & adventure or story
     m = re.search("{{(?P<template>.*?)\|(.*?\|)?book[0-9]?=(?P<book>.*?)\|(.*?\|)?(adventure|story)=(?P<story>.*?)(\|.*?)?}", s)
@@ -522,9 +529,11 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         return Item(z, mode, a, target=m.group('story'), template=template, parent=m.group('book'))
 
     # Web article with int= parameter
-    m = re.search("{{[^|\[}\n]+\|(.*?\|)?url=(?P<url>.*?)\|.*?(text=(?P<t1>.*?)\|)?(.*?\|)?int=(?P<int>.*?)(\|.*?text=(?P<t2>.*?))?(\|.*?)?}}", s)
+    m = re.search("{{[^|\[}\n]+\|(.*?\|)?url=(?P<url>.*?)\|.*?(text=(?P<t1>.*?)\|)?(.*?\|)?(?P<p>int|serieslink)=(?P<int>.*?)(\|.*?text=(?P<t2>.*?))?(\|.*?)?}}", s)
     if m:
         text = m.group('t1') or m.group('t2')
+        if m.group('p') == "serieslink":
+            text = f"{m.group('int')} {text}"
         return Item(z, mode, a, target=m.group('int'), template=template, url=m.group('url'), text=text)
 
     # Web articles without int= parameter
@@ -563,15 +572,15 @@ def determine_parent_magazine(m: Match, template, types: dict):
     p = PREFIXES.get(template)
     if m.group('issue'):
         if template == "InsiderCite" and m.group('issue').isnumeric() and int(m.group('issue')) <= 23:
-            p = "The Lucasfilm Fan Club Magazine"
+            p = "The Lucasfilm Fan Club Magazine <x>"
         elif template == "InQuestCite" and m.group('issue').isnumeric() and int(m.group('issue')) <= 46:
-            p = "InQuest"
+            p = "InQuest <x>"
         elif template == "CalendarCite":
             p = f"Star Wars Day-at-a-Time Calendar 20{m.group('issue')}"
+    if not p and types["Magazine"].get(template):
+        p = types["Magazine"].get(template) + " <x>"
     if not p:
-        p = types["Magazine"].get(template)
-    if not p:
-        p = template.replace('Cite', '')
+        p = template.replace('Cite', '') + " <x>"
     return p
 
 

@@ -11,7 +11,8 @@ from c4de.sources.determine import determine_id_for_item
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, SectionComponents, SectionLeaf
 from c4de.sources.external import prepare_basic_url
 from c4de.sources.extract import extract_item, convert_issue_to_template, swap_parameters
-from c4de.sources.media import match_header, rearrange_sections, check_for_cover_image, COVER_GALLERY_MEDIA
+from c4de.sources.media import match_header, check_for_cover_image, COVER_GALLERY_MEDIA, \
+    SUBSECTIONS, add_plot_template, rearrange_sections
 
 BY_INDEX = "Use Master Index"
 UNCHANGED = "Leave As Is"
@@ -53,23 +54,6 @@ def is_official_link(o: Item):
     return False
 
 
-def is_official_product_page(o: Item, real):
-    if o and real and _is_official_product_page(o):
-        o.mode = "Official"
-        return True
-    return False
-
-
-def _is_official_product_page(o: Item):
-    if o.url and o.url.startswith("games/"):
-        return o.template in ["SW", "EA", "LucasArts"]
-    elif o.url and o.url.startswith("games-apps/"):
-        return o.template in ["SW"]
-    elif o.url and o.template == "LucasArts":
-        return o.url.startswith("static/") or o.url.startswith("products/")
-    return False
-
-
 def is_nav_or_date_template(template, types: dict):
     return template.lower().replace("_", " ") in types["Nav"] or template.lower().replace("_", " ") in types["Dates"]
 
@@ -91,12 +75,19 @@ def _check_format_text(t, y):
     )
 
 
-def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_cats: list, manual: str = None,
-                             keep_page_numbers=False) -> Tuple[str, Dict, PageComponents]:
-    # now = datetime.now()
+def fix_template_redirects(target: Page, manual: str = None):
     redirects = build_redirects(target, manual=manual)
     template_redirects = {k: v for k, v in redirects.items() if k.startswith("Template:")}
     manual = fix_redirects(template_redirects, manual or target.get(force=True), "Template", [], {})
+    return manual, redirects
+
+
+def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_cats: list, manual: str = None,
+                             keep_page_numbers=False, redirects: dict = None) -> Tuple[str, Dict, PageComponents]:
+    # now = datetime.now()
+    if not redirects:
+        manual = manual or target.get(force=True)
+        manual, redirects = fix_template_redirects(target, manual)
 
     before, infobox, original = initial_cleanup(target, all_infoboxes, before=manual, keep_page_numbers=keep_page_numbers)
 
@@ -136,6 +127,23 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_c
         if c.title() in bad_cats:
             flag.append(c.title())
 
+    media_cat = None
+    stub = None
+    if real and media:
+        if "{{Mediacat" in before:
+            x = re.search("\n(\{\{Mediacat.*?}})", before)
+            if x:
+                media_cat = x.group(1)
+                if "|from=1" not in media_cat:
+                    media_cat = media_cat.replace("Mediacat", "Mediacat|from=1")
+                before = before.replace(x.group(0), "")
+        y = re.search("\{\{([A-z]+-)?[Ss]tub(\|.*?)?}}", before)
+        if y:
+            stub = y.group(0)
+            if stub.lower() == "{{stub}}" and media:
+                stub = "{{Media-stub}}"
+            before = before.replace("\n" + y.group(0), "").replace(y.group(0), "")
+
     if real and media and before.count("\n==") > 3 and "==External links==\n{{Mediacat" in before:
         before = re.sub("(==External links==\n)\{\{Mediacat.*?\n", "\\1", before)
 
@@ -143,7 +151,7 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_c
         canon = True
         app_mode = BY_INDEX
     return before, redirects, PageComponents(manual or target.get(), canon, non_canon, unlicensed, real, app_mode,
-                                             media, infobox, original, flag, target.title())
+                                             media, infobox, original, flag, target.title(), media_cat, stub)
 
 
 def match_iu_header(line):
@@ -158,47 +166,69 @@ def split_by_section(text: str, results: PageComponents) -> Tuple[Dict[str, Sect
     duplicates = set()
     intro = []
     current, subheader = "", ""
-    section_num, subheader_num = 1, 1
+    section_num, subheader_num, current_level = 1, 1, 0
     for line in text.splitlines():
-        line = line.replace("{{SectionFlag}}", "")
+        line = line.replace(FLAG_TEMPLATE, "").replace(BTS_FLAG_TEMPLATE, "")
+        level = len(re.search("^(=+)", line).group(1)) if line.startswith("==") else 0
+        if current_level == 0:
+            current_level = level + 0
+        needs_app = (line.endswith("{{App") or "{{App|" in line) and "appearances" not in (current or '').lower() and results.infobox != "MagazineDepartment"
+
         if "===non-canon appearances===" in line.strip().lower() and "Appearances" not in by_section:
             intro.append(line)
-        elif not results.real and line.strip().startswith("==") and match_iu_header(line.strip()):
+        elif not results.real and level >= 2 and match_iu_header(line.strip()):
             current = match_iu_header(line)
-            by_section[current] = SectionLeaf(current, line.strip(), 1, int(line.count("=") / 2))
-        elif results.real and line.strip().startswith("===") and not line.strip().startswith("===="):
+            by_section[current] = SectionLeaf(current, line.strip(), 1, level)
+        elif results.real and level == 3 and current:
             # only process subheaders if it's a real-world article
             x = re.search("^===?([^=].*?)=+ *$", line)
             if x:
                 subheader = x.group(1).strip()
                 if subheader in by_section[current].subsections:
-                    subheader = f"{subheader} {section_num}-{subheader_num}"
+                    i = 2
+                    while subheader in by_section[current].subsections:
+                        subheader = f"{subheader} {i}"
+                        i += 1
                     duplicates.add(subheader)
                 by_section[current].subsections[subheader] = SectionLeaf(subheader, line.strip(), subheader_num, 3, duplicate=subheader in duplicates)
                 subheader_num += 1
             else:
                 print(f"Unknown header line: {line}")
-        elif results.real and line.strip().startswith("==") and not line.strip().startswith("==="):
+        elif results.real and (2 <= level <= 3 or needs_app):
+            extra_line = None
+            if needs_app:
+                extra_line = f"{line}"
+                line, level = "==Appearances==", 2
+
             # store top-level section headers in a dict and store the lines for that section under that key
             x = re.search("^===?([^=]+?)=+ *$", line)
             if x:
                 current = x.group(1).strip()
                 if current in by_section:
                     print(f"Unexpected state: duplicate {x.group(1).strip()} header")
-                    current = f"{current} {section_num}"
+                    i = 2
+                    while current in by_section:
+                        current = f"{current} {i}"
+                        i += 1
                     duplicates.add(current)
                 by_section[current] = SectionLeaf(current, line.strip(), section_num, 2, duplicate=current in duplicates)
                 section_num += 1
                 subheader = None
                 subheader_num = len(by_section[current].subsections) + 1
+                if needs_app and extra_line:
+                    by_section[current].lines.append(extra_line)
             else:
                 print(f"Unknown header line: {line}")
         elif not current:
             intro.append(line)
         elif subheader:
+            if level and level > (current_level + 1):
+                line = re.sub("^=+(.*?)=+$", '='*(current_level + 1) + "\\1" + '='*(current_level + 1), line)
+                level = current_level + 1
             by_section[current].subsections[subheader].lines.append(line)
         else:
             by_section[current].lines.append(line)
+        current_level = level + 0
     return by_section, intro, duplicates
 
 
@@ -264,15 +294,16 @@ def fix_section_redirects(section: SectionLeaf, redirects, header, disambigs, re
 
 
 FLAG_TEMPLATE = "{{SectionFlag}}"
+BTS_FLAG_TEMPLATE = "{{SectionFlag|bts}}"
 
 
-def build_page_components(target: Page, text: str, redirects: dict, results: PageComponents, types: dict,
-                          disambigs: list, appearances: FullListData, sources: FullListData, remap: dict, log: bool,
-                          extra=None):
-    text = analyze_body(target, text, types, appearances, sources, remap, disambigs, redirects, results.canon, log)
+def build_page_sections(target: Page, text: str, results: PageComponents, redirects: dict, disambigs: list, types: dict,
+                        appearances: FullListData, sources: FullListData, remap: dict, log: bool,
+                        extra=None):
+    text = analyze_body(target, text, types, appearances, sources, remap, disambigs, redirects, results, log)
     unknown = []
     final = ""
-    rest = ""
+    rest = []
 
     x = re.split("(\{\{DEFAULTSORT|\{\{[Ii]nterlang|\[\[Category:|\{\{RelatedCategories)", text, 1)
     if x:
@@ -295,6 +326,11 @@ def build_page_components(target: Page, text: str, redirects: dict, results: Pag
             section.lines = check_for_cover_image(section.lines, images)
             for _, sx in section.subsections.items():
                 sx.lines = check_for_cover_image(sx.lines, images)
+        if not master_header and results.media and section.subsections:
+            for p, z in SUBSECTIONS.items():
+                if all(i in z for i in section.subsections):
+                    master_header = p
+                    break
 
         if master_header == "References":
             section.name = "Notes and references"
@@ -306,7 +342,11 @@ def build_page_components(target: Page, text: str, redirects: dict, results: Pag
             parse_data(results, section.lines, master_header, redirects, disambigs, types, remap, extra, unknown, log)
             nav_lines += remove_nav_templates(section, types)
             continue
-        elif master_header and master_header != "FLAG":
+        elif master_header:
+            fix_section_redirects(section, redirects, header, disambigs, remap, False)
+            results.redirects_fixed.add(header)
+            nav_lines += remove_nav_templates(section, types)
+
             # Identify any master sections that are incorrectly on a subheader level, and move them up
             skip = []
             for sx, sk in section.subsections.items():
@@ -315,50 +355,56 @@ def build_page_components(target: Page, text: str, redirects: dict, results: Pag
                     continue
 
                 ms_header = match_header(sx, results.infobox)
-                if ms_header is not None and ms_header not in valid and ms_header not in by_section:
+                if ms_header is None or ms_header in SUBSECTIONS.get(master_header, []):
+                    continue
+                elif master_header == "Contents" and ms_header == "Card List":
+                    continue
+                elif ms_header not in valid and ms_header not in by_section:
                     valid[ms_header] = [sk]
                     skip.append(sx)
-            fix_section_redirects(section, redirects, header, disambigs, remap, False)
-            results.redirects_fixed.add(header)
             if skip:
                 for x in skip:
                     section.subsections.pop(x)
                 if not section.subsections and not section.lines:
                     if master_header == "Plot Summary":
-                        section.lines.append("{{Plot}}")
+                        section.lines.append(add_plot_template(results.infobox))
                     else:
                         continue
-            nav_lines += remove_nav_templates(section, types)
-            if master_header == "Appearances" and results.infobox == "book":
-                if not any("<onlyinclude>" in ln for ln in section.lines):
-                    section.lines.insert(0, "<onlyinclude>")
-                    section.lines.append("</onlyinclude>")
+            if master_header == "Appearances":
+                if results.infobox == "book":
+                    if not any("<onlyinclude>" in ln for ln in section.lines):
+                        section.lines.insert(0, "<onlyinclude>")
+                        section.lines.append("</onlyinclude>")
+                if "Out-of-universe appearances" in section.subsections and "In-universe appearances" not in section.subsections:
+                    section.subsections["In-universe appearances"] = SectionLeaf("In-universe appearances", "===In-universe appearances===", 0, 3, lines=section.lines)
+                    section.lines = []
+
             if master_header in valid and header.lower() != master_header.lower():
-                section.invalid = True
-                other[header] = section
+                if master_header in SUBSECTIONS and header in SUBSECTIONS[master_header]:
+                    if not valid.get(master_header):
+                        valid[master_header] = [SectionLeaf(master_header, f"=={master_header}==", section.num, 2)]
+                    section.level = 3
+                    section.header_line = f"==={header}==="
+                    valid[master_header][0].subsections[header] = section
+                else:
+                    section.invalid = results.infobox != "MagazineDepartment"
+                    other[header] = section
+            elif master_header in valid:
+                valid[master_header].append(section)
             else:
                 valid[master_header] = [section]
                 valid_nums[section.num] = master_header
         elif results.real:
-            section.invalid = True
+            section.invalid = results.infobox != "MagazineDepartment"
             other[header] = section
         else:
             print(f"Unexpected state, header {header} in section map for IU article")
             continue
 
-        if master_header in ["Plot Summary", "Opening Crawl", "Development", "Release/Reception", "Legacy", "Credits", "Appearances"]:
-            continue
-
-        for subheader, subsection in section.subsections.items():
-            master_subheader = match_header(subheader, results.infobox)
-            if not master_subheader:
-                section.invalid = True
-
     for k, v in other.items():
         if k in duplicates:
             k = k.rsplit(" ", 1)[0]
         x = v.num
-        v.flag = True
         found = False
         while x > 1:
             x -= 1
@@ -366,30 +412,25 @@ def build_page_components(target: Page, text: str, redirects: dict, results: Pag
                 valid[valid_nums[x]][0].other.append(v)
                 found = True
                 break
-        if x == 1 and not found:
-            intro.append(f"=={k} {FLAG_TEMPLATE}==\n" + '\n'.join(v.lines) + "\n")
-            for sx, sz in v.subsections.items():
-                intro.append(f"==={sx}===\n" + '\n'.join(sz.lines) + "\n")
-            found = True
         if not found:
-            rest += (f"=={k} {FLAG_TEMPLATE}==\n" + '\n'.join(v.lines) + "\n")
+            z = " " + (BTS_FLAG_TEMPLATE if k == 'Behind the scenes' else FLAG_TEMPLATE)
+            if results.infobox == "MagazineDepartment":
+                z = ""
+            chunk = [f"=={k}{z}==\n" + '\n'.join(v.lines) + "\n"]
             for sx, sz in v.subsections.items():
-                rest += (f"==={sx}===\n" + '\n'.join(sz.lines) + "\n")
+                chunk.append(f"==={sx}===\n" + '\n'.join(sz.lines) + "\n")
+            if x == 1:
+                intro += chunk
+            else:
+                rest += chunk
 
     results.before = "\n".join(intro)
-    novel = None
-    if results.infobox:
-        for x in [" (novel)", f" (novelization)", ""]:
-            if f"{target.title()}{x}" in appearances.target:
-                novel = Page(target.site, f"{target.title()}{x}")
-                break
-    results.sections = rearrange_sections(target, results, valid, appearances, sources, novel, images)
-    if results.sections.get("Plot Summary") and "{{Plot}}" in results.sections["Plot Summary"].lines:
-        if "{{plot}}" in results.before.lower():
-            results.before = re.sub("\{\{[Pp]lot}}\n?", "", results.before)
+    if results.media:
+        results.sections = rearrange_sections(target, results, valid, appearances, sources)
+        results.cover_images = images
     results.nav_templates = nav_lines
 
-    final = f"{rest}\n{final}".strip()
+    final = ('\n'.join(rest) + f"\n{final}").strip()
     if results.links and results.links.after:
         final = f"{results.links.after}\n{final}"
         results.links.after = ""
@@ -519,7 +560,7 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
     z = re.sub("<sup>(.*?)</sup>", "{{C|\\1}}", z)
     extra = ''
     if name == "Collections":
-        zx = re.search("(\*[^\n\[{]*[\[{]+.*?[}\]]+['\"]*)(.*?)$", z)
+        zx = re.search("(\*[^\n\[{]*[\[{]+.*?[}\]]+['\"]*)(.*?)$", re.sub("\{\{(Series|Unknown)Listing.*?}} ?", "", z))
         if zx:
             z = zx.group(1)
             extra = zx.group(2)
@@ -588,6 +629,7 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
         if t and not t.invalid:
             if is_official_link(t):
                 t.mode = "Official"
+            t.external = name == "Links"
             found = True
             data.append(t)
             t.extra = extra.strip()
@@ -612,12 +654,12 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
     return found
 
 
-def analyze_body(page: Page, text, types, appearances: FullListData, sources: FullListData, remap, disambigs, redirects, canon, log: bool):
+def analyze_body(page: Page, text, types, appearances: FullListData, sources: FullListData, remap, disambigs, redirects, results: PageComponents, log: bool):
     references = [(i[0], i[2]) for i in re.findall("(<ref name=((?!<ref).)*?[^/]>(((?!<ref).)*?)</ref>)", text)]
     references += [(i[0], i[1]) for i in re.findall("(<ref>(((?!<ref).)*?)</ref>)", text)]
     new_text = text
     for full_ref, ref in references:
-        new_text = handle_reference(full_ref, ref, page, new_text, types, appearances, sources, remap, disambigs, redirects, canon, log)
+        new_text = handle_reference(full_ref, ref, page, new_text, types, appearances, sources, remap, disambigs, redirects, results.canon, results.media, log)
     # return do_final_replacements(new_text, True)
     return new_text
 
@@ -655,7 +697,7 @@ def build_card_text(o: ItemId, c: ItemId, replace_parent=True):
 
 
 def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearances: FullListData, sources: FullListData,
-                     remap: dict, disambigs: dict, redirects, canon, log: bool):
+                     remap: dict, disambigs: dict, redirects, canon: bool, media: bool, log: bool):
     try:
         new_ref = re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", ref).replace("{{PageNumber}} ", "")
         if "HomeVideoCite" not in new_ref:
@@ -666,12 +708,13 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                 new_ref = appearances.target[x.group(1)][0].original
             elif x and x.group(1) in sources.target:
                 new_ref = sources.target[x.group(1)][0].original
-        x = re.search(",? (page|pg\.?|p?p\.|chapters?|ch\.) ?([0-9-]+|one|two|three|four|five)(?!])[,.]?", new_ref)
-        if x:
-            print(f"Found page/chapter numbers in reference: \"{x.group(0)}\" -> \"{new_ref}\"")
-            # new_ref = new_ref.replace(x.group(0), "")
-            new_ref = "{{PageNumber}} " + new_ref
-        new_ref = convert_issue_to_template(new_ref)
+        if not media:
+            x = re.search(",? (page|pg\.?|p?p\.|chapters?|ch\.) ?([0-9-]+|one|two|three|four|five)(?!])[,.]?", new_ref)
+            if x:
+                print(f"Found page/chapter numbers in reference: \"{x.group(0)}\" -> \"{new_ref}\"")
+                # new_ref = new_ref.replace(x.group(0), "")
+                new_ref = "{{PageNumber}} " + new_ref
+        new_ref = convert_issue_to_template(new_ref).replace("{{=}}", "=")
         links = re.findall("(['\"]*\[\[(?![Ww]:c:).*?(\|.*?)?]]['\"]*)", new_ref)
         templates = re.findall("(\{\{[^{}\n]+}})", new_ref)
         templates += re.findall("(\{\{[^{}\n]+\{\{[^{}\n]+}}[^{}\n]+}})", new_ref)
@@ -689,7 +732,8 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                         if o.master.template != "Film" and f'"[[{x.target}]]"' not in new_ref:
                             print(f"Skipping {link[0]} due to extraneous text")
                     elif link[0].startswith('"') and link[0].endswith('"') and (len(ref) - len(link[0])) > 5:
-                        print(f"Skipping quote-enclosed link {link[0]} (likely an episode name)")
+                        if o.master.template != "StoryCite":
+                            print(f"Skipping quote-enclosed link {link[0]} (likely an episode name)")
                     elif "{{" in o.master.original and len(templates) > 0:
                         print(f"Skipping {link[0]} due to presence of other templates in ref note")
                     elif o.master.original.isnumeric():
@@ -701,13 +745,9 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                     elif x.target in SPECIAL and x.original in SPECIAL[x.target]:
                         print(f"Skipping exempt {link[0]}")
                     elif re.search("^['\"]*\[\[" + x.target.replace("(", "\(").replace(")", "\)") + "(\|.*?)?]]['\"]*", new_ref):
-                        if "TODO" in o.master.original:
-                            print(link[0], x.full_id(), o.master.original, o.current.original)
                         if link[0] != o.master.original:
                             new_links.append((link[0], o.master.original))
                     elif o.current.original_target and re.search("^['\"]*\[\[" + o.current.original_target.replace("(", "\(").replace(")", "\)") + "(\|.*?)?]]['\"]*", new_ref):
-                        if "TODO" in o.master.original:
-                            print(link[0], x.full_id(), o.master.original, o.current.original)
                         if link[0] != o.master.original:
                             new_links.append((link[0], o.master.original))
                 elif o:
@@ -731,7 +771,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                                           sources.target, {}, canon, log, ref=True)
                 if o and o.current.is_card_or_mini():
                     new_templates.append((t, o, []))
-                elif o and not (o.use_original_text or o.current.collapsed) and t != o.master.original:
+                elif o and not (o.use_original_text or o.current.collapsed) and t != (o.master.original.replace(f"|int={page.title()}|", "|").replace(f"|int={page.title()}" + "}", "}") if media else o.master.original):
                     found.append(o)
                     ex = []
                     if "|author=" in t:
@@ -740,8 +780,6 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                         ex += re.findall("(\|date=.*?)[|}]", t)
                     if "|quote=" in t:
                         ex += re.findall("(\|quote=.*?)[|}]", t)
-                    if "TODO" in o.master.original:
-                        print(t, x.full_id(), o.master.original, o.current.original)
                     new_templates.append((t, o, ex))
                 elif o:
                     found.append(o)
@@ -753,6 +791,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                 z = re.sub("(\{\{(?!FactFile)[A-z0-9]+\|[0-9]+\|.*?)(\|.*?(\{\{'s?}})?.*?)?}}", "\\1}}", ni.master.original)
             else:
                 z = swap_parameters(ni.master.original)
+            z = z.replace(f"|int={page.title()}|", "|").replace(f"|int={page.title()}" + "}", "}")
             if extra:
                 for i in extra:
                     z = z.replace(i, "")
@@ -760,7 +799,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
             if "|d=y" in ni.current.original:
                 z = z[:-2] + "|d=y}}"
             new_ref = new_ref.replace(ot, z.replace("–", "&ndash;").replace("—", "&mdash;"))
-            if page.title() != ni.master.target:
+            if page.title() != ni.master.target or ni.current.card:
                 new_ref = re.sub("\|parent=1(?!}}( is set| \{\{C\|))", "", new_ref)
 
         new_ref = fix_redirects(redirects, new_ref, "Reference", disambigs, remap)
@@ -774,7 +813,15 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                 final_ref = final_ref.replace("<ref>", f"<ref name=\"{found[0].master.template}-{z}\">")
             elif len(found) == 1:
                 print(f"Cannot fix nameless reference to {found[0].master.target}: {ref}")
-            else:
+            elif "|cardname=" in final_ref:
+                z = re.sub("^.*?\{\{(.*?)\|.*?cardname=(.*?)(\|.*?)?}}.*?$", "\\1-\\2", final_ref).replace('"', '').replace('(', '').replace(')', '').replace("'''", "").replace("''", "")
+                if f'="{z}"' in new_text:
+                    i = 2
+                    while f'="{z}-{i}"' in new_text:
+                        i += 1
+                    z = f"{z}-{i}"
+                final_ref = final_ref.replace("<ref>", f"<ref name=\"Card-{z}\">")
+            elif "WebCite" not in final_ref:
                 print(f"Cannot fix nameless reference, due to {len(found)} links found in reference: {final_ref}")
         for r, x in REF_REPLACEMENTS:
             if not ("reprint" in r and "reprint" in full_ref):

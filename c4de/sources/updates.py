@@ -154,7 +154,7 @@ def parse_page(p: Page, types):
     for i, line in enumerate(text.splitlines()):
         parse_line(line, i, p, types, full, unique, target)
 
-    return FullListData(unique, full, target, set(), set(), {})
+    return FullListData(unique, full, target, {}, set(), set(), {})
 
 
 def parse_line(line, i, p: Page, types, full, unique, target):
@@ -556,7 +556,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
     post = re.search("==Post-([0-9]+)==", page.get())
     post = post.group(1) if post else None
     post_found = False
-    for f in sorted(final, key=lambda a: (a[4], " abridged" not in a[0], a[1], (a[2] or 200), a[3], a[0])):
+    for f in sorted(final, key=lambda a: (a[4], "StoryCite" in a[0] if key == "Audiobook" else False, " abridged" not in a[0], a[1], (a[2] or 200), a[3], a[0])):
         txt, d, i = f[0], f[1], f[2]
         if use_sections:
             if d.startswith("Cancel"):
@@ -570,6 +570,10 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
                 if not section:
                     section = "Abridged"
                     lines.append("\n==Abridged==")
+            elif key == "Audiobooks" and "StoryCite" in txt:
+                if not section:
+                    section = "Stories"
+                    lines.append("\n==Stories==")
             elif d.startswith("1") or d.startswith("2"):
                 if post_found:
                     pass
@@ -577,7 +581,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
                     start_date = None
                     section = d[:4]
                     lines.append(f"\n=={section}==")
-                elif start_date and (not section or section == "Abridged"):
+                elif start_date and (not section or section == "Abridged" or section == "Stories"):
                     section = f"Pre-{start_date}"
                     lines.append(f"=={section}==")
                 elif not start_date and d[:4] != section:

@@ -140,9 +140,13 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
     if x.startswith("Unidentified"):
         x = x[0].lower() + x[1:]
 
-    if x != page.title():
-        x = page.title() + "|" + x
-    lines = [f"This is the media index page for [[{x}]].", "", "==Media index=="]
+    if x == f"''{page.title()}''":
+        x = f"''[[{page.title()}]]''"
+    elif x != page.title():
+        x = f"[[{page.title()}|{x}]]"
+    else:
+        x = f"[[{x}]]"
+    lines = [f"This is the media index page for {x}.", "", "==Media index=="]
     refs = {}
     contents = {}
     links = set()

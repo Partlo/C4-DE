@@ -52,6 +52,23 @@ def is_product_page(u: str):
             u.startswith("comics/")) and "subdomain=news" not in u
 
 
+def is_official_product_page(o: Item, real):
+    if o and real and _is_official_product_page(o):
+        o.mode = "Official"
+        return True
+    return False
+
+
+def _is_official_product_page(o: Item):
+    if o.url and o.url.startswith("games/"):
+        return o.template in ["SW", "LucasArts"]
+    elif o.url and o.url.startswith("games-apps/"):
+        return o.template in ["SW"]
+    elif o.url and o.template == "LucasArts":
+        return o.url.startswith("static/") or o.url.startswith("products/")
+    return False
+
+
 def is_publisher(d: ItemId, o: Item):
     if o.template in PRODUCT_CHECKS and o.url and (any(o.url.lower().endswith(s) for s in PRODUCT_CHECKS[o.template]["E"]) or
                                                    any(o.url.lower().startswith(s) for s in PRODUCT_CHECKS[o.template]["S"])):
@@ -81,11 +98,24 @@ def is_commercial(o: Item):
     return False
 
 
+TEMPLATE_ORDERING = {
+    "Disney": 9,
+    "FantasyFlightGames": 10,
+    "AtomicMassGames": 11,
+    "Asmodee": 12,
+}
+
+
 def determine_link_order(mode, o: Item, x):
     if not o:
         return -1, None, x
-    elif o.publisher_listing:
-        return 0, o.date, x
+    elif o.master_page == "Web/Repost":
+        return 0.9, o.date, x
+    elif o.publisher_listing or o.master_page in ["Web/Target", "Web/Publisher"]:
+        z = 0 + (TEMPLATE_ORDERING.get(o.template, 100) / 1000)
+        if o.index:
+            z += (0.4 if o.template and o.template.startswith("SW") else 0.5) + (o.index / 1000000)
+        return z, o.date, x
     elif o.template == "SW" and o.url and o.url.startswith("series/"):
         return 0, o.date, x
     elif mode == "Official":
@@ -95,7 +125,7 @@ def determine_link_order(mode, o: Item, x):
     elif mode == "Profile":
         return 2, o.date, x
     elif mode == "Publisher":
-        return 3.1 if o.template in ["Disney"] else 3, o.date, x
+        return 3 + (TEMPLATE_ORDERING.get(o.template, 100) / 1000), o.date, x
     elif mode == "Commercial":
         return 3.2, o.date, x
     elif o.template == "WP":
@@ -104,7 +134,7 @@ def determine_link_order(mode, o: Item, x):
         return 4.2, o.date, x
     elif o.template in ["SW", "SWArchive", "Blog", "OfficialBlog", "SWBoards"]:
         return 5.1, o.date, x
-    elif o.mode == "Social":
+    elif o.mode == "Social" and not o.date:
         return 5.2, o.date, x
     else:
         return 5.3, o.date, x

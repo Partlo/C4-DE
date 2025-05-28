@@ -220,6 +220,7 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
                     sub_names = item.find_elements(By.CLASS_NAME, "pve_subName")
                     page_fields = item.find_elements(By.CLASS_NAME, "pve_numberOfPages")
                     status = item.find_elements(By.CLASS_NAME, "publishing-status-02")
+                    status = status or item.find_elements(By.CLASS_NAME, "publishing-status-03")
                     item = driver.find_element(By.XPATH, f".//div[@id='{cid}']//div[contains(@class, 'ltRow')][{k}]")
                     imprint = item.find_element(By.CLASS_NAME, "headerImprint").text
                     no_image = bool(item.find_elements(By.CLASS_NAME, "noThumbImageScroll"))
@@ -420,7 +421,7 @@ def analyze_products(site, products: List[dict], search_terms):
             elif not item.get("publicationDate"):
                 log(f"No publication date found for {item['title']}")
                 continue
-            if item["status"] and (item["status"].lower() == "canceled" or item["status"].lower() == "cancelled"):
+            if item["status"] and any(s in item["status"].lower() for s in ["canceled", "cancelled", "postponed"]):
                 if any("Canceled" in d or "Cancelled" in d for d in date_strs) or "{{Canceled" in text:
                     log(f"Skipping canceled product {item['title']}")
                     continue

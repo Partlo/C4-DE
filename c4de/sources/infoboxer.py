@@ -75,19 +75,22 @@ def build_fields_for_infobox(page) -> InfoboxInfo:
     text = page.get()
     fields = []
     optional = ["no_image"]
+    combo, groups = {}, {}
     theme = re.search("theme-source=\"(.*?)\"", text)
     if theme:
         fields.append(theme.group(1))
     o = re.search("\|optional=(.*?)[|}]", text)
     if o:
-        optional += re.split('[,]', o.group(1))
-    combo, groups = {}, {}
-    for x in optional:
-        if ":" in x:
-            groups[x] = []
-            for y in x.split(":"):
-                combo[y] = x
-                groups[x].append(y)
+        optional += re.split(',', o.group(1))
+    c = re.search("\|combo=(.*?)[|}]", text)
+    if c:
+        combo_fields = re.split(',', c.group(1))
+        for x in combo_fields:
+            pieces = x.split(":")
+            groups[pieces[0]] = []
+            for y in pieces[1:]:
+                combo[y] = pieces[0]
+                groups[pieces[0]].append(y)
     for r in re.findall("<(data|image|title) source=\"(.*?)\" ?/?>", text):
         if r[0] == "image":
             fields.append("image")
@@ -228,11 +231,11 @@ def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List
             done = True
             continue
 
-        continuation = oc2 > 0 and line.startswith("|") and line.count("}") > line.count("{")
+        continuation = oc2 > 0 and line.count("}") > line.count("{")
         oc2 += line.count("{")
         oc2 -= line.count("}")
         if continuation:
-            data[field] += line
+            data[field] += f" {line}"
             continue
 
         m = re.search("^\|([A-Za-z_ 0-9]+?)=(.*)$", line)
@@ -252,24 +255,24 @@ def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List
 
         if field not in data:
             continue
-        n = re.search("\|([A-Za-z_ 0-9]+?)=(.*)$", data[field].replace("\n", ""))
-        while n:
-            if data[field].startswith("|"):
-                n = re.search("^\|([A-Za-z_ 0-9]+?)=(.*)$", data[field].replace("\n", ""))
-                if n:
+        n = re.search("^(.*?)\|([A-Za-z_ 0-9]+?) ?= ?(.*)$", data[field].replace("\n", "<NL>"))
+        if n:
+            data[field] = ""
+            cx = 0
+            while n:
+                cx += n.group(1).count("{")
+                cx -= n.group(1).count("}")
+                if n.group(1):
+                    data[field] += n.group(1).replace("<NL>", "\n")
+                if cx > 0:
+                    data[field] += f"|{n.group(2)}="
+                else:
+                    field = n.group(2)
                     data[field] = ""
-                    field = n.group(1).strip()
-                    data[field] = data.get(field) or n.group(2).strip()
-            elif data[field].count("{{") != data[field].count("}}") or (
-                    data[field].count("}}") == 0 and data[field].count("{{") == 0):
-                # print(field, line, data[field], n)
-                n = re.search("^.*?(\|([A-Za-z_ 0-9]+?)=(.*))$", data[field].replace("\n", ""))
-                if n:
-                    data[field] = data[field].replace(n.group(1), "")
-                    field = n.group(2).strip()
-                    data[field] = data.get(field) or n.group(3).strip()
-            else:
-                n = None
+                nx = n.group(3) or ''
+                n = re.search("^(.*?)\|([A-Za-z_ 0-9]+?) ?= ?(.*)$", nx)
+                if not n and nx:
+                    data[field] += nx.replace("<NL>", "\n")
 
     return data, pre, post, found or "", original, scroll_box
 
@@ -386,7 +389,9 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
                         v = x.groupdict()['t']
             if f in infobox.optional and f not in data and not v:
                 continue
-            elif f in infobox.combo and f not in data and not v and any(i in data for i in infobox.groups[infobox.combo[f]] if i != f):
+            elif f in infobox.combo and (data.get(infobox.combo[f]) or not any(data.get(i) for i in infobox.groups[infobox.combo[f]])):
+                continue
+            elif f in infobox.groups and any(data.get(i) for i in infobox.groups[f] if i != f):
                 continue
             data[f] = v
 
@@ -416,7 +421,9 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
         if (f == "no_image" or f == "image") and data.get("no_image"):
             new_infobox.append(f"|no_image=1")
             added += ["no_image", "image"]
-        elif f in infobox.combo and not v and any(i in data for i in infobox.groups[infobox.combo[f]] if i != f):
+        elif f in infobox.combo and (data.get(infobox.combo[f]) or not any(data.get(i) for i in infobox.groups[infobox.combo[f]])):
+            continue
+        elif f in infobox.groups and any(data.get(i) for i in infobox.groups[f] if i != f):
             continue
         elif f in infobox.optional and not v and f not in data:
             continue

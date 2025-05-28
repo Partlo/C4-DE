@@ -10,10 +10,19 @@ from c4de.sources.infoboxer import handle_infobox_on_page
 
 REPLACEMENTS = [
     ("==Work==", "==Works=="), ("Apearance", "Appearance"), ("Appearence", "Appearance"), ("&#40;&#63;&#41;", "(?)"),
-    ("{{mO}}", "{{Mo}}"), ("*{{Indexpage", "{{Indexpage"), ("<br>", "<br />"),
+    ("{{mO}}", "{{Mo}}"), ("*{{Indexpage", "{{Indexpage"), ("<br>", "<br />"), ("{{InvalidCategory}}", ""),
     ("Youtube", "YouTube"), ("{{Scrollbox", "{{ScrollBox"), ("referneces", "references"), ("{{MO}}", "{{Mo}}"),
     ("{{scrollbox", "{{ScrollBox"), ("</reF>", "</ref>"), ("\n</ref>", "</ref>"), ("†", "&dagger:"),
     ("{{Visions|focus=1", "{{VisionsFocus"),
+    ("{{Visions|focus=4", "{{VisionsFocus"),
+    ("{{Visions|focus=8", "{{VisionsFocus"),
+    ("{{IntroMissingTitle}} ", ""), ("{{IntroMissingTitle}}\n", ""),
+    ("==Media==\n*{{ISBN|", "==Media==\n===Editions===\n*{{ISBN|"),
+    ("\n==Back-cover summary==\n", "\n===Back-cover summary===\n"),
+    ("{{App|characters=", "{{App\n|characters="), ("PenguinRandomHouse|old=1", "RandomHouseOld"),
+    ("<onlyinclude>\n{{Incomplete_app}}", "{{IncompleteApp}}\n<onlyinclude>"),
+    ("<onlyinclude>\n{{IncompleteApp}}", "{{IncompleteApp}}\n<onlyinclude>"),
+    ("Star Wars: Darth Vader (2017)|Vol. ", "Star Wars: Darth Vader: Dark Lord of the Sith Vol. "),
     ("2024 Topps Star Wars Hyperspace Always A Bigger Fish", "2024 Topps Star Wars Hyperspace|subset=Always A Bigger Fish"),
 
     ("[[B1-Series battle droid]]", "[[B1-series battle droid/Legends|B1-series battle droid]]"),
@@ -52,6 +61,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, keep_page_num
         before = target.get(force=True)
     before = before.replace("\u202c", "")
     before = re.sub("(\{\{WebCite[^\n}]*?)\|title=(.*?}})", "\\1|text=\\2", before)
+    before = before.replace("\n}}</ref>", "}}</ref>")
     # print(f"retrieval: {(datetime.now() - now).microseconds / 1000} microseconds")
     if "]]{{" in before or "}}{{" in before:
         before = re.sub(
@@ -72,6 +82,9 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, keep_page_num
             before = before.replace(f"|title2=''{y}''", "|italics2=1")
         elif f"|title2={y}" in before:
             before = before.replace(f"|title2={y}", "")
+
+    for (x, y) in REPLACEMENTS:
+        before = before.replace(x, y)
 
     # now = datetime.now()
     infobox, original = None, None
@@ -96,6 +109,10 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, keep_page_num
         before = re.sub("<[Rr]efe?rences ?/ ?>", "{{Reflist}}", before)
 
     # now = datetime.now()
+    while re.search("\[\[(?!File:)([^\[\]{}\n]+?)&[mn]dash;([^\[\]{}\n]+?)]]", before):
+        before = re.sub("\[\[(?!File:)([^\[\]{}\n]+?)&ndash;([^\[\]{}\n]+?)]]", "[[\\1–\\2]]", before)
+        before = re.sub("\[\[(?!File:)([^\[\]{}\n]+?)&mdash;([^\[\]{}\n]+?)]]", "[[\\1—\\2]]", before)
+
     before = re.sub("(\{\{(Unknown|Series)Listing.*?}})\{\{", "\\1 {{", before)
     before = before.replace("||text=", "|text=").replace("|Parent=1", "|parent=1")
     before = before.replace("{{C|non-canon|reprint=1}}", "")
@@ -112,12 +129,18 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, keep_page_num
     before = re.sub("\* +([A-z0-9'\[{])", "*\\1", before)
     before = re.sub("([A-z'0-9\]]+)  +([A-z'0-9\[]+)", "\\1 \\2", before)
     before = re.sub("\|image=(File:)?([A-Z0-9 _]+\..+)(?=\n)", "|image=[[File:\\2]]", before)
-    before = re.sub("(\|image=\[\[File:[^\n\]]+?)\|.*?]]", "\\1]]", before)
+    before = re.sub("(\|image=\[\[File:[^\n\]]+?)\|.+?]]", "\\1]]", before)
     before = re.sub("<small>\((.*?)\)</small>", "{{C|\\1}}", before)
     before = re.sub("([*#]\{\{[^}\n]+)\n([^{\n]+}})", "\\1\\2", before)
     before = re.sub("\{\{([^\n{}\[]+?)]]", "{{\\1}}", before)
     before = re.sub("\*\{\{\{([A-Z])", "*{{\\1", before)
     before = re.sub("(<ref( name=\".*?\")?>)\*", "\\1", before)
+    before = re.sub("\n<br ?/?>(\n+==)", "\\1", before)
+    before = re.sub("(\{\{((?!WebCite)[^{}\n])*?\|[^{}\n]+?)\|work=.*?(\|.*?)?}}", "\\1\\3}}", before)
+    before = re.sub("(\{\{[A-z]+)(\|url=[^\n{}]+?)(\|(subdomain|uk|lang)=[^\n{}]+?)(\|[^\n{}]*?)?}}", "\\1\\3\\2\\5}}", before)
+    while re.search("(\n\*+\[\[[^\n\]}]+?]])(\|[a-z _]+=)", before):
+        before = re.sub("(\n\*+\[\[[^\n\]}]+?]])(\|[a-z _]+=)", "\\1\n\\2", before)
+    before = re.sub("\n?(\|(c-|l-)?(characters|organisms|droids|events|locations|organizations|species|vehicles|technology|miscellanea)=)\*", "\n\\1\n*", before)
 
     before = re.sub("(\[\[[^\n\[{|]+)\|(an?) ([^\n|\[{]+?)]]", "\\2 \\1|\\3]]", before)
 
@@ -140,6 +163,9 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, keep_page_num
     before = re.sub("(\{\{([A-z _0-9]+)\|.*?}}) (\{\{1st[a-z]*)\|\{\{\\2.*?}}( \{.*?)?\n", "\\1 \\3}}\\4\n", before)
     before = re.sub("\{\{InsiderCite\|(1?[0-9]|2[012])\|", "{{LucasFanClubCite|\\1|", before)
     before = re.sub(">'*\[\[(.*? (Magazine|Insider|Journal))]]'* ([0-9]+)(, pa?ge?.*?)?</ref>", ">[[\\1 \\3|''\\1'' \\3]]</ref>", before)
+    before = re.sub("\[\[K-Zone\|'*K-Zone'* (Volume [0-9]+, Number [0-9]+)]]", "[[K-Zone \\1|''K-Zone'' \\1]]", before)
+    before = re.sub("'*\[(https?://[w.]*?archive.org/.*?) (.*?)]'* (on|at)( the)? ('*\[https?://[w.]*archive\.org/? )?Internet Archive]?'*",
+                    "{{WebCite|url=\\1|text=\\2}}", before)
 
     while re.search("\[\[Category:[^\n|\]_]+_", before):
         before = re.sub("(\[\[Category:[^\n|\]_]+)_", "\\1 ", before)
@@ -151,9 +177,6 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, keep_page_num
     # now = datetime.now()
     before = regex_cleanup(before)
     # print(f"regex-2: {(datetime.now() - now).microseconds / 1000} microseconds")
-
-    for (x, y) in REPLACEMENTS:
-        before = before.replace(x, y)
 
     while "== " in before or " ==" in before:
         before = before.replace("== ", "==").replace(" ==", "==")
@@ -222,9 +245,10 @@ def regex_cleanup(before: str) -> str:
     # if "*[[wikipedia:" in before.lower() or "source=[[wikipedia:" in before.lower():
     #     before = re.sub("(\n\*|\">|ref>|source=)\[\[[Ww]ikipedia:(.*?)\|(.*?)]]( on (\[\[Wikipedia.*?]]|Wikipedia))?","\\1{{WP|\\2|\\3}}", before)
     if "w:c:" in before.lower() or "wikia:c" in before.lower():
-        before = re.sub("\*'*\[\[:?([Ww]|Wikia):c:([^\n|]]*?):([^\n|]]*?)\|([^\n]]*?)]] (on|at) (the )?[^\n]*?([Ww]|Wikia):c:[^\n|]]*?\|(.*?)]](,.*?$)?","*{{Interwiki|\\2|\\8|\\3|\\4}}", before)
+        before = re.sub("\*'*\[\[:?([Ww]|Wikia):c:(www\.)?([^\n|\]]*?):([^\n|\]]*?)\|([^\n\]]*?)]?]? (on|at) (the )?[^\n]*?([Ww]|Wikia):c:[^\n|\]]*?\|(.*?)]](,.*?$)?","*{{Interwiki|\\3|\\9|\\4|\\5}}", before)
+        before = re.sub("\*'*\[\[:?([Ww]|Wikia):c:(www\.)?([^\n|\]]*?):([^\n|\]]*?)\|([^\n\]]*?) (on|at) (the )?(.*?)]](,.*?$)?","*{{Interwiki|\\3|\\8|\\4|\\5}}", before)
     if "memoryalpha:" in before.lower():
-        before = re.sub("\[\[([Mm]emory[Aa]lpha|w:c:memory-alpha):(.*?)\|(.*?)]] (on|at) (the )?.*?([Mm]emory[Aa]lpha:|Wikipedia:Memory Alpha).*?\|.*?]](,.*?$)?", "{{MA|\\2|\\3}}", before)
+        before = re.sub("\[\[([Mm]emory[Aa]lpha|w:c:memory-alpha):(.*?)\|(.*?)]?]? (on|at) (the )?.*?([Mm]emory[Aa]lpha:|Wikipedia:Memory Alpha).*?\|.*?]](,.*?$)?", "{{MA|\\2|\\3}}", before)
 
     if "oldversion=1" in before:
         before = re.sub("(\|archive(date|url)=([^|\n}{]+))(\|[^\n}{]*?)?\|oldversion=1", "|oldversion=\\3\\4", before)

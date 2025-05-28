@@ -1,3 +1,4 @@
+import codecs
 import re
 import sys
 import traceback
@@ -26,7 +27,7 @@ def remove_the(x):
     return x[(4 if x.startswith("The ") else 0):]
 
 
-def analyze(*args):
+def analyze(*args, to_save):
     gen_factory = pagegenerators.GeneratorFactory()
     log = False
     start_on, skip_start, skip_end, redo = None, None, None, None
@@ -78,6 +79,7 @@ def analyze(*args):
     print(f"Loaded {len(appearances.unique)} appearances and {len(sources.unique)} sources in {duration.seconds} seconds")
 
     save = any("save:true" in s.lower() for s in args[0])
+    passive = False
 
     gen = pagegenerators.PreloadingGenerator(gen_factory.getCombinedGenerator(), groupsize=50)
 
@@ -86,20 +88,21 @@ def analyze(*args):
     i = count - 1
     if any("Legends articles" in a or "C4-DE traversal" in a for a in args):
         i += ci
-    total = ci + li
+    # total = ci + li
+    total = 16431
     checked = []
     processed = []
     always_comment = False
     found = False
     message = "Source Engine analysis of Appearances, Sources and references"
     media_msg = "Source Engine media page analysis and overhaul"
-    since = Timestamp(2025, 1, 25)
+    since = Timestamp(2025, 5, 20)
     for page in gen:
         if page.title().startswith("Map:") or page.title() == "Forum:WPWeb:Template icons standardization":
             continue
         elif page.namespace().id == 2:
             continue
-        elif page.title() in processed:
+        elif page.title() in processed or page.title().startswith("List of"):
             continue
         else:
             processed.append(page.title())
@@ -107,7 +110,7 @@ def analyze(*args):
         i += 1
         z = str(i / total * 100).zfill(10)[:6]
         if i % 100 == 0:
-            print(f"{i} -> {z} -> {page.title()}")
+            print(f"{i} -> {z}% -> {page.title()}")
         if i % 250 == 0 and i > 0 and not start_on:
             appearances = load_full_appearances(gen_factory.site, types, False, log_match=False)
             sources = load_full_sources(gen_factory.site, types, False)
@@ -117,7 +120,6 @@ def analyze(*args):
                 quit()
 
         if start_on:
-
             if remove_the(page.title()).lower() >= start_on.lower() and not page.title().startswith("Wookieepedia:"):
                 print(f"Found: {page.title()}")
                 start_on = None
@@ -156,7 +158,7 @@ def analyze(*args):
                         break
             extra = []
             text, u1, u2 = build_new_text(page, infoboxes, types, [], appearances, sources, cats, remap, include_date,
-                                          checked, log=log, collapse_audiobooks=True, manual=old_revision, extra=extra, keep_pages=False)
+                                          checked, log=log, collapse_audiobooks=True, manual=old_revision, extra=extra, keep_pages=False, redo=redo)
             if text is None:
                 continue
 
@@ -181,10 +183,14 @@ def analyze(*args):
                 print(f"Skipping {page.title()}; infobox newline is only change -> {to_duration(now)} seconds")
                 continue
 
-            match = re.sub("\{\{1stID\|.*?}}", "{{1stID}}", re.sub("<!--.*?-->", "", z1.replace("ncomplete list", "ncompleteList").replace("ncomplete_list", "ncompleteList").replace("–", "&ndash;").replace("—", "&mdash;").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]"))).replace("=Collections=", "=Collected in=") == \
-                    re.sub("\{\{1stID\|.*?}}", "{{1stID}}", re.sub("<!--.*?-->", "", z2.replace("ncomplete list", "ncompleteList").replace("ncomplete_list", "ncompleteList").replace("–", "&ndash;").replace("—", "&mdash;").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]"))).replace("=Collections=", "=Collected in=")
+            match = re.sub("\{\{1stID\|.*?}}", "{{1stID}}", re.sub("\|title=\"(.*?)\"", "|title=\\1", re.sub("<!--.*?-->", "", z1.replace("ncomplete list", "ncompleteList").replace("ncomplete_list", "ncompleteList").replace("–", "&ndash;").replace("—", "&mdash;").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]"))).replace("=Collections=", "=Collected in=").replace("|from=1", "")) == \
+                    re.sub("\{\{1stID\|.*?}}", "{{1stID}}", re.sub("\|title=\"(.*?)\"", "|title=\\1", re.sub("<!--.*?-->", "", z2.replace("ncomplete list", "ncompleteList").replace("ncomplete_list", "ncompleteList").replace("–", "&ndash;").replace("—", "&mdash;").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]"))).replace("=Collections=", "=Collected in=").replace("|from=1", ""))
 
-            override = old_text.count("nterlang") > text.count("nterlang") or old_text.count("ategory:") > text.count("ategory:")
+            override = old_text.count("nterlang") > text.count("nterlang") or (old_text.count("[[Category:") + old_text.count("[[category:")) > (text.count("[[Category:") + text.count("[[category:"))
+            if override:
+                p = Page(gen_factory.site, f"User:Cade Calrayn/Test5")
+                p.put((p.get() if p.exists() else "") + f"\n#[[{page.title()}]]")
+                continue
             if not override and match and always_comment:
                 page.put(text, media_msg if media else message, botflag=match or bf)
                 continue
@@ -193,9 +199,14 @@ def analyze(*args):
             # if override:
             #     continue
 
+            if passive:
+                print(f"Changes found for {page.title()}")
+                to_save.append(page.title())
+                continue
+
             # showDiff(old_text, text, context=1)
-            z1 = re.sub("\|stext=.*?(\|.*?)?}}", "\\1}}", z1).replace("Journal|", "JournalCite|").replace("=Collections=", "=Collected in=")
-            z2 = re.sub("\|stext=.*?(\|.*?)?}}", "\\1}}", z2).replace("Journal|", "JournalCite|").replace("=Collections=", "=Collected in=")
+            z1 = re.sub("\|stext=.*?(\|.*?)?}}", "\\1}}", z1).replace("Journal|", "JournalCite|").replace("=Collections=", "=Collected in=") + "\n"
+            z2 = re.sub("\|stext=.*?(\|.*?)?}}", "\\1}}", z2).replace("Journal|", "JournalCite|").replace("=Collections=", "=Collected in=") + "\n"
 
             if include_date:
                 showDiff(z2, z1, context=1)
@@ -252,4 +263,10 @@ def analyze(*args):
 
 
 if __name__ == "__main__":
-    analyze(sys.argv)
+    to_save = []
+    try:
+        analyze(sys.argv, to_save=to_save)
+    except KeyboardInterrupt:
+        if to_save:
+            with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/review.txt", mode="a", encoding="utf-8") as f:
+                f.writelines("\n".join(to_save))

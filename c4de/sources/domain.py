@@ -23,11 +23,9 @@ class Item:
     def __init__(self, original: str, mode: str, is_app: bool, *, invalid=False, target: str = None, text: str = None,
                  parent: str = None, template: str = None, url: str = None, issue: str = None, subset: str=None,
                  card: str = None, special=None, collapsed=False, format_text: str = None, no_issue=False, ref_magazine=False,
-                 full_url: str=None, publisher_listing=False, check_both=False, date="", archivedate="",
+                 full_url: str=None, publisher_listing=False, check_both=False, date="", archivedate="", issue2=None,
                  alternate_url=None):
         self.master_page = None
-        self.is_appearance = is_app
-        self.tv = mode == "TV"
         self.mode = "General" if mode == "TV" else mode
         self.sort_mode = SORT_MODES.get(self.mode, 5)
         self.invalid = invalid
@@ -40,14 +38,32 @@ class Item:
         self.text = self.strip(text)
         self.parent = self.strip(parent)
         self.issue = self.strip(issue)
+        self.issue2 = self.strip(issue2)
         self.card = self.strip(card)
         self.template = self.strip(template)
         self.url = self.strip(url)
+        self.full_url = self.strip(full_url)
+        self.alternate_url = self.strip(alternate_url)
         self.special = self.strip(special)
         self.subset = self.strip(subset)
         self.collapsed = collapsed
-        self.ref_magazine = ref_magazine
         self.ff_data = {}
+
+        # media-type flags
+        self.is_appearance = is_app
+        self.is_true_appearance = False
+        self.ref_magazine = ref_magazine
+        self.tv = mode == "TV"
+        self.is_abridged = False
+        self.is_audiobook = False
+        self.german_ad = False
+        self.is_adaptation = False
+        self.is_reprint = False
+        self.external = False
+        self.unlicensed = False
+        self.has_content = False
+        self.publisher_listing = publisher_listing
+        self.collection_type = None
 
         if self.card:
             self.text = None
@@ -57,25 +73,16 @@ class Item:
         self.no_issue = no_issue
         self.old_version = self.original and ("oldversion" in self.original or "|old=true" in self.original)
 
+        # Overrides, flags and continuity
         self.is_exception = False
         self.unknown = False
         self.from_extra = None
         self.canon = None
         self.non_canon = False
         self.both_continuities = False
-        self.external = False
-        self.unlicensed = False
-        self.abridged = False
-        self.is_audiobook = False
-        self.german_ad = False
-        self.is_true_appearance = False
-        self.reprint = False
-        self.has_content = False
-        self.publisher_listing = publisher_listing
-        self.collection_type = None
-        self.expanded = False
         self.original_printing = None
 
+        # Timeline and indexing
         self.index = None
         self.canon_index = None
         self.legends_index = None
@@ -89,22 +96,21 @@ class Item:
         self.archivedate = archivedate
 
         self.parenthetical = ''
-        self.department = ''
+        self.department = ''    # used for updates sort-key
         self.check_both = check_both
         self.self_cite = False
         self.followed_redirect = False
         self.original_target = None
-        self.full_url = full_url
-        self.alternate_url = alternate_url
         self.date_ref = None
         self.extra_date = None
+
+        # Templates/text for appending after the listing
         self.ab = ''
         self.repr = ''
         self.crp = False
         self.extra = ''
         self.bold = False
-        self.master_text = ''
-        self.others = {}
+        self.master_text = ''   # used for debugging ExL text mismatch
 
     def copy(self):
         return copy.copy(self)
@@ -150,7 +156,7 @@ class Item:
         return self.date is not None and (self.date.startswith("1") or self.date.startswith("2") or self.date == "Current" or self.date.startswith("Cancel"))
 
     def match_expected(self):
-        return (not self.non_canon and not self.unlicensed and not self.from_extra and not self.reprint
+        return (not self.non_canon and not self.unlicensed and not self.from_extra and not self.is_reprint
                 and self.has_date() and not self.future and "Jedi Temple Challenge" not in self.original and "{{JTC|" not in self.original)
 
     def full_id(self):
@@ -171,6 +177,9 @@ class Item:
     def mark_as_publisher(self):
         self.mode = "Publisher"
         self.publisher_listing = True
+
+    def is_hyperspace_reprint(self):
+        return self.template == "Hyperspace" and ("hyperspace/member/fiction/" in self.url or "hyperspace/member/webstrips" in self.url)
 
 
 REF_MAGAZINE_ORDERING = {
@@ -198,6 +207,8 @@ class ItemId:
         if " edition" in self.current.original:
             if re.search("''Star Wars: (Complete Locations|The Complete Visual Dictionary|Complete Vehicles)'', [0-9]+ edition", self.current.original):
                 self.use_original_text = True
+        elif "Starlog" in self.current.original:
+            self.use_original_text = True
         self.from_other_data = from_other_data
         self.wrong_continuity = wrong_continuity
         self.by_parent = by_parent
@@ -227,7 +238,7 @@ class ItemId:
             x = z.index(self.current.target) if self.current.target in z else 9
             return f"{self.current.index} {x} {self.current.original}"
         return (self.current.text if self.current.mode == "DB" else self.current.original).replace("''", "")\
-            .replace('"', '').replace("|", " |").replace("}}", " }}").lower().split(" (novel")[0]
+            .replace('"', '').replace("|", " |").replace("]]", "").replace("}}", " }}").lower().split(" (novel")[0]
 
 
 class AnalysisConfig:
@@ -236,11 +247,12 @@ class AnalysisConfig:
 
 
 class FullListData:
-    def __init__(self, unique: Dict[str, Item], full: Dict[str, Item], target: Dict[str, List[Item]],
+    def __init__(self, unique: Dict[str, Item], full: Dict[str, Item], target: Dict[str, List[Item]], by_parent: Dict[str, List[Item]],
                  parantheticals: set, both_continuities: set, reprints: Dict[str, List[Item]], no_canon_index: List[Item]=None, no_legends_index: List[Item]=None):
         self.unique = unique
         self.full = full
         self.target = target
+        self.by_parent = by_parent
         self.parentheticals = parantheticals
         self.reprints = reprints
         self.both_continuities = both_continuities
@@ -256,7 +268,7 @@ class PageComponents:
     :type links: SectionComponents
     """
     def __init__(self, original: str, canon: bool, non_canon: bool, unlicensed: bool, real: bool, mode, media, infobox,
-                 original_infobox, flag: list, page_name):
+                 original_infobox, flag: list, page_name, media_cat, stub=None):
         self.before = ""
         self.final = ""
         self.original = original
@@ -270,6 +282,8 @@ class PageComponents:
         self.original_infobox = original_infobox
         self.flag = flag
         self.page_name = page_name
+        self.media_cat = media_cat
+        self.stub = stub
 
         self.ncs = SectionComponents([], [], [], '')
         self.src = SectionComponents([], [], [], '')
@@ -280,6 +294,7 @@ class PageComponents:
         self.collections = SectionComponents([], [], [], '')
         self.sections = {}
         self.nav_templates = []
+        self.cover_images = []
         self.redirects_fixed = set()
 
     def get_navs(self):
@@ -340,17 +355,16 @@ class SectionLeaf:
     :type subsections: dict[str, SectionLeaf]
     :type other: list[SectionLeaf]
     """
-    def __init__(self, name, header: str, num: int, level: int, lines=None, duplicate=False):
+    def __init__(self, name, header: str, num: int, level: int, *, lines=None, duplicate=False, master_num=100):
         self.name = name
         self.header_line = header
         self.num = num
-        self.master_num = 100
+        self.master_num = master_num
         self.level = level
         self.lines = lines or []
         self.subsections = {}
         self.invalid = False
         self.remove = False
-        self.flag = False
         self.duplicate = duplicate
         self.other = []
 
@@ -360,49 +374,83 @@ class SectionLeaf:
     def is_empty_section(self):
         return len(self.lines) == 0 and not self.subsections
 
-    def build_text(self, header=None, image=None, media_cat=None):
+    def build_text(self, header=None, media_cat=None, add_subsections=True, above_header=False):
         header_line = header or self.name
         added_media_cat = False
+        has_lines = any(ln.strip() for ln in self.lines)
         if "=" not in header_line:
             header_line = f"{'='*self.level}{header_line}{'='*self.level}"
-        if self.flag:
-            header_line = re.sub("(===?.*?)(===?)", "\\1 {{SectionFlag}}\\2", header_line)
-        if not any(ln.strip() for ln in self.lines):
-            return [header_line], added_media_cat
-
-        lines = [header_line]
-        if media_cat:
-            lines.append(media_cat)
+        if self.invalid:
+            f = "{{SectionFlag|bts}}" if 'Behind the scenes' in header_line else "{{SectionFlag}}"
+            header_line = re.sub("(===?.*?)(===?)", f"\\1 {f}\\2", header_line)
+        if media_cat and (has_lines or self.subsections):
+            lines = [media_cat, header_line] if above_header else [header_line, media_cat]
             added_media_cat = True
-        if "cover gallery" in header_line.lower():
-            lines += self.build_gallery(image)
         else:
-            lines += self.lines
-        lines.append("")
+            lines = [header_line]
+
+        if has_lines:
+            if "cover gallery" in header_line.lower():
+                lines += self.build_gallery()
+            else:
+                skip = True
+                for ln in self.lines:
+                    if skip and ln.strip():
+                        skip = False
+                    elif skip:
+                        continue
+                    lines.append(ln)
+        if add_subsections:
+            for sx, sv in self.subsections.items():
+                has_lines = True
+                txt, _ = sv.build_text()
+                lines += txt
+            for x in self.other:
+                txt, _ = x.build_text()
+                if any(ln.strip() for ln in txt):
+                    has_lines = True
+                    lines += txt
+        if has_lines:
+            lines.append("")
+
         return lines, added_media_cat
 
-    def build_gallery(self, image=None):
+    def build_gallery(self):
+        sections = [[]]
+        for ln in self.lines:
+            if ln.startswith("=="):
+                sections.append([])
+            sections[-1].append(ln)
+
+        results = []
+        for section in sections:
+            if section:
+                rx = self.build_gallery_for_section(section)
+                results += rx
+        return results
+
+    @staticmethod
+    def build_gallery_for_section(lines):
         before, images, filenames, after = [], [], [], []
         gallery_start = False
-        add_image = image is not None
-        for ln in self.lines:
+        for ln in lines:
+            x = re.search("^(([Ff]ile:)?.*?\.(png|jpe?g))(\|.*?)?$", ln)
             if "<gallery" in ln:
                 before.append(ln)
                 gallery_start = True
-            elif "file:" in ln.lower():
-                fx = ln.split("|")[0].replace(" ", "_")
+            elif x:
+                fx = x.group(1).replace(" ", "_")
+                if not fx.lower().startswith("file:"):
+                    fx = f"File:{fx}"
+                    ln = f"File:{ln}"
                 if fx in filenames:
                     continue
                 filenames.append(fx)
                 images.append(ln)
-                if image and image.lower() in ln.lower().replace(" ", "_"):
-                    add_image = False
             elif gallery_start:
                 after.append(ln)
             else:
                 before.append(ln)
-        if add_image:
-            images.insert(0, f"{image}|Cover")
         return [*before, *images, *after]
 
 

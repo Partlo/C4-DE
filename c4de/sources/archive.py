@@ -84,7 +84,7 @@ def build_missing_and_new(page, types, archives, new_data, skip):
             zx = [(i[0], i[2]) for i in re.findall("(\{\{Databank\|(url=)?([^|\n}]+?)(\|.*?)(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
         else:
             zx = [(i[0], i[3]) for i in re.findall("(\{\{" + template + "(\|[^\n}]*?)?\|(url|link|altlink)=/?([^|\n}]+?(\{\{=}})?[^|\n}]*?)/*(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
-            if template == "Blogspot" or template == "DeviantArt" or template == "Tumblr":
+            if template == "Blogspot" or template == "DeviantArt" or template == "Tumblr" or template == "ArtStation":
                 for i in re.findall("(\{\{" + template + "(\|[^\n}]*?)?\|(subdomain|username)=/?([^|\n}]+?)/*(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text):
                     if "|url=" not in i[0]:
                         zx.append((i[0], i[3]))
