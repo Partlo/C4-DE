@@ -58,6 +58,7 @@ logging.getLogger("discord").setLevel(logging.WARN)
 SELF = 880096997217013801
 CADE = 346767878005194772
 MONITOR = 268478587651358721
+BUREAUCRATS = [369969035066081281, 421565086428299278, 493900309932802059, 399999486765826048]
 MAIN = "wookieepedia"
 COMMANDS = "other-commands"
 REQUESTS = "bot-requests"
@@ -306,7 +307,7 @@ class C4DE_Bot(commands.Bot):
         "is_create_list_command": "handle_create_list_command",
     }
     source_command_search = {
-        "create archive categor": "create_archive_categories",
+        "create archive category": "create_archive_categories",
         "recheck nominations": "recheck_nominations",
         "rebuild sources": "build_sources",
         "reload sources": "build_sources",
@@ -378,6 +379,19 @@ class C4DE_Bot(commands.Bot):
             await self.recheck_nominations()
             return
 
+        if message.author.id not in [CADE, *BUREAUCRATS]:
+            return
+
+        match = re.search("message #(?P<channel>.*?): (?P<text>.*?)$", message.content)
+        if match:
+            channel = match.groupdict()['channel']
+            text = match.groupdict()['text'].replace(":star:", "🌠")
+
+            try:
+                await self.text_channel(channel).send(text)
+            except Exception as e:
+                await self.report_error(message.content, type(e), e)
+
         if message.author.id != CADE:
             return
 
@@ -407,16 +421,6 @@ class C4DE_Bot(commands.Bot):
         if match:
             await self.delete_message(match.groupdict()['ids'], match.groupdict()['channel'])
             return
-
-        match = re.search("message #(?P<channel>.*?): (?P<text>.*?)$", message.content)
-        if match:
-            channel = match.groupdict()['channel']
-            text = match.groupdict()['text'].replace(":star:", "🌠")
-
-            try:
-                await self.text_channel(channel).send(text)
-            except Exception as e:
-                await self.report_error(message.content, type(e), e)
 
     async def recheck_nominations(self, _=None):
         for m in await self.text_channel(NOM_CHANNEL).history(limit=200).flatten():
@@ -493,7 +497,8 @@ class C4DE_Bot(commands.Bot):
     def list_commands(self):
         text = [
             f"Current C4DE Commands (v. {self.version}):",
-            f"- **@C4-DE analyze sources for <article> (with date)** - runs the target article through the Source Engine, sorting sources and appearances and standardizing formatting. Including 'with date' will cause it to include the release date in comments.",
+            f"- **@C4-DE analyze sources for <article> (with date)** - runs the target article through the Source Engine, sorting sources and appearances and standardizing formatting."
+            f" Including 'with date' will cause it to include the release date in comments. Please note this command should be primarily be used after major overhauls of an article, or before/during a status article nomination; the entire mainspace undergoes analysis during mainspace sweeps, and general cleanup of redirects should done manually.",
             f"- **@C4-DE create index for <article>** - runs analysis for the target article and uses that to create an index page, or updates the existing one if it exists.",
             f"- **@C4-DE create list for <article>** - runs analysis for the target article and uses that to create a list of all Appearances and Sources, sorted chronologically by release date. Currently writes to User:C4-DE Bot/Timeline Request.",
             f"- **@C4-DE rebuild sources** - rebuilds the Source Engine's internal data from the Sources Project pages on Wookieepedia."
@@ -1986,7 +1991,7 @@ class C4DE_Bot(commands.Bot):
 
         if youtube:
             t = f"New Video on the official {m['site']} YouTube channel"
-            x = re.search("\|.*?\|(Star Wars:? )?(,*?) ?&#124; ?(.*?) ?&#124; ?(Disney\+|Star Wars) *}}", f)
+            x = re.search("\|.*?\|(Star Wars:? )?(,*?) ?&#124; ?(.*?) ?&#124; ?(Disney\+|Star Wars|@?Star ?Wars ?Kids) *}}", f)
             if (x and x.group(2) in REPOSTS) or f.endswith("Full Episode") or " Full Episode " in f:
                 date = f"R: {date}"
                 t += " (Repost)"

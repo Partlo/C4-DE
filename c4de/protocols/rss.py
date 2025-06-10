@@ -593,10 +593,14 @@ def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, che
             content = e.summary
 
         if check_star_wars and "star wars" not in title.lower().replace("-", " ") and \
-                "star wars" not in content.lower().replace("-", " "):
+                (site == "LEGO" or "star wars" not in content.lower().replace("-", " ")):
             log(f"Skipping non-Star Wars post: {title} --> {e.link}")
             cache[site].append(e.link)
             continue
+        elif site == "Wookieepedia" and "interview" not in title.lower():
+            cache[site].append(e.link)
+            continue
+
         template = None
         if (content and ("this week in" in content.lower() or "this week!" in content.lower())) or \
                 (title and ("this week in" in title.lower() or "this week!" in title.lower())):
@@ -706,7 +710,7 @@ def check_user_rights_nominations(site: Site):
     page = Page(site, "Wookieepedia:Requests for user rights")
     text = page.get()
 
-    noms = {"Rollback": [], "Admin": [], "Bureaucrat": [], "SMT": []}
+    noms = {"Rollback": [], "Admin": [], "Bureaucrat": [], "SMT": [], "Discussions Moderator": []}
     for u in re.findall("\n{{/(.*?)/(.*?)}}", text):
         if u[0] not in noms:
             error_log(f"Unexpected nom type {u[0]}")
@@ -828,7 +832,7 @@ def build_site_map(full: bool):
 
 def compile_tracked_urls(site):
     urls = []
-    for y in [*range(1990, datetime.now().year + 1), "External"]:
+    for y in [*range(1990, datetime.now().year + 1), "Publisher", "Target", "External"]:
         p = Page(site, f"Wookieepedia:Sources/Web/{y}")
         if p.exists():
             for line in p.get().splitlines():

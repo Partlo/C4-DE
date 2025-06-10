@@ -12,7 +12,7 @@ from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, Sect
 from c4de.sources.external import prepare_basic_url
 from c4de.sources.extract import extract_item, convert_issue_to_template, swap_parameters
 from c4de.sources.media import match_header, check_for_cover_image, COVER_GALLERY_MEDIA, \
-    SUBSECTIONS, add_plot_template, rearrange_sections
+    SUBSECTIONS, add_plot_template, rearrange_sections, combine_sections
 
 BY_INDEX = "Use Master Index"
 UNCHANGED = "Leave As Is"
@@ -101,6 +101,7 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_c
     legends = False
     real = False
     media = False
+    person = False
     non_canon = False
     unlicensed = False
     app_mode = BY_INDEX
@@ -114,6 +115,9 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_c
             canon = True
         elif "legends articles" in c.title().lower():
             legends = True
+        elif c.title(with_ns=False) == "Real-world people":
+            real = True
+            person = True
         elif c.title(with_ns=False) == "Real-world media":
             real = True
             media = True
@@ -129,20 +133,23 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_c
 
     media_cat = None
     stub = None
+    if "{{Mediacat" in before:
+        x = re.search("\{\{Mediacat.*?}}", before)
+        if x:
+            media_cat = x.group(0)
     if real and media:
-        if "{{Mediacat" in before:
-            x = re.search("\n(\{\{Mediacat.*?}})", before)
-            if x:
-                media_cat = x.group(1)
-                if "|from=1" not in media_cat:
-                    media_cat = media_cat.replace("Mediacat", "Mediacat|from=1")
-                before = before.replace(x.group(0), "")
+        if media_cat:
+            before = before.replace("\n" + media_cat, "")
+            if "|from=1" not in media_cat:
+                media_cat = media_cat.replace("Mediacat", "Mediacat|from=1")
         y = re.search("\{\{([A-z]+-)?[Ss]tub(\|.*?)?}}", before)
         if y:
             stub = y.group(0)
             if stub.lower() == "{{stub}}" and media:
                 stub = "{{Media-stub}}"
             before = before.replace("\n" + y.group(0), "").replace(y.group(0), "")
+    elif real:
+        media_cat = "Ignore"
 
     if real and media and before.count("\n==") > 3 and "==External links==\n{{Mediacat" in before:
         before = re.sub("(==External links==\n)\{\{Mediacat.*?\n", "\\1", before)
@@ -151,7 +158,7 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_c
         canon = True
         app_mode = BY_INDEX
     return before, redirects, PageComponents(manual or target.get(), canon, non_canon, unlicensed, real, app_mode,
-                                             media, infobox, original, flag, target.title(), media_cat, stub)
+                                             media, person, infobox, original, flag, target.title(), media_cat, stub)
 
 
 def match_iu_header(line):
@@ -177,7 +184,7 @@ def split_by_section(text: str, results: PageComponents) -> Tuple[Dict[str, Sect
         if "===non-canon appearances===" in line.strip().lower() and "Appearances" not in by_section:
             intro.append(line)
         elif not results.real and level >= 2 and match_iu_header(line.strip()):
-            current = match_iu_header(line)
+            current = match_iu_header(line.strip())
             by_section[current] = SectionLeaf(current, line.strip(), 1, level)
         elif results.real and level == 3 and current:
             # only process subheaders if it's a real-world article
@@ -317,20 +324,23 @@ def build_page_sections(target: Page, text: str, results: PageComponents, redire
     valid_nums = {}
     nav_lines = []
     images = []
+    do_not_validate = results.person or results.infobox == "MagazineDepartment"
     for header, section in by_section.items():
-        if results.real:
+        if results.media:
+            master_header = match_header(header, results.infobox)
+            if results.infobox in COVER_GALLERY_MEDIA:
+                section.lines = check_for_cover_image(section.lines, images)
+                for _, sx in section.subsections.items():
+                    sx.lines = check_for_cover_image(sx.lines, images)
+            if not master_header and section.subsections:
+                for p, z in SUBSECTIONS.items():
+                    if all(i in z for i in section.subsections):
+                        master_header = p
+                        break
+        elif results.real:
             master_header = match_header(header, results.infobox)
         else:
             master_header = header if header in MASTER_STRUCTURE else None
-        if results.media and results.infobox in COVER_GALLERY_MEDIA:
-            section.lines = check_for_cover_image(section.lines, images)
-            for _, sx in section.subsections.items():
-                sx.lines = check_for_cover_image(sx.lines, images)
-        if not master_header and results.media and section.subsections:
-            for p, z in SUBSECTIONS.items():
-                if all(i in z for i in section.subsections):
-                    master_header = p
-                    break
 
         if master_header == "References":
             section.name = "Notes and references"
@@ -348,36 +358,14 @@ def build_page_sections(target: Page, text: str, results: PageComponents, redire
             nav_lines += remove_nav_templates(section, types)
 
             # Identify any master sections that are incorrectly on a subheader level, and move them up
-            skip = []
-            for sx, sk in section.subsections.items():
-                if sx == "Collections" or sx == "Collected in":
-                    parse_data(results, sk.lines, "Collections", redirects, disambigs, types, remap, extra, unknown, log)
-                    continue
+            empty = process_subsections(master_header, section, results, redirects, disambigs, types, remap, valid,
+                                        by_section, unknown, log, extra)
+            if empty:
+                continue
 
-                ms_header = match_header(sx, results.infobox)
-                if ms_header is None or ms_header in SUBSECTIONS.get(master_header, []):
-                    continue
-                elif master_header == "Contents" and ms_header == "Card List":
-                    continue
-                elif ms_header not in valid and ms_header not in by_section:
-                    valid[ms_header] = [sk]
-                    skip.append(sx)
-            if skip:
-                for x in skip:
-                    section.subsections.pop(x)
-                if not section.subsections and not section.lines:
-                    if master_header == "Plot Summary":
-                        section.lines.append(add_plot_template(results.infobox))
-                    else:
-                        continue
-            if master_header == "Appearances":
-                if results.infobox == "book":
-                    if not any("<onlyinclude>" in ln for ln in section.lines):
-                        section.lines.insert(0, "<onlyinclude>")
-                        section.lines.append("</onlyinclude>")
-                if "Out-of-universe appearances" in section.subsections and "In-universe appearances" not in section.subsections:
-                    section.subsections["In-universe appearances"] = SectionLeaf("In-universe appearances", "===In-universe appearances===", 0, 3, lines=section.lines)
-                    section.lines = []
+            if master_header == "Appearances" and "Out-of-universe appearances" in section.subsections and "In-universe appearances" not in section.subsections:
+                section.subsections["In-universe appearances"] = SectionLeaf("In-universe appearances", "===In-universe appearances===", 0, 3, lines=section.lines)
+                section.lines = []
 
             if master_header in valid and header.lower() != master_header.lower():
                 if master_header in SUBSECTIONS and header in SUBSECTIONS[master_header]:
@@ -387,7 +375,7 @@ def build_page_sections(target: Page, text: str, results: PageComponents, redire
                     section.header_line = f"==={header}==="
                     valid[master_header][0].subsections[header] = section
                 else:
-                    section.invalid = results.infobox != "MagazineDepartment"
+                    section.invalid = not do_not_validate
                     other[header] = section
             elif master_header in valid:
                 valid[master_header].append(section)
@@ -395,7 +383,7 @@ def build_page_sections(target: Page, text: str, results: PageComponents, redire
                 valid[master_header] = [section]
                 valid_nums[section.num] = master_header
         elif results.real:
-            section.invalid = results.infobox != "MagazineDepartment"
+            section.invalid = not do_not_validate
             other[header] = section
         else:
             print(f"Unexpected state, header {header} in section map for IU article")
@@ -414,9 +402,10 @@ def build_page_sections(target: Page, text: str, results: PageComponents, redire
                 break
         if not found:
             z = " " + (BTS_FLAG_TEMPLATE if k == 'Behind the scenes' else FLAG_TEMPLATE)
-            if results.infobox == "MagazineDepartment":
+            if do_not_validate:
                 z = ""
-            chunk = [f"=={k}{z}==\n" + '\n'.join(v.lines) + "\n"]
+            lx = '\n' + '\n'.join(v.lines) + '\n'
+            chunk = [f"=={k}{z}==" + (lx if lx.strip() else "")]
             for sx, sz in v.subsections.items():
                 chunk.append(f"==={sx}===\n" + '\n'.join(sz.lines) + "\n")
             if x == 1:
@@ -428,6 +417,11 @@ def build_page_sections(target: Page, text: str, results: PageComponents, redire
     if results.media:
         results.sections = rearrange_sections(target, results, valid, appearances, sources)
         results.cover_images = images
+    elif valid:
+        for k, v in valid.items():
+            if len(v) > 1:
+                v[0].lines = combine_sections(k, v)
+            results.sections[k] = v[0]
     results.nav_templates = nav_lines
 
     final = ('\n'.join(rest) + f"\n{final}").strip()
@@ -436,6 +430,44 @@ def build_page_sections(target: Page, text: str, results: PageComponents, redire
         results.links.after = ""
     results.final = final
     return unknown
+
+
+def process_subsections(master_header: str, section: SectionLeaf, results: PageComponents, redirects: dict,
+                        disambigs: list, types: dict, remap: dict, valid: dict, by_section: dict, unknown, log: bool,
+                        extra=None):
+    skip = []
+    for sx in set(section.subsections.keys()):
+        if sx == "Collections" or sx == "Collected in":
+            parse_data(results, section.subsections[sx].lines, "Collections", redirects, disambigs, types,
+                       remap, extra, unknown, log)
+            continue
+
+        ms_header = match_header(sx, results.infobox)
+        if ms_header:
+            if ms_header != sx:
+                section.subsections[ms_header] = section.subsections.pop(sx)
+                section.subsections[ms_header].name = ms_header
+                section.subsections[ms_header].header_line = f"==={ms_header}==="
+                sx = f"{master_header}"
+
+            if ms_header in SUBSECTIONS.get(master_header, []) or ms_header == master_header:
+                continue
+            elif master_header == "Contents" and ms_header == "Card List":
+                continue
+            elif master_header == "Appearances" and results.infobox == "ReferenceMagazine":
+                continue
+            elif ms_header not in valid and ms_header not in by_section:
+                valid[ms_header] = [section.subsections[sx]]
+                skip.append(sx)
+    if skip:
+        for x in skip:
+            section.subsections.pop(x)
+        if not section.subsections and not section.lines:
+            if master_header == "Plot Summary":
+                section.lines.append(add_plot_template(results.infobox))
+            else:
+                return True
+    return False
 
 
 def split_section_pieces(section):
@@ -625,6 +657,7 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
 
     found = False
     for y in zs:
+        print(y)
         t = extract_item(convert_issue_to_template(y), is_appearances, name, types)
         if t and not t.invalid:
             if is_official_link(t):
@@ -700,8 +733,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                      remap: dict, disambigs: dict, redirects, canon: bool, media: bool, log: bool):
     try:
         new_ref = re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", ref).replace("{{PageNumber}} ", "")
-        if "HomeVideoCite" not in new_ref:
-            new_ref = re.sub("\|set=(.*?) \(.*?\)\|(sformatt?e?d?|stext)=.*?\|", "|set=\\1|", new_ref)
+        new_ref = re.sub("\|set=(.*?) \(.*?\)\|(sformatt?e?d?|stext)=.*?\|", "|set=\\1|", new_ref)
         if "<ref>" in full_ref and new_ref.count('[') == 0 and new_ref.count("]") == 0:
             x = re.search("^'*(.*?)'*$", new_ref)
             if x and x.group(1) in appearances.target:
@@ -725,7 +757,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
         for link in links:
             x = extract_item(link[0], False, "reference", types)
             if x:
-                o = determine_id_for_item(x, page, appearances.unique, appearances.target, sources.unique, sources.target, remap, canon, log)
+                o = determine_id_for_item(x, page, appearances.unique, appearances.urls, appearances.target, sources.unique, sources.urls, sources.target, remap, canon, log)
                 if o and not o.use_original_text and o.replace_references:
                     found.append(o)
                     if o.master.template and not x.template and x.target and not re.search("^['\"]*\[\[" + prepare_title(x.target) + "(\|.*?)?]]['\"]*$", new_ref):
@@ -767,8 +799,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
             if x:
                 if x.template and is_nav_or_date_template(x.template, types):
                     continue
-                o = determine_id_for_item(x, page, appearances.unique, appearances.target, sources.unique,
-                                          sources.target, {}, canon, log, ref=True)
+                o = determine_id_for_item(x, page, appearances.unique, appearances.urls, appearances.target, sources.unique, sources.urls, sources.target, {}, canon, log, ref=True)
                 if o and o.current.is_card_or_mini():
                     new_templates.append((t, o, []))
                 elif o and not (o.use_original_text or o.current.collapsed) and t != (o.master.original.replace(f"|int={page.title()}|", "|").replace(f"|int={page.title()}" + "}", "}") if media else o.master.original):

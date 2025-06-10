@@ -156,11 +156,12 @@ def analyze(*args, to_save):
                     if r['timestamp'] < since or (r['user'] != 'C4-DE Bot'):
                         print(f"Reloaded revision {r['revid']} for {page.title()}")
                         break
+            if "<li value" in old_text:
+                old_revision = None
+
             extra = []
             text, u1, u2 = build_new_text(page, infoboxes, types, [], appearances, sources, cats, remap, include_date,
                                           checked, log=log, collapse_audiobooks=True, manual=old_revision, extra=extra, keep_pages=False, redo=redo)
-            if text is None:
-                continue
 
             z1 = re.sub("(\|[A-z _0-9]+=.*?(\n.+?)?)}}(\n((The |A )?'''|\{\{Quote))", "\\1\n}}\\3",
                         re.sub("(\|.*?=)}}\n", "\\1\n}}\n", text.replace("{{!}}", "|")))

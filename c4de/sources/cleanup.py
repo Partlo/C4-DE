@@ -22,8 +22,6 @@ REPLACEMENTS = [
     ("{{App|characters=", "{{App\n|characters="), ("PenguinRandomHouse|old=1", "RandomHouseOld"),
     ("<onlyinclude>\n{{Incomplete_app}}", "{{IncompleteApp}}\n<onlyinclude>"),
     ("<onlyinclude>\n{{IncompleteApp}}", "{{IncompleteApp}}\n<onlyinclude>"),
-    ("Star Wars: Darth Vader (2017)|Vol. ", "Star Wars: Darth Vader: Dark Lord of the Sith Vol. "),
-    ("2024 Topps Star Wars Hyperspace Always A Bigger Fish", "2024 Topps Star Wars Hyperspace|subset=Always A Bigger Fish"),
 
     ("[[B1-Series battle droid]]", "[[B1-series battle droid/Legends|B1-series battle droid]]"),
     ("[[Variable Geometry Self-Propelled Battle Droid, Mark I/Legends|Variable Geometry Self-Propelled Battle Droid, Mark I]]", "[[Vulture-class starfighter/Legends|''Vulture''-class starfighter]]"),
@@ -136,7 +134,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, keep_page_num
     before = re.sub("\*\{\{\{([A-Z])", "*{{\\1", before)
     before = re.sub("(<ref( name=\".*?\")?>)\*", "\\1", before)
     before = re.sub("\n<br ?/?>(\n+==)", "\\1", before)
-    before = re.sub("(\{\{((?!WebCite)[^{}\n])*?\|[^{}\n]+?)\|work=.*?(\|.*?)?}}", "\\1\\3}}", before)
+    before = re.sub("(\{\{((?!([wW]ebCite|OfficialSite))[^{}\n])*?\|[^{}\n]+?)\|work=.*?(\|.*?)?}}", "\\1\\4}}", before)
     before = re.sub("(\{\{[A-z]+)(\|url=[^\n{}]+?)(\|(subdomain|uk|lang)=[^\n{}]+?)(\|[^\n{}]*?)?}}", "\\1\\3\\2\\5}}", before)
     while re.search("(\n\*+\[\[[^\n\]}]+?]])(\|[a-z _]+=)", before):
         before = re.sub("(\n\*+\[\[[^\n\]}]+?]])(\|[a-z _]+=)", "\\1\n\\2", before)

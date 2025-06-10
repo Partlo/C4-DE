@@ -71,6 +71,8 @@ def prepare_title(t):
 
 
 def is_redirect(page, title=None):
+    if title and "w:c:" in title.lower():
+        return False
     try:
         return page.exists() and page.full_url() and page.isRedirectPage()
     except JSONDecodeError:
@@ -308,7 +310,7 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
                 continue
             if section_name:
                 print(f"Fixing {section_name} redirect {r} to {t}")
-            if "Appearances" in section_name and "Star Wars Galaxies" in r:
+            if section_name and "Appearances" in section_name and "Star Wars Galaxies" in r:
                 continue
             x = prepare_title(r)
             y = appearances.get(t) if appearances else (sources.get(t) if sources else None)
@@ -587,8 +589,8 @@ def archive_url(url, force_new=False, timeout=30, enabled=True, skip=False, star
                 log(f"No archive has been recorded for {url}")
                 if skip:
                     return False, "No archive has been recorded for this site"
-        except (TimeoutError, ConnectionError, requests.exceptions.ReadTimeout, requests.exceptions.ConnectionError, urllib3.exceptions.MaxRetryError):
-            log(f"ERROR: Timeout/connection error while attempting to archive {url}")
+        except (TimeoutError, ConnectionError, requests.exceptions.ReadTimeout, requests.exceptions.ConnectionError, urllib3.exceptions.MaxRetryError) as e:
+            log(f"ERROR: {type(e)} while attempting to archive {url}")
             time.sleep(15)
         except Exception as e:
             error_log(url, type(e), e)

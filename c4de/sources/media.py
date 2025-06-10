@@ -36,9 +36,11 @@ MEDIA_STRUCTURE = {
     "Official Description": "==Official description==",
     "Opening Crawl": "==Opening crawl==",
     "Plot Summary": "==Plot summary==",
+    "Interactive Map": "==Interactive Map==",
     "Contents": "==Contents==",
     "Card List": "==Card list==",
     "Gameplay": "==Gameplay==",
+    "Star Wars Content": "==''Star Wars'' content==",
     "Development": "==Development==",
     "Release/Reception": "==Release and reception==",
     "Continuity": "==Continuity==",
@@ -55,7 +57,7 @@ MEDIA_STRUCTURE = {
 SUBSECTIONS = {
     "Contents": ["Articles", "Departments", "Features"],
     "Development": ["Conception", "Production"],
-    "Media": ["Installments", "Issues", "Editions", "Episodes", "Seasons", "Cover gallery", "Poster gallery", "Content gallery", "Collections"],
+    "Media": ["Installments", "Issues", "Editions", "Shorts", "Episodes", "Seasons", "Cover gallery", "Poster gallery", "Content gallery", "Collections"],
     "Appearances": ["In-universe appearances", "Out-of-universe appearances"]
 }
 
@@ -89,8 +91,9 @@ def match_header(header: str, infobox):
         return "References"
     elif h in ["collections", "collected in"]:
         return "Collections"
-
-    if h in ["plot summary", "synopsis", "story"]:
+    elif h in ["interactive map"]:
+        return "Interactive Map"
+    elif h in ["plot summary", "synopsis", "story"]:
         return "Plot Summary"
     elif remove(h, ["publisher", "publishers", "publishing", "official", "product", "manufacturers", "publication"]) in [
         "summary", "description", "from the publisher", "back cover summary", "site summary", "blurb"
@@ -112,12 +115,12 @@ def match_header(header: str, infobox):
         return "Credits"
     elif h in ["appearances"]:
         return "Appearances"
-    elif h == "in universe appearances":
+    elif h in ["in universe appearances", "in universe"]:
         return "In-universe appearances"
-    elif h == "out of universe appearances":
+    elif h in ["out of universe appearances", "out of universe", "real world appearances"]:
         return "Out-of-universe appearances"
     elif h in ["adaptation", "adaptations", "adaption", "adaptions", "tie in media", "merchandising", "merchandise",
-               "merchandise and tie in media"]:
+               "merchandise and tie in media", "adaptations and tie in media"]:
         return "Adaptations"
     elif h in ["cover gallery", "cover art"]:
         return "Cover gallery"
@@ -125,12 +128,20 @@ def match_header(header: str, infobox):
         return "Poster gallery"
     elif h in ["content gallery", "media gallery"]:
         return "Content gallery"
+    elif h in ["features"]:
+        return "Features"
+    elif h in ["departments"]:
+        return "Departments"
+    elif h in ["articles"]:
+        return "Articles"
     elif h in ["issues", "issues with star wars content"]:
         return "Issues"
     elif h in ["edition", "editions"]:
         return "Editions"
     elif h in ["seasons"]:
         return "Seasons"
+    elif h in ["shorts"]:
+        return "Episodes"
     elif h in ["episodes", "videos"]:
         return "Episodes"
     elif h in ["media"]:
@@ -138,8 +149,10 @@ def match_header(header: str, infobox):
     elif h in ["cards", "card lists", "card list", "card set", "list of cards", "cardlist"]:
         return "Card List"
 
-    if h in ["books", "books in series"]:
+    if h in ["installments", "books", "books in series", "entries"]:
         return "Installments"
+    if h in ["star wars content"]:
+        return "Star Wars Content"
 
     if h in ["content", "contents", "tracks", "track list", "track listing", "comic strip", "features", "parts",
              "stories", "short stories", "other stories", "articles", "adventures", "contains", "set list",
@@ -205,8 +218,7 @@ def rearrange_sections(target: Page, results: PageComponents, valid: Dict[str, L
         if key in MEDIA_STRUCTURE:
             duplicate = key in sections
             if len(items) > 1:
-                print(f"combining: {key}, {len(items)}")
-                items[0].lines = combine_sections(items)
+                items[0].lines = combine_sections(key, items)
 
             if not duplicate:
                 sections[key] = items[0]
@@ -217,9 +229,9 @@ def rearrange_sections(target: Page, results: PageComponents, valid: Dict[str, L
 
             for sx, subsection in items[0].subsections.items():
                 sxm = match_header(sx, results.infobox)
-                if key in SUBSECTIONS:
+                if key in SUBSECTIONS and key != "Development":
                     if sxm not in SUBSECTIONS[key]:
-                        subsection.invalid = key != "Development" and (key != "Contents" or results.infobox == "MagazineIssue")
+                        subsection.invalid = key != "Contents" or results.infobox == "MagazineIssue"
                         subsection.master_num += len(items[0].subsections)
                     else:
                         subsection.master_num = SUBSECTIONS[key].index(sxm)
@@ -288,7 +300,7 @@ def remap_sections(key, items: List[SectionLeaf], valid: Dict[str, List[SectionL
                     if "Adaptations" in valid:
                         valid["Adaptations"][0].lines += sk.lines
                     elif "Adaptations" not in sections:
-                        sections["Adaptations"] = SectionLeaf("Adaptations", MEDIA_STRUCTURE["Adaptations"], 0, 2, sk.lines)
+                        sections["Adaptations"] = SectionLeaf("Adaptations", MEDIA_STRUCTURE["Adaptations"], 0, 2, lines=sk.lines)
                     else:
                         sections["Adaptations"].lines += sk.lines
                     to_pop.add(sx)
@@ -332,7 +344,7 @@ def add_and_cleanup_sections(target: Page, results: PageComponents, sections: Di
 
     title = target.title()
     listing = get_listings(title, appearances, sources)
-    is_appearance = any(a.is_true_appearance and not a.date == "Canceled" for a in listing)
+    is_appearance = any(a.is_true_appearance and not a.date == "Canceled" for a in listing) and "|anthology=1" not in target.get()
     if results.infobox in ["TelevisionEpisode", "MagazineArticle", "Adventure", "ShortStory", "ComicStory", "ComicStrip", "Documentary"]:
         handle_published_in_and_collections(target, title, results, appearances, sources)
 
@@ -344,8 +356,7 @@ def add_and_cleanup_sections(target: Page, results: PageComponents, sections: Di
         add_sections_if_missing(sections, "Appearances", lines=NEW_APP_TEMPLATE)
 
     if is_appearance and results.infobox in ["ShortStory", "ComicBook", "ComicStory", "WebStrip", "Adventure", "Book", "TelevisionEpisode"]:
-        tx = detect_adaptation(sections, title, target.get(), appearances, sources)
-        add_plot_summary(sections, results, link=tx)
+        add_plot_summary(sections, results)
         add_sections_if_missing(sections, "Appearances", lines=NEW_APP_TEMPLATE)
 
     elif results.infobox == "Audiobook" and not (listing and listing[0].extra):
@@ -355,7 +366,7 @@ def add_and_cleanup_sections(target: Page, results: PageComponents, sections: Di
                 tx = re.sub("(Plot-link\|)(.*?)( \(.*?\))}}", "\\1\\2\\3|''\\2''}}", tx)
             add_plot_summary(sections, results, link=tx)
 
-        if "Appearances" not in valid and "(" in title and "(abridged" not in title and novel:
+        if "Appearances" not in valid and "(" in title and "(abridged" not in title and "radio" not in title and novel:
             sections["Appearances"] = SectionLeaf("Appearances", "==Appearances==", 0, 2)
             if novel.exists() and not novel.isRedirectPage() and "Plot summary" in novel.get() and "<onlyinclude>\n{{App" not in novel.get():
                 sections["Appearances"].lines = [f"{{{{:{title.split(' (')[0]}}}}}"]
@@ -386,19 +397,23 @@ def add_and_cleanup_sections(target: Page, results: PageComponents, sections: Di
         sections["Media"].invalid = True
     # TODO: flag book collections/etc. with missing Contents sections
 
-    if results.sections.get("Plot Summary") and any("{{Plot" in ln for ln in results.sections["Plot Summary"].lines):
+    if sections.get("Plot Summary") and any("{{Plot" in ln for ln in sections["Plot Summary"].lines):
         if "{{plot}}" in results.before.lower() or "{{plot|" in results.before.lower():
             results.before = re.sub("\{\{[Pp]lot(\|.*?)?}}\n?", "", results.before)
 
     return sections
 
 
-def add_cover_gallery(sections: Dict[str, SectionLeaf], images):
+def add_cover_gallery(sections: Dict[str, SectionLeaf], images, main_image):
     if "Media" in sections and "Cover gallery" not in sections["Media"].subsections and any("<gallery" in ln for ln in sections["Media"].lines):
         new_lines, gallery, done = [], [], False
+        if any(main_image.replace(" ", "_") in ln.replace(" ", "_") for ln in sections["Media"].lines):
+            main_image = None
         for ln in sections["Media"].lines:
             if "<gallery" in ln:
                 gallery.append(ln)
+                if main_image:
+                    gallery.append(f"{main_image}|Cover")
                 if images:
                     gallery += images
             elif "</gallery>" in ln:
@@ -408,19 +423,17 @@ def add_cover_gallery(sections: Dict[str, SectionLeaf], images):
                 gallery.append(ln)
             else:
                 new_lines.append(ln)
-        add_sections_if_missing(sections, "Media", "Cover gallery", child_lines=gallery)
+        add_sections_if_missing(sections, "Media", "Cover gallery")
+        sections["Media"].subsections["Cover gallery"].lines = gallery
         sections["Media"].lines = new_lines
 
     elif images:
         add_sections_if_missing(sections, "Media", "Cover gallery", child_lines=["<gallery captionalign=\"center\">"])
-        found = -1
-        for i, ln in enumerate(sections["Media"].subsections["Cover gallery"].lines):
-            if "</gallery>" in ln:
-                found = i
-        if found == -1:
-            images.append("</gallery>")
-        for x in reversed(images):
-            sections["Media"].subsections["Cover gallery"].lines.insert(found, x)
+        sections["Media"].subsections["Cover gallery"].lines += images
+
+    if main_image and "Media" in sections and "Cover gallery" in sections["Media"].subsections:
+        if not any(main_image in ln.replace(" ", "_") for ln in sections["Media"].subsections["Cover gallery"].lines):
+            sections["Media"].subsections["Cover gallery"].lines.insert(1, f"{main_image}|Cover")
 
 
 def add_sections_if_missing(sections: Dict[str, SectionLeaf], name: str, child: str = None, actual: str = None,
@@ -538,7 +551,8 @@ def add_correct_section(key, header, valid: dict, sections: dict, lines):
         sections[key].lines = lines
 
 
-def combine_sections(items: List[SectionLeaf], sub=False):
+def combine_sections(key, items: List[SectionLeaf], sub=False):
+    print(f"combining: {key}, {len(items)}")
     lines = [*items[0].lines]
     for ix in items[1:]:
         lines.append("")
@@ -581,12 +595,14 @@ def combine_and_demote_sections(items, key, kx):
     return items[0]
 
 
+def clean(s):
+    return s.replace("'", "").replace('"', '').replace("#", '')
+
+
 def simplify(s):
-    return re.sub(
-        ",?(''+|<br ?/?>),?", " ",
-        s.replace("&#34;", '"').replace("&#39;", "'").replace("–", "-").replace("—", "-").replace("&mdash;", "-")
-        .replace("&ndash;", "-").replace("&hellip;", "...").replace("…", "...").split(" (")[0]
-    ).replace("  ", " ").replace("#", "")
+    z = s.replace("&#34;", '"').replace("&#39;", "'").replace("–", "-").replace("—", "-").replace("&mdash;", "-").replace("&ndash;", "-").replace("&hellip;", "...").replace("…", "...").split(" (")[0]
+    z = re.sub("<br ?/?>", " ", z)
+    return z.replace(" : ", ": ").replace("  ", " ").replace("#", "").strip()
 
 
 def equals_or_starts_with(s, t):
@@ -602,30 +618,29 @@ def trim(s, t):
     return n
 
 
-def prepare_title_format(infobox: str, page: Page, appearances: FullListData, sources: FullListData):
+def prepare_title_format(infobox: str, title: str, text: str, appearances: FullListData, sources: FullListData):
     fmt, top_fmt, text_fmt = None, None, None
     skip = False
     template = None
-    if infobox == "Soundtrack" or "{{Conjecture}}" in page.get() or "{{Conjecture|" in page.get():
+    if infobox == "Soundtrack" or "{{Conjecture}}" in text or "{{Conjecture|" in text:
         return None, None, None
-    elif "(audio drama)" in page.title():
-        fmt = f"''{page.title().split(' (')[0]}''"
+    elif "(audio drama)" in title or "(radio)" in title:
+        fmt = f"''{title.split(' (')[0]}''"
         return fmt, fmt, f"'''{fmt}'''"
-    # elif infobox == "Audiobook" and "(" in page.title() and "German audio drama" not in page.title():
-    #     fmt = f"''{page.title().split(' (')[0]}''"
-    #     return fmt, fmt, fmt
-    elif page.title() in appearances.target:
-        template = appearances.target[page.title()][0].template
+    elif title.startswith('"') and title.startswith('"'):
+        return title, title, f"'''{title}'''"
+    elif title in appearances.target:
+        template = appearances.target[title][0].template
         if template == "Film":
             return None, None, None
         if not template:
-            fmt = appearances.target[page.title()][0].original.replace(" German audio drama", "")
-    elif page.title() in sources.target:
-        template = sources.target[page.title()][0].template
-        if sources.target[page.title()][0].title_format_text():
-            fmt = sources.target[page.title()][0].title_format_text()
-            if len(sources.target[page.title()]) > 1 and "department" not in page.title():
-                if len([s for s in sources.target[page.title()] if not s.is_reprint and not s.ref_magazine and s.template == template]) == 1:
+            fmt = appearances.target[title][0].original.replace(" German audio drama", "")
+    elif title in sources.target:
+        template = sources.target[title][0].template
+        if sources.target[title][0].title_format_text():
+            fmt = sources.target[title][0].title_format_text()
+            if len(sources.target[title]) > 1 and "department" not in title:
+                if len([s for s in sources.target[title] if not s.is_reprint and not s.ref_magazine and s.template == template]) == 1:
                     pass
                 elif " Part " in fmt:
                     fmt = re.sub("[:,]? Part (One|Two|Three|Four|I+|[0-9]+).*?$", "", fmt)
@@ -633,44 +648,50 @@ def prepare_title_format(infobox: str, page: Page, appearances: FullListData, so
                     fmt = None
                     skip = True
         elif not template:
-            fmt = sources.target[page.title()][0].original
-        elif sources.target[page.title()][0].text and sources.target[page.title()][0].url and len(sources.target[page.title()]) == 1:
-            fmt = sources.target[page.title()][0].text
+            fmt = sources.target[title][0].original
+        elif sources.target[title][0].text and sources.target[title][0].url and len(sources.target[title]) == 1:
+            fmt = sources.target[title][0].text
             if " Part " in fmt:
                 fmt = re.sub("[:,]? Part (One|Two|Three|Four|I+|[0-9]+).*?$", "", fmt)
+    zx = re.search("\[\[(.*?) \((.*?)\)\|(\"\\1\") \\2]]", fmt or '')   # story/episode audio
+    if zx:
+        return zx.group(1), zx.group(3), f"'''{zx.group(3)}'''"
 
     if fmt:
         if "|" in fmt:
             fmt = re.sub("^.*\[\[.*?\|(.*?)]].*?$", "\\1", fmt)
+            if '"' in fmt and '"' not in title:
+                fmt = fmt.replace('"', '')
         elif "[[" in fmt:
             fmt = re.sub("^\"?('')?\[\[(.*?)]]('')?\"?$", "\\1\\2\\3", fmt)
-        if len(fmt.replace('"', "").replace("'", "").replace("(", "").replace(")", "")) > (
-                len(page.title().replace("(", "").replace(")", "")) + 5):
-            fmt = None
+        if not title.startswith(f"{clean(fmt)} ("):
+            if abs(len(clean(fmt).replace("(", "").replace(")", "")) - len(title.replace("(", "").replace(")", ""))) > 5:
+                print("Skip:", clean(fmt), clean(title))
+                fmt = None
 
     if not fmt and infobox:
         if infobox in ISSUE:
-            fmt = re.sub("^(.*?)( \([0-9]+\))? ([0-9]+)( \(.*?\))?$", "''\\1''\\2 \\3", page.title())
+            fmt = re.sub("^(.*?)( \([0-9]+\))? ([0-9]+)( \(.*?\))?$", "''\\1''\\2 \\3", title)
         elif infobox in ITALICIZE or (fmt and "''" in fmt):
-            fmt = "''" + re.sub(" \(.*?\)$", "", page.title()) + "''"
+            fmt = "''" + re.sub(" \(.*?\)$", "", title) + "''"
 
-    fmt = fmt or page.title()
-    if fmt and " (" in page.title() and page.title().endswith(")") and "audio drama" not in page.title() and (" (" not in fmt or page.title().split(" (")[-1] not in fmt):
-        fmt = truncate(fmt, page.title().split(" (")[0])
+    fmt = fmt or title
+    if " (" in title and title.endswith(")") and (" (" not in fmt or title.split(" (")[-1] not in fmt):
+        fmt = truncate(fmt, title.split(" (")[0])
 
     fmt = "<b>" + re.sub(" \(.*?\)$", "", fmt).replace("#", "<n>") + "<b>"
     if fmt.startswith('<b>"') and fmt.endswith('"<b>'):
         fmt = fmt.replace('<b>"', '<q><b>').replace('"<b>', '<b><q>')
-    elif infobox in QUOTES and not skip and not (page.title().startswith('"') and page.title().endswith('"')) \
+    elif infobox in QUOTES and not skip and not (title.startswith('"') and title.endswith('"')) \
             and not (fmt.startswith('"') and fmt.endswith('"')):
         fmt = "<q>" + fmt + "<q>"
     top_fmt = fmt.replace("<q>", "").replace("<b>", "").replace("<n>", "")
     fmt = re.sub("^(.*?) \([0-9]+\) ([0-9]+)", "\\1 \\2", fmt).replace("<n>", "#")
 
-    if template == "EncyclopediaCite" and (page.title().endswith("(1)") or page.title().endswith("(2)")):
-        fmt = f"<q><b>{page.title()}</b></q>"
+    if template == "EncyclopediaCite" and (title.endswith("(1)") or title.endswith("(2)")):
+        fmt = f"<q><b>{title}</b></q>"
     field_fmt = fmt.replace("<q>", '"').replace("<b>", "")
-    if "(audio drama)" in page.title():
+    if "(audio drama)" in title:
         top_fmt = top_fmt.replace(" audio drama", "")
         field_fmt = field_fmt.replace(" audio drama", "")
 
@@ -681,10 +702,11 @@ def prepare_title_format(infobox: str, page: Page, appearances: FullListData, so
 
 def truncate(x, y):
     a = ""
+    z = '"' if '"' in y else ''
     for c in x:
         if (c == "'" and not a.endswith("'")) or c == '"':
             a += c
-        elif a and not y.startswith(f"{a}{c}".replace("''", "").replace('"', '')):
+        elif a and not y.startswith(f"{a}{c}".replace("''", "").replace('"', z)):
             return a
         else:
             a += c
@@ -752,7 +774,7 @@ def is_infobox_field(ln, prev, fields):
 
 def prepare_media_infobox_and_intro(page: Page, results: PageComponents, redirects, disambigs, types,
                                     remap, appearances: FullListData, sources: FullListData):
-    top_fmt, field_fmt, text_fmt = prepare_title_format(results.infobox, page, appearances, sources)
+    top_fmt, field_fmt, text_fmt = prepare_title_format(results.infobox, page.title(), page.get(), appearances, sources)
     # print(page.title(), top_fmt, field_fmt, text_fmt)
 
     text = fix_redirects(redirects, results.before.strip(), "Intro", disambigs, remap,
@@ -791,17 +813,19 @@ def prepare_media_infobox_and_intro(page: Page, results: PageComponents, redirec
                 elif ln.startswith("|title=") and field_fmt:
                     if ("''" in field_fmt and "''" not in ln) or ("''" in ln and "''" not in field_fmt) or f"|title={simplify(field_fmt)}" != simplify(ln) or (ln == f"|title=\"{field_fmt}\"" and '"' not in field_fmt):
                         ln = f"|title={field_fmt}"
-                elif ln.startswith("|publisher="):
-                    x = re.search("\|publisher=\[\[(.*?)(\|.*?)?]]", ln)
-                    if x and "Disney" in x.group(1):
-                        book_publishers = {"Disney"}
-                    elif x and "Random House" in x.group(1):
-                        book_publishers = {"PenguinBooks", "RandomHouseOld", "PenguinRandomHouse", "RandomHouseBooks"}
                 elif ln.startswith("|image="):
                     x = re.search("\|image=\[*([Ff]ile:.*?)[|\n\]]", ln)
                     if x:
                         image = x.group(1).replace("file:", "File").replace(" ", "_")
                 prev = ln
+
+            if ln.startswith("|publisher=") or prev.startswith("|publisher="):
+                x = re.search("(\|publisher=\*|\*)\[\[(.*?)(\|.*?)?]]", ln)
+                if x and "Disney" in x.group(1):
+                    book_publishers.add("Disney")
+                elif x and "Random House" in x.group(1):
+                    book_publishers.update({"PenguinBooks", "RandomHouseOld", "PenguinRandomHouse", "RandomHouseBooks"})
+
             if infobox_found:
                 ct += (ln.count("{") - ln.count("}"))
                 infobox_done = ct == 0
@@ -880,9 +904,7 @@ def prepare_media_infobox_and_intro(page: Page, results: PageComponents, redirec
     if results.stub:
         pieces.append("")
         pieces.append(results.stub)
-    if image:
-        results.cover_images.append(f"{image}|Cover art")
-    add_cover_gallery(results.sections, results.cover_images)
+    add_cover_gallery(results.sections, results.cover_images, image)
 
     return pieces
 

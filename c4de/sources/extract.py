@@ -232,6 +232,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     s = re.sub("<!--.*?-->", "", s)
     s = re.sub("^(.*?\[\[.*?[^ ])#(.*?)(\|.*?]].*?)$", "\\1\\3", s).replace("|d=y", "")
     s = re.sub(" ?\{\{Ab\|.*?}}", "", s)
+    s = re.sub(" ?\{\{[Rr]eprint\|.*?}}", "", s)
     s = re.sub("^(Parent: )*", "", s)
     if s.count("{") == 2 and s.count("}") == 1:
         s += "}"
@@ -334,6 +335,9 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     elif template == "OST":
         m = re.search("\{\{OST\|(.*?)(\|.*?)?}}", s)
         return Item(z, mode, a, target=m.group(1), template=template)
+    elif template == "FilmVideo":
+        m = re.search("\{\{FilmVideo\|(.*?)(\|.*?)?}}", s)
+        return Item(z, mode, a, issue=m.group(1), template=template)
     # HoloNet News
     elif template == "Hnn":
         m = re.search("\{\{Hnn\|([0-9]+)(\|(.*?)\|(.*?))?}", s)
@@ -393,8 +397,11 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     elif template == "HomeVideoCite":
         m = re.search("\{+HomeVideoCite.*?\|(set=)?(.*?)(\|.*?)?\|(episode|featurette|scene)=\[*?(.*?)]*?(\|.*?)?}+", s)
         if m:
-            target = m.group(5) if "featurette=" in s and "nolink=1" not in s else None
-            return Item(z, mode, a, target=target, template=template, parent=m.group(2), issue=m.group(5), collapsed=True)
+            parent = m.group(2) if "film=" not in s else None
+            if "featurette=" in s and "nolink=1" not in s:
+                return Item(z, mode, a, template=template, parent=parent, target=m.group(5))
+            else:
+                return Item(z, mode, a, template=template, parent=parent, issue=m.group(5), collapsed=True)
     elif mode == "Social":
         m = re.search("\{\{[A-z]+\|([^|\n}]+)\|\|(.*?)(\|.*?)?}}", s)
         if m:
@@ -414,7 +421,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
             return Item(z, "Official", a, target=None, template=template, url=m.group(1))
     # YouTube templates
     elif mode == "YT":
-        m = re.search("{{[^|\[}\n]+\|(.*?\|)?video=(?P<video>.*?)(&.*?)?(\|.*?)?}}", s)
+        m = re.search("{{[^|\[}\n]+\|(.*?\|)?(url|video)=(?P<video>.*?)(&.*?)?(\|.*?)?}}", s)
         if not m:
             m = re.search("{{[^|\[}\n]+\|(([a-z_]+)=.*?\|)?(?P<video>.*?)(&.*?)?\|(text=)?(?P<text>.*?)(\|.*?)?}}", s)
         if m:
@@ -424,6 +431,10 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
             if 'text' not in m.groupdict():
                 txt = re.search("\|text=(.*?)(\|.*?)?}}", s)
                 t = txt.group(1) if txt else ''
+                if t and "series=" in s:
+                    zx = re.search("series=(.*?)(\|.*?)?$", s)
+                    if zx:
+                        t = zx.group(1) + " " + t
             i = re.search("\|int=(.*?)(\|.*?)?}}", s)
             return Item(z, mode, a, target=i.group(1) if i else None, template=template, url=m.group('video'), text=t,
                         special=u.group(3) if u else None, alternate_url=alt)
@@ -529,10 +540,10 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         return Item(z, mode, a, target=m.group('story'), template=template, parent=m.group('book'))
 
     # Web article with int= parameter
-    m = re.search("{{[^|\[}\n]+\|(.*?\|)?url=(?P<url>.*?)\|.*?(text=(?P<t1>.*?)\|)?(.*?\|)?(?P<p>int|serieslink)=(?P<int>.*?)(\|.*?text=(?P<t2>.*?))?(\|.*?)?}}", s)
+    m = re.search("{{[^|\[}\n]+\|(.*?\|)?url=(?P<url>.*?)\|.*?(text=(?P<t1>.*?)\|)?(.*?\|)?(?P<p>int|seriesl?i?n?k?)=(?P<int>.*?)(\|.*?text=(?P<t2>.*?))?(\|.*?)?}}", s)
     if m:
         text = m.group('t1') or m.group('t2')
-        if m.group('p') == "serieslink":
+        if m.group('p') and m.group('p').startswith('series'):
             text = f"{m.group('int')} {text}"
         return Item(z, mode, a, target=m.group('int'), template=template, url=m.group('url'), text=text)
 
@@ -543,7 +554,12 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     if not m:
         m = re.search("{{[^|\[}\n]+\|(.*?\|)?(full_url|url|video)=(?P<url>.*?)\|(.*?\|)?(text|postname|thread)=(?P<text>.*?)(\|.*?)?}}", s)
     if m:
-        return Item(z, mode, a, target=None, template=template, url=m.group('url'), text=m.group('text'))
+        text = m.group('text') or ''
+        if text and "series=" in s:
+            zx = re.search("series=(.*?)(\|.*?)?$", s)
+            if zx:
+                text = zx.group(1) + " " + text
+        return Item(z, mode, a, target=None, template=template, url=m.group('url'), text=text)
 
     # Web templates without named parameters
     if mode == "Web" or mode == "External" or mode == "Publisher" or mode == "Commercial":

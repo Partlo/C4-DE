@@ -154,7 +154,7 @@ def parse_page(p: Page, types):
     for i, line in enumerate(text.splitlines()):
         parse_line(line, i, p, types, full, unique, target)
 
-    return FullListData(unique, full, target, {}, set(), set(), {})
+    return FullListData(unique, full, {}, target, {}, set(), set(), {})
 
 
 def parse_line(line, i, p: Page, types, full, unique, target):

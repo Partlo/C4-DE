@@ -84,6 +84,7 @@ class Item:
 
         # Timeline and indexing
         self.index = None
+        self.link_index = None
         self.canon_index = None
         self.legends_index = None
         self.timeline = None
@@ -153,7 +154,7 @@ class Item:
         return s.strip() if s is not None else None
 
     def has_date(self):
-        return self.date is not None and (self.date.startswith("1") or self.date.startswith("2") or self.date == "Current" or self.date.startswith("Cancel"))
+        return self.date is not None and (self.date.startswith("1") or self.date.startswith("2") or self.date == "Current" or self.date.startswith("Cancel") or self.date == "OfficialSite")
 
     def match_expected(self):
         return (not self.non_canon and not self.unlicensed and not self.from_extra and not self.is_reprint
@@ -221,11 +222,14 @@ class ItemId:
                 z = current.original.split("|", 1)[-1].replace("]]", "").replace("''", "")
                 if z.replace(":", "") == master.target.replace(":", ""):
                     self.replace_references = True
+        elif master.template == "SWArchive" or master.template == "SW":
+            if current.url and "_picview" in current.url:
+                self.replace_references = False
 
     def sort_date(self):
         if self.current.override_date:
             return self.current.override_date
-        elif self.current.unknown and self.current.original_date:
+        elif self.current.original_date and (self.current.unknown or not self.master.date):
             return self.current.original_date
         return self.master.date
 
@@ -247,10 +251,11 @@ class AnalysisConfig:
 
 
 class FullListData:
-    def __init__(self, unique: Dict[str, Item], full: Dict[str, Item], target: Dict[str, List[Item]], by_parent: Dict[str, List[Item]],
+    def __init__(self, unique: Dict[str, Item], full: Dict[str, Item], urls: Dict[str, List[Item]], target: Dict[str, List[Item]], by_parent: Dict[str, List[Item]],
                  parantheticals: set, both_continuities: set, reprints: Dict[str, List[Item]], no_canon_index: List[Item]=None, no_legends_index: List[Item]=None):
         self.unique = unique
         self.full = full
+        self.urls = urls
         self.target = target
         self.by_parent = by_parent
         self.parentheticals = parantheticals
@@ -267,8 +272,8 @@ class PageComponents:
     :type sections: dict[str, SectionLeaf]
     :type links: SectionComponents
     """
-    def __init__(self, original: str, canon: bool, non_canon: bool, unlicensed: bool, real: bool, mode, media, infobox,
-                 original_infobox, flag: list, page_name, media_cat, stub=None):
+    def __init__(self, original: str, canon: bool, non_canon: bool, unlicensed: bool, real: bool, mode, media, person,
+                 infobox, original_infobox, flag: list, page_name, media_cat, stub=None):
         self.before = ""
         self.final = ""
         self.original = original
@@ -278,6 +283,7 @@ class PageComponents:
         self.real = real
         self.app_mode = mode
         self.media = media
+        self.person = person
         self.infobox = infobox
         self.original_infobox = original_infobox
         self.flag = flag
@@ -383,7 +389,10 @@ class SectionLeaf:
         if self.invalid:
             f = "{{SectionFlag|bts}}" if 'Behind the scenes' in header_line else "{{SectionFlag}}"
             header_line = re.sub("(===?.*?)(===?)", f"\\1 {f}\\2", header_line)
-        if media_cat and (has_lines or self.subsections):
+        if any("{{mediacat" in ln for ln in self.lines):
+            lines = [header_line]
+            added_media_cat = True
+        elif media_cat and (has_lines or self.subsections):
             lines = [media_cat, header_line] if above_header else [header_line, media_cat]
             added_media_cat = True
         else:
@@ -432,11 +441,11 @@ class SectionLeaf:
     @staticmethod
     def build_gallery_for_section(lines):
         before, images, filenames, after = [], [], [], []
-        gallery_start = False
+        gallery_start, ended = False, False
         for ln in lines:
             x = re.search("^(([Ff]ile:)?.*?\.(png|jpe?g))(\|.*?)?$", ln)
             if "<gallery" in ln:
-                before.append(ln)
+                before.append(ln.replace(" widths=\"150\"", ""))
                 gallery_start = True
             elif x:
                 fx = x.group(1).replace(" ", "_")
@@ -447,10 +456,15 @@ class SectionLeaf:
                     continue
                 filenames.append(fx)
                 images.append(ln)
+            elif "</gallery>" in ln:
+                ended = True
+                after.append(ln)
             elif gallery_start:
                 after.append(ln)
             else:
                 before.append(ln)
+        if not ended:
+            after.insert(0, "</gallery>")
         return [*before, *images, *after]
 
 
@@ -463,11 +477,10 @@ class SectionComponents:
         self.preceding = pre
         self.trailing = suf
         self.after = after
-        self.before = ""
         self.nav = nav or []
 
     def has_text(self):
-        return self.preceding or self.trailing or self.after or self.before
+        return self.preceding or self.trailing or self.after
 
 
 class FinishedSection:

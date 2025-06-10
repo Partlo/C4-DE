@@ -23,15 +23,12 @@ def build_section_from_pieces(section: SectionComponents, items: FinishedSection
         print(f"Creating {items.name} section with {items.rows} / {len(items.text.splitlines())} items")
 
     pieces = [items.name] if items.text else []
-    if section.before:
-        pieces.insert(0, "")
-        pieces.insert(0, section.before)
     if items.rows >= 20 and not any("{{scroll" in i.lower() for i in section.preceding):
         pieces.append("{{ScrollBox|content=")
 
     pieces += section.preceding
-    added_media_cat = False
-    if media_cat and items.text:
+    added_media_cat = any("{{mediacat" in i.lower() for i in pieces)
+    if not added_media_cat and media_cat and items.text:
         if start:
             pieces.insert(0, media_cat)
         else:
@@ -155,8 +152,8 @@ def format_update_contents(ln, page: Page, results: PageComponents, appearances:
         if "{{" in i[0]:
             x = extract_item(i[0], False, page.title(), types)
             if x:
-                d = determine_id_for_item(x, page, appearances.unique, appearances.target, sources.unique,
-                                          sources.target, {}, results.canon, False)
+                d = determine_id_for_item(x, page, appearances.unique, appearances.urls, appearances.target,
+                                          sources.unique, sources.urls, sources.target, {}, results.canon, False)
                 if d and x.is_card_or_mini() and d.current.card:
                     new_items.append(build_card_text(d, d).replace("|parent=1", "").replace("|reprint=1", ""))
                     continue
@@ -239,13 +236,13 @@ def build_final_text(pieces, otx, page: Page, results: PageComponents, disambigs
 
     pieces.append("")
     if results.media_cat:
-        media_cat = results.media_cat
+        media_cat = None if results.media_cat == "Ignore" else results.media_cat
     elif results.infobox in NO_MEDIA or "{{Mediacat" in otx:
+        media_cat = None
+    elif results.canon and not results.real and not results.media:
         media_cat = None
     else:
         media_cat = find_media_categories(page, media=results.media, check_audio=results.infobox not in NO_AUDIO)
-        if not results.real and not results.media and results.canon:
-            media_cat = None
 
     section = sorted([components.links, components.nca, components.apps, components.ncs, components.src], key=lambda a: a.rows)[-1]
     mc_section_name = section.name if section.rows > 3 else None
@@ -261,6 +258,7 @@ def build_final_text(pieces, otx, page: Page, results: PageComponents, disambigs
             elif "<ref" in otx and "{{reflist}}" not in otx:
                 if media_cat:
                     pieces.append("==Notes and references==\n" + media_cat + "\n{{Reflist}}\n\n")
+                    media_cat = None
                 else:
                     pieces.append("==Notes and references==\n{{Reflist}}\n\n")
         elif key == "Appearances" and not results.real:
@@ -332,11 +330,11 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
                 pieces.append(i)
         pieces.append("")
 
-    if media_cat:
+    if media_cat and not any("{{mediacat" in p.lower() for p in pieces):
         for i in range(len(pieces)):
-            z = re.search("==.*?==+", pieces[i])
+            z = re.search("==.*?==+", pieces[-(i + 1)])
             if z:
-                pieces[i] = pieces[i].replace(z.group(0), z.group(0) + "\n" + media_cat)
+                pieces[i] = pieces[-(i + 1)].replace(z.group(0), z.group(0) + "\n" + media_cat)
                 media_cat = None
                 break
 

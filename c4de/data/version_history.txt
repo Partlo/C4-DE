@@ -233,3 +233,5 @@
 **Handling reprints with unique content
 *'''4.6.1''': May 28, 2025
 **More media parsing logic tweaks
+*'''4.6.2''': June 10, 2025
+**Various bug fixes/tweaks

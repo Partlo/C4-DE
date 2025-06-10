@@ -20,6 +20,22 @@ SUBPAGES = [
 LIST_AT_START = ["Star Wars: Galactic Defense", "Star Wars: Force Arena", "Star Wars: Starfighter Missions"]
 LIST_AT_END = ["Star Wars: Galaxy of Heroes"]
 
+EXPANSION = {
+    "The Haunted Village (film)": [
+        "The Haunted Village", "The Cries of the Trees", "Rampage of the Phlogs", "Sunstar vs. Shadowstone"
+    ],
+    "The Pirates and the Prince": [
+        "The Lost Prince", "The New King", "The Pirates of Tarnoonga", "The Revenge of Kybo Ren"
+    ],
+    "Treasure of the Hidden Planet": [
+        "Tail of the Roon Comets", "The Roon Games", "Across the Roon Sea", "The Frozen Citadel"
+    ],
+    "Young Jedi Adventures: My First Comic Reader Level 1": [
+        *"¡Que Empiece el Entrenamiento!", "Una Nueva Perspectiva", "Pord Recibe una Lección",
+        "La Visita del Maestro Yoda", "Entrenando Con Remotos", "La Carrera Contra Taborr"
+    ]
+}
+
 MANGA = {
     "Star Wars Rebels (webcomic)": {
         "Star Wars Rebels, Vol. 1": ["Star Wars Rebels: Spark of Rebellion"],
@@ -154,6 +170,10 @@ def load_appearances(site, log, canon_only=False, legends_only=False):
             if line and sp in ("Extra", "Series") and line.startswith("=="):
                 if "anthologies" in line:
                     collection_type = "anthology"
+                elif "Individual issues" in line:
+                    collection_type = "individual"
+                elif "reprint magazine" in line:
+                    collection_type = "reprint"
                 elif "Toy lines" in line:
                     collection_type = "toy"
                 elif "reprint" in line.lower():
@@ -177,7 +197,7 @@ def load_appearances(site, log, canon_only=False, legends_only=False):
     return data
 
 
-def load_source_lists(site, log):
+def load_source_lists(site, log, include_web=True):
     data = []
     for sp in SUBPAGES:
         i = 0
@@ -209,6 +229,8 @@ def load_source_lists(site, log):
                     print(f"{p.title()}: Cannot parse line: {line}")
         if log:
             print(f"Loaded {i} sources from Wookieepedia:Sources/{sp}")
+    if not include_web:
+        return data
 
     for y in [*range(1990, datetime.now().year + 1), "Special", "Repost"]:
         i = 0
@@ -218,7 +240,7 @@ def load_source_lists(site, log):
             for o, line in enumerate(lines):
                 if "/Header}}" in line or line.startswith("----"):
                     continue
-                x = re.search("\*(R: )?(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? *(?P<t>.*?) ?†?( {{C\|1?=?(original|alternate): (?P<a>.*?)}})?( {{C\|int: (?P<i>.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
+                x = re.search("\*([RP]: )?(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? *(?P<t>.*?) ?†?( {{C\|1?=?(original|alternate): (?P<a>.*?)}})?( {{C\|int: (?P<i>.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
                 if x:
                     i += 1
                     data.append({"index": i, "page": "Web/Repost" if y == "Special" else f"Web/{y}", "date": x.group("d"), "item": x.group("t"),
@@ -248,14 +270,14 @@ def load_source_lists(site, log):
     for line in p.get().splitlines():
         if "/Header}}" in line or line.startswith("----"):
             continue
-        x = re.search("\*(.*?):( [0-9:-]+)? (.*?)( †)?( {{C\|1?=?(original|alternate): (.*?)}})?$", line)
+        x = re.search("\*(.*?):( [0-9:-]+)? (.*?)( †)?( {{C\|1?=?(original|alternate): (.*?)}})?( \{\{C\|[Nn]on-canon}})?$", line)
         if x:
             i += 1
-            data.append({"index": i, "page": "Web/Unknown", "date": "Unknown", "item": x.group(3), "alternate": x.group(7), "official": x.group(1) == "OfficialSite"})
+            data.append({"index": i, "page": "Web/Unknown", "date": "Unknown", "item": x.group(3) + (x.group(8) or ''), "alternate": x.group(7), "official": x.group(1) == "OfficialSite"})
         else:
             print(f"{p.title()}: Cannot parse line: {line}")
     if log:
-        print(f"Loaded {i} sources from Wookieepedia:Sources/Unknown")
+        print(f"Loaded {i} sources from Wookieepedia:Sources/Web/Unknown")
 
     for sp in ["External", "Target", "Publisher"]:
         p = Page(site, f"Wookieepedia:Sources/Web/{sp}")
@@ -263,10 +285,10 @@ def load_source_lists(site, log):
         for line in p.get().splitlines():
             if "/Header}}" in line or not line.strip():
                 continue
-            x = re.search("[#*](?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?) ?†?( {{C\|1?=?(original|alternate): (?P<a>.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
+            x = re.search("[#*]([RP]: )?(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?) ?†?( {{C\|1?=?(original|alternate): (?P<a>[^{}\[\]|]+?)}})?( {{C\|d: [0-9X-]+?}})?(?P<x> \{\{C\|[Nn]on-canon}})?$", line)
             if x:
                 i += 1
-                data.append({"index": i, "page": f"Web/{sp}", "date": x.group('d'), "item": x.group('t'), "alternate": x.group('a')})
+                data.append({"index": i, "page": f"Web/{sp}", "date": x.group('d'), "item": x.group('t') + (x.group('x') or ''), "alternate": x.group('a')})
             else:
                 print(f"{p.title()}: Cannot parse line: {line}")
         if log:
@@ -382,8 +404,8 @@ def record_reprints(reprints, x):
         print(f"Unexpected state: reprint with no target: {x.original}")
 
 
-def load_full_sources(site, types, log) -> FullListData:
-    sources = load_source_lists(site, log)
+def load_full_sources(site, types, log, include_web=True) -> FullListData:
+    sources = load_source_lists(site, log, include_web)
     set_formatting = {}
     for ln in Page(site, "Module:FormattedTextLookup/Cards").get().splitlines():
         x = re.search("\[['\"](.*?)['\"]] ?= ?\"(.*?)\"", ln)
@@ -415,6 +437,7 @@ def load_full_sources(site, types, log) -> FullListData:
     reprints = {}
     card_suffixes = {}
     by_parent = {}
+    urls = {}
     for i in sources:
         item = i['item']
         old = f"{i['item']}"
@@ -445,6 +468,14 @@ def load_full_sources(site, types, log) -> FullListData:
                     if x.parent not in by_parent:
                         by_parent[x.parent] = []
                     by_parent[x.parent].append(x)
+                if x.url:
+                    if x.url not in urls:
+                        urls[x.url] = []
+                    urls[x.url].append(x)
+                if x.alternate_url:
+                    if x.alternate_url not in urls:
+                        urls[x.alternate_url] = []
+                    urls[x.alternate_url].append(x)
 
                 if x.target in set_formatting:
                     x.set_format_text = set_formatting[x.target]
@@ -493,7 +524,7 @@ def load_full_sources(site, types, log) -> FullListData:
                 for i in v:
                     i.original_printing = x
     _log(f"{count} out of {len(sources)} unmatched: {count / len(sources) * 100}")
-    return FullListData(unique_sources, full_sources, target_sources, by_parent, set(), both_continuities, reprints)
+    return FullListData(unique_sources, full_sources, urls, target_sources, by_parent, set(), both_continuities, reprints)
 
 
 def load_full_appearances(site, types, log, canon_only=False, legends_only=False, log_match=True) -> FullListData:
@@ -511,12 +542,13 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
     no_legends_index = []
     reprints = {}
     by_parent = {}
+    urls = {}
     for i in appearances:
         item = i['item']
         old = f"{i['item']}"
         try:
             is_reprint = "{{c|republish" in item.lower() or i["page"] == "Reprint"
-            item = re.sub("{{C\|([Uu]nlicensed|[Nn]on[ -]?canon)}}", "", item)
+            item = re.sub("{{C\|([Uu]nlicensed|[Nn]on[ -]?canon|source)}}", "", item)
             item, reprint = remove_capture(item, re.compile("{{[Rr]eprint\|.*?}}"), 0)
             item, ab = remove_capture(item, re.compile("\{\{[Aa]b\|.*?}}"), 0)
             item, parenthetical = remove_capture(item, re.compile("(\|p=(.*?))(?=(\|.*?)?}})"), 1, 2)
@@ -550,6 +582,7 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 x.is_audiobook = not ab and ("audiobook)" in x.original or x.target in AUDIOBOOK_MAPPING.values() or i['audiobook'])
                 x.german_ad = x.target and "German audio drama" in x.target
                 x.is_true_appearance = i["master"]
+                x.index = i['index']
                 if x.template == "SchAdv" or x.template == "EpIAdv":
                     x.original = f"''[[{x.target}]]''"
 
@@ -559,6 +592,14 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                     if x.parent not in by_parent:
                         by_parent[x.parent] = []
                     by_parent[x.parent].append(x)
+                if x.url:
+                    if x.url not in urls:
+                        urls[x.url] = []
+                    urls[x.url].append(x)
+                if x.alternate_url:
+                    if x.alternate_url not in urls:
+                        urls[x.alternate_url] = []
+                    urls[x.alternate_url].append(x)
 
                 if x.target:
                     x.is_adaptation = (lx.get(x.target, {}) or cx.get(x.target, {})).get("adaptation", False)
@@ -606,7 +647,7 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
     _log(f"{count} out of {len(appearances)} unmatched: {count / len(appearances) * 100}")
     _log(f"{len(no_canon_index)} canon items found without index")
     _log(f"{len(no_legends_index)} Legends items found without index")
-    return FullListData(unique_appearances, full_appearances, target_appearances, by_parent, parentheticals,
+    return FullListData(unique_appearances, full_appearances, urls, target_appearances, by_parent, parentheticals,
                         both_continuities, reprints, no_canon_index, no_legends_index)
 
 

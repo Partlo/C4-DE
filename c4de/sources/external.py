@@ -109,35 +109,36 @@ TEMPLATE_ORDERING = {
 def determine_link_order(mode, o: Item, x):
     if not o:
         return -1, None, x
-    elif o.master_page == "Web/Repost":
-        return 0.9, o.date, x
+    dx = f"0-{o.date}" if o.date == "OfficialSite" else o.date
+    if o.master_page == "Web/Repost":
+        return 0.9, dx, x
     elif o.publisher_listing or o.master_page in ["Web/Target", "Web/Publisher"]:
         z = 0 + (TEMPLATE_ORDERING.get(o.template, 100) / 1000)
         if o.index:
             z += (0.4 if o.template and o.template.startswith("SW") else 0.5) + (o.index / 1000000)
-        return z, o.date, x
+        return z, dx, x
     elif o.template == "SW" and o.url and o.url.startswith("series/"):
-        return 0, o.date, x
+        return 0, dx, x
     elif mode == "Official":
-        return 1.1, o.date, x
+        return 1.1, dx, x
     elif mode == "Bio":
-        return 1.2, o.date, x
+        return 1.2, dx, x
     elif mode == "Profile":
-        return 2, o.date, x
+        return 2, dx, x
     elif mode == "Publisher":
-        return 3 + (TEMPLATE_ORDERING.get(o.template, 100) / 1000), o.date, x
+        return 3 + (TEMPLATE_ORDERING.get(o.template, 100) / 1000), dx, x
     elif mode == "Commercial":
-        return 3.2, o.date, x
+        return 3.2, dx, x
     elif o.template == "WP":
-        return 4.1, o.date, x
+        return 4.1, dx, x
     elif mode == "Interwiki" or o.template in ["MobyGames", "BFICite", "BGG", "LCCN", "EndorExpress"]:
-        return 4.2, o.date, x
+        return 4.2, dx, x
     elif o.template in ["SW", "SWArchive", "Blog", "OfficialBlog", "SWBoards"]:
-        return 5.1, o.date, x
+        return 5.1, dx, x
     elif o.mode == "Social" and not o.date:
-        return 5.2, o.date, x
+        return 5.2, dx, x
     else:
-        return 5.3, o.date, x
+        return 5.3, dx, x
 
 
 DOMAINS = ["paninishop.de", "prhcomics.com", "music.apple.com", "audible.com", "shop.deagostini", "penguin.com"]
@@ -152,6 +153,9 @@ def is_external_link(d: ItemId, o: Item, unknown):
     elif d and d.master.template and "ToyCite" in d.master.template:
         return False
     elif not d and o.original.replace("*", "").startswith("[http"):
+        return True
+    elif o.template == "SWArchive" and o.url and o.url.startswith("shop/"):
+        o.mode = "Commercial"
         return True
     elif "isprofile=" in o.original:
         o.mode = "Profile"

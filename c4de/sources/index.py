@@ -13,7 +13,7 @@ def build_alternate(i: ItemId):
     o = "{{SW|url=" + i.master.special + "|text=" + i.master.text + "}}"
     x = Item(o, "Web", i.master.is_appearance, url=i.master.special, template="SW", text=i.master.text)
     x.date = i.master.date
-    x.index = i.master.index + 0.1
+    x.index = (i.master.index or 0) + 0.1
     x.canon_index = i.master.canon_index
     x.legends_index = i.master.legends_index
     x.extra = i.current.extra
