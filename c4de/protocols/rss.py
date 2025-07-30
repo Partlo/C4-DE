@@ -428,7 +428,7 @@ def check_ilm(site, url, feed_url, cache: Dict[str, List[str]]):
             date = datetime.strptime(date, "%B %d, %Y").strftime("%Y-%m-%d")
         except Exception:
             pass
-        results.append({"site": site, "title": link.text.strip() if link else None, "url": u, "content": "", "date": date})
+        results.append({"site": site, "title": clean_title(link.text.strip()) if link else None, "url": u, "content": "", "date": date})
         cache[site].append(u)
 
     return list(reversed(results))
@@ -575,6 +575,19 @@ def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, che
                 continue
             elif not any(t in e.link for t in [today2, today3, today4, today5]):
                 continue
+        if "youtube" in e.link and "/shorts/" in e.link:
+            continue
+        elif site == "*Star Wars*" and "youtube" in e.link:
+            try:
+                rx = requests.get(e.link.replace("/watch?v=", "/shorts/"))
+                if rx.url and "/shorts/" in rx.url:
+                    cache[site].append(e.link)
+                    continue
+            except Exception:
+                pass
+
+            # if e.link.replace("/shorts/", "/watch?v=") in site_cache:
+            #     continue
 
         if site == "*Star Wars: The Old Republic*":
             if any(x in e.title.lower() for x in ["mise à jour", "de l'histoire", "spieleupdate", "spiel-update", "teaser-clip"]):
@@ -582,7 +595,11 @@ def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, che
             elif any(f" {x} " in f" {e.title.lower()} " for x in ["de", "la", "zu", "der", "des", "sur"]):
                 continue
 
-        r = requests.get(e.link).text
+        try:
+            r = requests.get(e.link.replace("http:", "https:")).text
+        except Exception as ex:
+            error_log(f"Encountered {type(ex)} while checking {e.link}", ex)
+            r = ""
         title = check_title_formatting(r, title_regex, e.title)
         content = ""
         if e.get("content"):
@@ -660,6 +677,9 @@ def check_title_formatting(text, title_regex, title):
     m = re.search(title_regex, text)
     if m:
         title = m.group(1)
+    return clean_title(title)
+
+def clean_title(title):
     title = re.sub(" ", " ", title)
     title = re.sub(r"<[ie]m?>( )?[ \n]*</[ie]m?>", r"\1", title)
     title = re.sub(r"<[ie]m?><[ie]m?>( )?(.*?)( )?</[ie]m?>( )?</[ie]m?>", r"\1''\2''\3\4", title)
@@ -670,8 +690,10 @@ def check_title_formatting(text, title_regex, title):
     title = title.replace("“", '"').replace("”", '"').replace("’", "'").replace("‘", "'")
     title = title.replace("|", "&#124;").replace("–", "&ndash;").replace("—", "&mdash;")
     title = title.replace("[", "&#91;").replace("]", "&#93;")
+    title = title.replace("", "—").replace("", '"').replace("", '"')
     # title = re.sub(" &#124; ?D[Ii][Ss][Nn][Ee][Yy] ?(\+|Plus)[ ]*(& Disney Junior)?[ ]*$", "", title)
     # title = re.sub(" (&#124; )?@?StarWarsKids *?x *?@?disneyjunior", "", title)
+    title = title.replace("\n", " ").replace("  ", " ")
     if title.strip().endswith("&#124;"):
         title = title.strip()[:-6]
     return html.unescape(title).replace("’", "'").strip()
@@ -832,7 +854,7 @@ def build_site_map(full: bool):
 
 def compile_tracked_urls(site):
     urls = []
-    for y in [*range(1990, datetime.now().year + 1), "Publisher", "Target", "External"]:
+    for y in [*range(1990, datetime.now().year + 1), "Current", "Publisher", "Target", "External"]:
         p = Page(site, f"Wookieepedia:Sources/Web/{y}")
         if p.exists():
             for line in p.get().splitlines():
@@ -842,6 +864,8 @@ def compile_tracked_urls(site):
                     urls.append(line.split("|url=", 1)[-1].split("|")[0].split("}", 1)[0])
                     if "{{C|alternate: " in line or "{{C|1=alternate: " in line:
                         urls.append(line.split("alternate: ", 1)[-1].split("}", 1)[0])
+                elif "{{C|alternate" in line and "|url=" not in line:
+                    urls.append(line.split("alternate: ", 1)[-1].split("}", 1)[0])
 
     for line in Page(site, "Wookieepedia:Sources/Web/Databank").get().splitlines():
         if "{{Databank|url=" in line:
@@ -963,7 +987,6 @@ def handle_site_map(sitemap: set, urls, skip, updated_db_entries, guides):
         if x in skip or u in skip:
             continue
         try:
-            print(u)
             r = requests.get(u)
             if r.url != u:
                 continue

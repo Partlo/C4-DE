@@ -9,13 +9,10 @@ from c4de.sources.domain import Item, ItemId
 from pywikibot import Site, Page, handle_args, pagegenerators, showDiff, input_choice, Timestamp
 from pywikibot.exceptions import APIMWError
 
-from c4de.sources.build import build_new_text
+from c4de.sources.build import build_new_text, STATUS
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, load_template_types, \
     load_auto_categories
 from c4de.sources.infoboxer import load_infoboxes
-
-
-STATUS = ["Category:Wookieepedia Featured articles", "Category:Wookieepedia Good articles", "Category:Wookieepedia Comprehensive articles"]
 
 
 def to_duration(now: datetime):
@@ -27,31 +24,48 @@ def remove_the(x):
     return x[(4 if x.startswith("The ") else 0):]
 
 
+def flatten(x):
+    z = (x.replace("ncomplete list", "ncompleteList").replace("ncomplete_list", "ncompleteList")
+         .replace("–", "&ndash;").replace("—", "&mdash;").replace("theruses|title=", "theruses|")
+         .replace("|nolive=1", "").replace("|from=1", "").replace("Journal|", "JournalCite|").replace("{{IU_media", "{{InUniverseMedia")
+         .replace("FFGweb", "FantasyFlightGames").replace("AMGweb", "AtomicMassGames").replace("TOMCite", "GermanFanCite")
+         .replace("{{Scroll_box", "{{ScrollBox").replace("{{Scroll box", "{{ScrollBox").replace("{{Title_infobox", "{{TitlePosition")
+         .replace("{{Canon Imperial Era}}", "{{CanonImperialEraNav}}").replace("{{Canon_Imperial_Era}}", "{{CanonImperialEraNav}}")
+         .replace("{{Republic Era}}", "{{RepublicEraNav}}").replace("{{Republic_Era}}", "{{RepublicEraNav}}")
+         .replace("{{New Republic Era}}", "{{NewRepublicEraNav}}").replace("{{New_Republic_Era}}", "{{NewRepublicEraNav}}")
+         .replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]")
+         .replace("=Collections=", "=Collected in=").replace("]]\n{{RelatedCategories", "]]\n\n{{RelatedCategories"))
+    z = re.sub("(\{\{[A-Z][a-z]+)[ _]([A-z])([A-z _]+)([ _]?Nav)?(\n|}})", lambda a: a.group(1) + a.group(2).upper() + a.group(3) + a.group(5), z)
+    z = re.sub("(\{\{[A-Z][a-z]+)[ _]([A-z])([A-z _]+)([ _]?Nav)?(\n|}})", lambda a: a.group(1) + a.group(2).upper() + a.group(3) + a.group(5), z)
+    return re.sub("\{\{1stID\|.*?}}", "{{1stID}}", re.sub("\|title=\"(.*?)\"", "|title=\\1", re.sub("<!--.*?-->", "", z)))
+
+
 def analyze(*args, to_save):
     gen_factory = pagegenerators.GeneratorFactory()
     log = False
-    start_on, skip_start, skip_end, redo = None, None, None, None
+    start_on, end_on, skip_start, skip_end, redo = None, None, None, None, None
     include_date = False
     legends, canon = False, False
     always = False
-    end_on = None
     bot = True
     count = 0
     encyclopedia, ultimate, ultimate2 = [], [], []
     for arg in handle_args(*args):
         if arg.startswith("-page:"):
             log = True
-        gen_factory.handle_arg(arg.replace("::", ":"))
         if arg.startswith("-st:"):
             _, _, start_on = arg.replace('"', '').partition("-st:")
-        if arg.startswith("-et:"):
+        elif arg.startswith("-et:"):
             _, _, end_on = arg.replace('"', '').partition("-et:")
-        if arg.startswith("-s1:"):
+        elif arg.startswith("-s1:"):
             _, _, skip_start = arg.replace('"', '').partition("-s1:")
-        if arg.startswith("-s2:"):
+        elif arg.startswith("-s2:"):
             _, _, skip_end = arg.replace('"', '').partition("-s2:")
-        if arg.startswith("-redo:"):
+        elif arg.startswith("-redo:"):
             _, _, redo = arg.replace('"', '').partition("-redo:")
+        else:
+            gen_factory.handle_arg(arg.replace("::", ":"))
+
         if "date:true" in arg.lower():
             include_date = True
         if "legends" in arg.lower():
@@ -83,13 +97,13 @@ def analyze(*args, to_save):
 
     gen = pagegenerators.PreloadingGenerator(gen_factory.getCombinedGenerator(), groupsize=50)
 
-    ci = 47919
-    li = 115796
+    ci = 50623
+    li = 116357
     i = count - 1
     if any("Legends articles" in a or "C4-DE traversal" in a for a in args):
         i += ci
     # total = ci + li
-    total = 16431
+    total = li
     checked = []
     processed = []
     always_comment = False
@@ -102,7 +116,7 @@ def analyze(*args, to_save):
             continue
         elif page.namespace().id == 2:
             continue
-        elif page.title() in processed or page.title().startswith("List of"):
+        elif page.title() in processed or page.title().startswith("List of") or page.title().startswith("Timeline of"):
             continue
         else:
             processed.append(page.title())
@@ -149,6 +163,9 @@ def analyze(*args, to_save):
 
             before = page.get(force=True)
             old_text = f"{before}"
+            # if "{{HelmetCollection" not in old_text and "{{ForceCollection" not in old_text:
+            #     continue
+
             old_revision = None
             if redo and redo >= page.title(with_ns=False): #and "audiobook" in old_text:
                 for r in page.revisions(total=10, content=True):
@@ -156,8 +173,6 @@ def analyze(*args, to_save):
                     if r['timestamp'] < since or (r['user'] != 'C4-DE Bot'):
                         print(f"Reloaded revision {r['revid']} for {page.title()}")
                         break
-            if "<li value" in old_text:
-                old_revision = None
 
             extra = []
             text, u1, u2 = build_new_text(page, infoboxes, types, [], appearances, sources, cats, remap, include_date,
@@ -184,10 +199,9 @@ def analyze(*args, to_save):
                 print(f"Skipping {page.title()}; infobox newline is only change -> {to_duration(now)} seconds")
                 continue
 
-            match = re.sub("\{\{1stID\|.*?}}", "{{1stID}}", re.sub("\|title=\"(.*?)\"", "|title=\\1", re.sub("<!--.*?-->", "", z1.replace("ncomplete list", "ncompleteList").replace("ncomplete_list", "ncompleteList").replace("–", "&ndash;").replace("—", "&mdash;").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]"))).replace("=Collections=", "=Collected in=").replace("|from=1", "")) == \
-                    re.sub("\{\{1stID\|.*?}}", "{{1stID}}", re.sub("\|title=\"(.*?)\"", "|title=\\1", re.sub("<!--.*?-->", "", z2.replace("ncomplete list", "ncompleteList").replace("ncomplete_list", "ncompleteList").replace("–", "&ndash;").replace("—", "&mdash;").replace("theruses|title=", "theruses|").replace("|nolive=1", "").replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]"))).replace("=Collections=", "=Collected in=").replace("|from=1", ""))
+            match = flatten(z1) == flatten(z2)
 
-            override = old_text.count("nterlang") > text.count("nterlang") or (old_text.count("[[Category:") + old_text.count("[[category:")) > (text.count("[[Category:") + text.count("[[category:"))
+            override = old_text.count("nterlang") > text.count("nterlang") #or (old_text.count("[[Category:") + old_text.count("[[category:")) > (text.count("[[Category:") + text.count("[[category:"))
             if override:
                 p = Page(gen_factory.site, f"User:Cade Calrayn/Test5")
                 p.put((p.get() if p.exists() else "") + f"\n#[[{page.title()}]]")
@@ -265,9 +279,9 @@ def analyze(*args, to_save):
 
 if __name__ == "__main__":
     to_save = []
-    try:
-        analyze(sys.argv, to_save=to_save)
-    except KeyboardInterrupt:
-        if to_save:
-            with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/review.txt", mode="a", encoding="utf-8") as f:
-                f.writelines("\n".join(to_save))
+    # try:
+    analyze(sys.argv, to_save=to_save)
+    # except KeyboardInterrupt:
+    #     if to_save:
+    #         with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/review.txt", mode="a", encoding="utf-8") as f:
+    #             f.writelines("\n".join(to_save))

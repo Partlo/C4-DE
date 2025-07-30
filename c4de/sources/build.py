@@ -2,12 +2,11 @@ import codecs
 import re
 from datetime import datetime
 
-from c4de.sources.cleanup import clear_page_numbers
 from pywikibot import Page, Category, showDiff
 
 from c4de.common import error_log, fix_redirects, do_final_replacements, sort_top_template, to_duration, \
     report_duration, MULTIPLE_ISSUE_CONVERSION
-from c4de.protocols.cleanup import clean_archive_usages
+from c4de.sources.archive import clean_archive_usages
 from c4de.sources.analysis import analyze_section_results
 from c4de.sources.determine import determine_id_for_item
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, SectionComponents, FinishedSection, \
@@ -17,12 +16,14 @@ from c4de.sources.index import create_index
 from c4de.sources.media import MEDIA_STRUCTURE, prepare_media_infobox_and_intro
 from c4de.sources.parsing import build_initial_components, build_page_sections, MASTER_STRUCTURE, build_card_text
 
+STATUS = ["Category:Wookieepedia Featured articles", "Category:Wookieepedia Good articles", "Category:Wookieepedia Comprehensive articles"]
+
 
 def build_section_from_pieces(section: SectionComponents, items: FinishedSection, log, media_cat, start=False):
     if log and items.text:
         print(f"Creating {items.name} section with {items.rows} / {len(items.text.splitlines())} items")
 
-    pieces = [items.name] if items.text else []
+    pieces = [items.name] if (items.text or items.keep_empty) else []
     if items.rows >= 20 and not any("{{scroll" in i.lower() for i in section.preceding):
         pieces.append("{{ScrollBox|content=")
 
@@ -47,15 +48,13 @@ def build_section_from_pieces(section: SectionComponents, items: FinishedSection
         pieces += section.trailing
     diff = 0
     for i in range(len(pieces)):
-        diff += pieces[i].count("{{")
-        diff -= pieces[i].count("}}")
+        diff += (pieces[i].count("{{") - pieces[i].count("}}"))
         if diff == -2 and remove_scroll:
             pieces[i] = re.sub("^(.*?)}}([^}]*?)$", "\\1\\2", pieces[i])
     if diff > 0:
         pieces.append("}}")
     pieces.append("")
     pieces.append(section.after)
-    # return do_final_replacements("\n".join(pieces).strip() + "\n\n", True), added_media_cat
     return "\n".join(pieces).strip() + "\n\n", added_media_cat
 
 
@@ -98,30 +97,53 @@ def matches_category(ln, categories):
 
 
 def sort_categories(pieces, namespace_id, bad_categories):
+    pieces = "\n".join(pieces)
     if namespace_id == 6:
-        return "\n".join(pieces)
-    final = []
-    categories = []
-    related_cats = []
-    rc_count = 0
+        return pieces
+    final, categories, related_cats, old_rc = [], [], [], []
+    rcb_count, regular = 0, 0
     has_bad = False
-    for line in "\n".join(pieces).splitlines():
-        if "{{relatedcategories" in line.lower():
-            rc_count += line.count("{")
-            related_cats.append(line)
-        elif rc_count > 0:
-            related_cats.append(line)
-            rc_count += line.count("{")
-            rc_count -= line.count("}")
+    pieces = re.sub("\|\n+\[\[Category:", "|[[Category:", pieces)
+
+    for line in pieces.splitlines():
+        if "{{relatedcategories" in line.lower() or rcb_count > 0 or line.strip().lower().startswith("|[[category"):
+            rcb_count += (line.count("{") - line.count("}"))
+            if "category:" in line.lower():
+                related_cats.append(line)
         elif line.strip().lower().startswith("[[category:"):
-            if bad_categories and matches_category(line.strip().lower(), bad_categories):
+            if bad_categories and matches_category(line.strip().lower(), bad_categories) and "Pages without categories" not in line:
                 categories.append(f"{line}{{{{InvalidCategory}}}}")
                 has_bad = True
             else:
-                categories.append(line)
+                x = re.search("^(\[\[[Cc]ategory:.*?)\| ]]", line)
+                if x:
+                    related_cats.append("|" + x.group(1) + "]]")
+                    old_rc.append(line)
+                else:
+                    if "category:" in line.lower():
+                        regular += 1
+                    categories.append(line)
         else:
             final.append(line)
 
+    # TODO: augment with auto-gen categories
+    if regular == 0 and not has_bad:
+        categories.append("[[Category:Pages without categories]]")
+
+    if related_cats:
+        if len(related_cats) > len(set(related_cats)):
+            new_rc = []
+            for r in related_cats:
+                if r not in new_rc:
+                    new_rc.append(r)
+            related_cats = [*new_rc]
+        if not any("{{RelatedCategories" in r for r in related_cats):
+            related_cats.insert(0, "{{RelatedCategories")
+        rx = sum(r.count("{") - r.count("}") for r in related_cats)
+        if rx > 0:
+            related_cats.append("}"*rx)
+
+    categories = set(categories)
     if has_bad and len(categories) == 1:
         categories = [c.replace("{{InvalidCategory}}", "") for c in categories]
 
@@ -142,7 +164,7 @@ def add_parsed_section(pieces: list, component: SectionComponents, finished: Fin
 
 
 MAINTENANCE = ["catneeded", "citation", "cleanup", "cleanup-context", "confirm", "contradict", "disputed", "expand",
-               "image", "moresources", "npov", "oou", "plot", "redlink", "split", "stayontarget", "tense", "tone", "update"]
+               "image", "moresources", "oou", "plot", "redlink", "split", "stayontarget", "tense", "update"]
 
 
 def format_update_contents(ln, page: Page, results: PageComponents, appearances: FullListData, sources: FullListData, types):
@@ -171,20 +193,20 @@ def build_iu_intro(page: Page, results: PageComponents, appearances: FullListDat
     update_content = None
     expand_content = None
     for ln in content:
-        for x in MAINTENANCE:
-            if "{{update|" in ln.lower():
-                update_content = format_update_contents(ln, page, results, appearances, sources, types)
-                maintenance_tags[ln] = "updatecontent"
-                break
-            elif "{{expand|" in ln.lower():
-                x = re.search("expand\|(.*?)}}", ln)
-                if x:
-                    expand_content = x.group(1)
-                    maintenance_tags[ln] = "expand"
-                break
-            elif f"{{{{{x}|" in ln.lower() or f"{{{{{x}}}}}" in ln.lower():
-                maintenance_tags[ln] = x
-                break
+        if "{{update|" in ln.lower():
+            update_content = format_update_contents(ln, page, results, appearances, sources, types)
+            maintenance_tags[ln] = "updatecontent"
+        elif "{{expand|" in ln.lower():
+            x = re.search("expand\|(.*?)}}", ln)
+            if x:
+                expand_content = x.group(1)
+                maintenance_tags[ln] = "expand"
+            break
+        else:
+            for x in MAINTENANCE:
+                if f"{{{{{x}|" in ln.lower() or f"{{{{{x}}}}}" in ln.lower():
+                    maintenance_tags[ln] = x
+                    break
     if len(maintenance_tags) > 1:
         maintenance_params = sorted(v for v in maintenance_tags.values() if "content" not in v)
         if expand_content:
@@ -244,8 +266,13 @@ def build_final_text(pieces, otx, page: Page, results: PageComponents, disambigs
     else:
         media_cat = find_media_categories(page, media=results.media, check_audio=results.infobox not in NO_AUDIO)
 
-    section = sorted([components.links, components.nca, components.apps, components.ncs, components.src], key=lambda a: a.rows)[-1]
-    mc_section_name = section.name if section.rows > 3 else None
+    mc_section_name = None
+    if media_cat and not results.sections_have_media_cat():
+        sections = sorted([components.links, components.nca, components.apps, components.ncs, components.src], key=lambda a: a.rows)
+        sections = [s for s in sections if s.rows > 3 and not (s.rows < 6 and "{{Indexpage" in s.text)]
+        mc_section_name = sections[-1].name if sections else None
+        if "References" in results.sections and any("{{mediacat" in s.lower() for s in results.sections["References"].lines):
+            mc_section_name = None
 
     structure = MEDIA_STRUCTURE if results.media else MASTER_STRUCTURE
     for key, header_line in structure.items():
@@ -320,6 +347,10 @@ def build_final_text(pieces, otx, page: Page, results: PageComponents, disambigs
     return final_steps(page, results, components, pieces, disambigs, remap, redirects, media_cat, sources, keep_page_numbers, redo=redo)
 
 
+def strip_page_number(t):
+    return re.sub("\{\{PageNumber}} ('*\[+.*?]+'*),? \(?[pagechtr.]+ ?[0-9- ]+[.,)]?(.*?</ref>.*?(\n.*?)*?\r?\n\*.*?\\1)", "\\1\\2", t)
+
+
 def final_steps(page: Page, results: PageComponents, components: NewComponents, pieces: list, disambigs: list,
                 remap: dict, redirects: dict, media_cat, sources: FullListData, keep_page_numbers, redo=False):
     if components.navs:
@@ -334,7 +365,7 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
         for i in range(len(pieces)):
             z = re.search("==.*?==+", pieces[-(i + 1)])
             if z:
-                pieces[i] = pieces[-(i + 1)].replace(z.group(0), z.group(0) + "\n" + media_cat)
+                pieces[-(i + 1)] = pieces[-(i + 1)].replace(z.group(0), z.group(0) + "\n" + media_cat)
                 media_cat = None
                 break
 
@@ -345,11 +376,18 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
     new_txt = sort_categories(pieces, page.namespace().id, results.flag)
     if results.canon and not results.real and "/Legends" in new_txt:
         new_txt = handle_legends_links(new_txt, page.title())
-    new_txt = clean_archive_usages(page, new_txt, sources.archive_data, redo)
+    new_txt, _ = clean_archive_usages(page, new_txt, sources.archive_data, redo)
     # print(f"archive: {(datetime.now() - now).total_seconds()} seconds")
 
-    if not keep_page_numbers:
-        new_txt = clear_page_numbers(new_txt)
+    # if not keep_page_numbers:
+    #     # cx = [a.original if a.template else a.target for b in [results.apps, results.nca, results.src, results.ncs] for a in b.items if a.target]
+    #     cx = []
+    #     new_txt = clear_page_numbers(new_txt, cx)
+    #
+    #     # replace = True
+    #     # while replace:
+    #     #     new_txt = clear_page_numbers(strip_page_number(new_txt), cx)
+    #     #     replace = new_txt != strip_page_number(new_txt)
 
     new_txt = re.sub("(\{\{DEFAULTSORT:.*?}})\n\n+\[\[[Cc]ategory", "\\1\n[[Category", new_txt)
     new_txt = re.sub("(?<![\n=}])\n==", "\n\n==", re.sub("\n\n+", "\n\n", new_txt)).strip()
@@ -375,7 +413,8 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
                          new_txt.replace("{{WP|{{PAGENAME}}", "{{WP|{{subst:PAGENAME}}"))
 
     # now = datetime.now()
-    t = do_final_replacements(new_txt, replace)
+    is_status = any(c.title() in STATUS for c in page.categories())
+    t = do_final_replacements(new_txt, replace, is_status)
     # print(f"replace: {(datetime.now() - now).total_seconds()} seconds")
     return t
 
@@ -400,27 +439,6 @@ def build_final(final, media_cat, redirects):
     templates = {k: v for k, v in redirects.items() if k.startswith("Template:")}
     if templates:
         final = fix_redirects(templates, final, "Ending Text", {}, {})
-
-    if "RelatedCategories" not in final and re.search("\n\[\[[Cc]ategory:.*?\| ]]", final):
-        cats = []
-        lines = []
-        regular = 0
-        for ln in final.splitlines():
-            x = re.search("^(\[\[[Cc]ategory:.*?)\| ]]", ln)
-            if x:
-                cats.append("|" + x.group(1) + "]]")
-            else:
-                if "category:" in ln.lower():
-                    regular += 1
-                lines.append(ln)
-
-        if cats and regular == 0:
-            print("Unable to move categories to RelatedCategories, as no categories would be left")
-        elif cats:
-            related = "\n".join(["{{RelatedCategories", *cats, "}}"])
-            final = "\n".join(lines).strip() + "\n\n" + related
-
-    final = re.sub("\|\n+\[\[Category:", "|[[Category:", final)
 
     if "==\n" in final and media_cat:
         z = final.split("==\n", 1)

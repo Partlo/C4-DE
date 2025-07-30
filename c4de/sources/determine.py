@@ -50,8 +50,8 @@ SPECIAL_REMAP = ["Star Wars Kids Answer Quest"]
 
 
 def determine_id_for_item(
-        o: Item, page: Page, data: Dict[str, Item], by_target: Dict[str, List[Item]],  urls: Dict[str, List[Item]],
-        other_data: Dict[str, Item], other_targets: Dict[str, List[Item]], other_urls: Dict[str, List[Item]],
+        o: Item, page: Page, data: Dict[str, Item], urls: Dict[str, List[Item]], by_target: Dict[str, List[Item]],
+        other_data: Dict[str, Item], other_urls: Dict[str, List[Item]], other_targets: Dict[str, List[Item]],
         remap: dict, canon: bool, log: bool, ref=False):
     """ :rtype: ItemId """
 
@@ -66,6 +66,9 @@ def determine_id_for_item(
             return m
     if o.template in GAME_TEMPLATES and o.card:
         return ItemId(o, o, True, False)
+    elif o.template == "SWU" and "|promo=1" in o.original:
+        o.override = True
+        return ItemId(o, o, True, False)
 
     data_sets = {True: other_data, False: data} if ref else {False: data, True: other_data}
 
@@ -73,7 +76,7 @@ def determine_id_for_item(
         m = data.get(o.unique_id(), other_data.get(o.unique_id()))
         if m.template == "SWE" and not canon and not o.override:
             o.override_date = "2014-04-25"
-        return ItemId(o, m, False, o.unique_id() in other_data)
+        return ItemId(o, m, False, o.unique_id() not in data)
     elif "cargobay" in o.original:
         return ItemId(o, o, True, False)
     elif "HoloNet News" in o.original and re.search("\[https://web.archive.*?\.gif .*?].*?\[\[Holonet News", o.original):
@@ -89,11 +92,7 @@ def determine_id_for_item(
             return ItemId(o, data[t] if t in data else other_data[t], True, False)
 
     if o.mode == "External" or o.mode == "Basic":
-        if o.url:
-            m = match_url(o, o.url.replace("/#!/about", "").replace("news/news/", "news/").lower(), data, urls, other_data, other_urls)
-            if m:
-                return m
-        return None
+        return match_url(o, o.url.replace("/#!/about", "").replace("news/news/", "news/").lower(), data, urls, other_data, other_urls) if o.url else None
 
     if o.template and o.template.startswith("FactFile"):
         x = match_fact_file(o, by_target, other_targets)
@@ -135,7 +134,7 @@ def determine_id_for_item(
                 if x.target == o.target:
                     return ItemId(o, x, True, other)
 
-    is_tracked_mini = o.template == "SWIA" or (o.mode == "Minis" and o.template not in ["Shatterpoint"])
+    is_tracked_mini = o.template == "SWIA" or (o.mode == "Minis" and o.template not in ["Shatterpoint", "NewLegion"])
     if o.mode == "Minis":
         set_name = o.parent or o.target
         m = match_miniatures(o, set_name, data_sets, canon, ref, is_tracked_mini)
@@ -174,10 +173,9 @@ def determine_id_for_item(
     if o.is_card_or_toy():
         set_name = o.parent or o.target
         set_name = "Star Wars: The Legacy Collection" if set_name == "Star Wars: Legacy Collection" else set_name
-        if o.card or o.special:
-            if o.mode == "Toys":
-                print(f"{o.mode} {o.template} with {o.card}/{o.special} card/special fell through specific logic")
-                o.unknown = True
+        if (o.card or o.special) and o.mode == "Toys":
+            print(f"{o.mode} {o.template} with {o.card}/{o.special} card/special fell through specific logic")
+            o.unknown = True
         m = match_by_set_name(o, o.mode, o.template, set_name, data, other_data)
         if not m:
             m = match_by_set_name(o, o.mode, None, set_name, data, other_data)
@@ -204,7 +202,7 @@ def determine_id_for_item(
         elif o.parent and "Special Edition" in o.parent and by_target.get(o.parent):
             return ItemId(o, by_target[o.parent][0], True, False)
         x = match_issue_target(o, by_target, other_targets, True)
-        if not x and o.target and not o.followed_redirect:
+        if not x and o.target and not o.followed_redirect and not o.template == "FigurineCite":
             if follow_redirect(o, page.site, True):
                 o.followed_redirect = True
                 x = match_issue_target(o, by_target, other_targets, False)
@@ -260,21 +258,13 @@ def determine_id_for_item(
 
     if o.template == "HomeVideoCite" and not (x and o.target and o.target == x.master.target and "featurette=" in o.original):
         x = None
-        if "episode=" in o.original:
+        if "episode=" in o.original or "scene=" in o.original:
             x = match_specific_target(o, o.parent, by_target, other_targets, log)
             if x:
                 x.use_original_text = True
                 return x
         elif "featurette=" in o.original:
             print(f"HomeVideoCite fell through featurette matching?: {o.original}, {o.target}")
-
-        for is_other, ids in data_sets.items():
-            for k, v in ids.items():
-                if k.startswith(f"General|HomeVideoCite|None|None|{o.parent}|"):
-                    if "scene=" in o.original and "scene=" in v.original:
-                        return ItemId(o, v, True, is_other)
-                    elif "featurette=" in o.original and "featurette=<FEATURETTE>" in v.original:
-                        return ItemId(o, v, True, is_other)
     return x
 
 
@@ -395,6 +385,7 @@ def match_fact_file_issue(o: Item, entries: list[Item], other: bool, log_missing
     if not o.ff_data:
         return None
     a = (o.ff_data.get("abbr") or "").replace(" ", "")
+    # TODO: remove
     a = "0ABY" if a == "0BBY" else a
     if o.issue == "Part 8" and a == "22BBY":
         a = "21BBY"
@@ -402,8 +393,6 @@ def match_fact_file_issue(o: Item, entries: list[Item], other: bool, log_missing
         a = "SKY"
     abbr = [x for x in entries if a and x.ff_data.get("abbr") and x.ff_data["abbr"].replace(" ", "") == a]
     if len(abbr) == 1:
-        # if o.ff_data['legacy']:
-        #     print(f"Match: {o.ff_data}, {abbr[0].ff_data}")
         return ItemId(o, abbr[0], False, other)
     elif len(abbr) > 1:
         for i in [1, 2]:
@@ -503,6 +492,7 @@ def match_issue_target(o: Item, by_target: Dict[str, List[Item]], other_targets:
 
 
 def match_target_issue_name(o, target, by_target, other_targets, use_original):
+    # TODO: remove
     if o.ref_magazine and target and target == "Star Wars Universe" and o.text:
         for name in ["Star Wars Universe", "Character"]:
             for b, targets in {False: by_target, True: other_targets}.items():
@@ -595,7 +585,7 @@ def match_specific_target(o: Item, target: str, by_target: Dict[str, List[Item]]
         if "ikipedia:" in target:
             targets.append(target.split("ikipedia:", 1)[-1])
         if o.template in ["Tales", "TCWUKCite", "IDWAdventuresCite-2017"] and "(" not in target and target not in by_target:
-            targets.append(f"{target} (comic)")
+            targets.append(f"{target} (comic story)")
 
         # m = re.search("^(Polyhedron|Challenge|Casus Belli|Valkyrie|Inphobia) ([0-9]+)$", target)
         # if m:
@@ -684,15 +674,15 @@ def match_news_format(d, u):
 def do_urls_match(url, template, d: Item, replace_page, log=False):
     d_url = prep_url(d.url)
     alternate_url = prep_url(d.alternate_url)
+    if d.mode == "YT" and d.special and not d.alternate_url:
+        alternate_url = prep_url(d.special)
+
     if template and "youtube" in template.lower() and not alternate_url and d_url and d_url.startswith("-"):
         alternate_url = d_url[1:]
-    if not alternate_url and template == "Hyperspace" and d_url.startswith("fans/"):
-        alternate_url = d_url.replace("fans/", "")
+
     if d_url and d_url.lower() == url.lower():
         return 2
     elif alternate_url and alternate_url.lower() == url.lower():
-        return 2
-    elif d_url and d.template == "EA" and ("/battlefront-2" in url or "starwars/jedi-" in url) and url.replace("/battlefront-2", "/star-wars-battlefront-2").replace("starwars/jedi-", "starwars/jedi/jedi-") == d_url:
         return 2
     elif d_url and clean_language_prefix(d_url) == clean_language_prefix(url):
         return 2
@@ -710,9 +700,6 @@ def do_urls_match(url, template, d: Item, replace_page, log=False):
     elif d_url and matches_up_to_string(d_url.lower(), url.lower(), "/index.html", False):
         return 1
     elif d_url and template == "SWArchive" and d_url.lower().replace(".html", "").startswith(url.lower().replace(".html", "")):
-        return 2
-    elif d_url and template == "SW" and d.template == "SW" and url.startswith("tv-shows/") and \
-            d_url.startswith("series") and d_url == url.replace("tv-shows/", "series/"):
         return 2
     elif d_url and not d_url.startswith("content.jsp?page=") and matches_up_to_string(d_url.lower(), url.lower(), "?page=", False):
         return 2
@@ -750,15 +737,8 @@ def match_url(o: Item, u: str, data: dict, urls: dict, other_data: dict, other_u
         m = match_by_urls(o, add_or_remove_piece(o.url, "/comments"), data, urls, other_data, other_urls, True)
     if not m and o.template == "SonyCite" and "&month=" in o.url:
         m = match_by_urls(o, u.split("&month=")[0], data, urls, other_data, other_urls, False)
-    if not m and o.template == "Faraway" and "starwarsknightsoftheoldrepublic" in o.url:    # TODO: remove
-        x = re.sub("kotor([0-9]+)\|", "kotor0\\1|", re.sub("starwarsknightsoftheoldrepublic/starwarsknightsoftheoldrepublic([0-9]+)(\.html)?/?", "swknights/swkotor\\1.html", u))
-        m = match_by_urls(o, x.replace("starwarsknightsoftheoldrepublicwar", "swkotorwar"), data, urls, other_data, other_urls, False)
     if not m and "%20" in o.url:
         m = match_by_urls(o, u.replace("%20", "-"), data, urls, other_data, other_urls, False)
-    # if not m and o.template in ["SW", "Databank"] and o.url in DATABANK_OVERWRITE:
-    #     m = match_by_urls(o, DATABANK_OVERWRITE[o.url], data, urls, other_data, other_urls, False)
-    #     if not m:
-    #         m = match_by_urls(o, "databank/" + DATABANK_OVERWRITE[o.url], data, urls, other_data, other_urls, False)
     if m:
         return m
 
@@ -790,6 +770,8 @@ def evaluate_match(x: int, url, o: Item, d: Item, ad, is_old, check_sw, merge, p
                    new_versions, valid):
     if x == 2:
         if o.mode == "Toys" and o.card and d.card and o.card != d.card:
+            if re.sub("^#[0-9]+: ", "", d.card) == o.card:
+                return ItemId(o, d, False, False)
             possible.append(d)
         elif d.original and "oldversion=" in d.original and ad and ad in d.original:
             return ItemId(o, d, False, False)
@@ -797,17 +779,18 @@ def evaluate_match(x: int, url, o: Item, d: Item, ad, is_old, check_sw, merge, p
             old_versions.append(d)
         elif old_versions and d.original and "oldversion=" not in d.original:
             new_versions.append(d)
-        elif ad and is_old and (
-                (o.mode == d.mode and o.mode != "Toys" and o.mode != "Cards") or (o.mode in valid and d.mode in valid)):
+        elif ad and is_old and ((o.mode == d.mode and o.mode != "Toys" and o.mode != "Cards") or (o.mode in valid and d.mode in valid)):
             possible.append(d)
-        elif d.template == o.template and o.target == d.target and not ad:
+        elif d.template == o.template and not ad and (o.target == d.target or ("series=" in d.original and "series=" not in o.original and d.url == o.url)):
             return ItemId(o, d, False, False)
         elif d.template == o.template:
             partial_matches.append(d)
         elif {d.template, o.template}.issubset(merge) and not ad:
             return ItemId(o, d, False, False)
-        elif d.mode == "YT" and o.mode == "YT":
+        elif d.mode == "YT" and (o.mode == "YT" or d.special == o.url):
             return ItemId(o, d, False, False)
+        else:
+            print(f"{o.template} != {d.template} for URL: {url} -> {o.original}, {d.original}")
 
     elif x == 1:
         partial_matches.append(d)
@@ -819,7 +802,7 @@ def evaluate_match(x: int, url, o: Item, d: Item, ad, is_old, check_sw, merge, p
 def match_by_url(o: Item, url: str, data: Dict[str, Item], urls: Dict[str, List[Item]], replace_page: bool):
     check_sw = o.template == "SW" and url.startswith("video/")
     url = prep_url(url)
-    merge = {"SW", "SWArchive", "Hyperspace"}
+    merge = {"SW", "SWArchive", "Hyperspace", "SideshowCite", "IronStudiosCite", "HotToysCite", "SWYouTube"}
     valid = {"External", "Web"}
     partial_matches = []
     old_versions = []
@@ -831,6 +814,7 @@ def match_by_url(o: Item, url: str, data: Dict[str, Item], urls: Dict[str, List[
         y = re.search("(oldversion=.*?)(\|.*?)?}}", o.original)
     ad = y.group(1) if y else None
 
+    # TODO: remove
     if o.template == "SWArchive" and "_picview" in url:
         url = re.sub("_picview.*?$", ".html", url)
 
@@ -842,34 +826,40 @@ def match_by_url(o: Item, url: str, data: Dict[str, Item], urls: Dict[str, List[
             if y:
                 return y
 
+    z = check_matches(o, ad, old_versions, new_versions, possible, partial_matches)
+    if z:
+        print(f"URL fell through exact URL matching ({len(urls.get(url, []))}): {o.original}")
+        return z
+
     for k, d in data.items():
         if d.full_id() in checked:
             continue
         x = do_urls_match(url, o.template, d, replace_page)
         y = evaluate_match(x, url, o, d, ad, is_old, check_sw, merge, possible, partial_matches, old_versions, new_versions, valid)
         if y:
-            print(f"URL fell through exact URL matching: {o.original}")
             return y
+
+    z = check_matches(o, ad, old_versions, new_versions, possible, partial_matches)
+    if z:
+        print(f"URL fell through second exact URL matching ({len(urls.get(url, []))}): {o.original}")
+        return z
+
+
+def check_matches(o: Item, ad, old_versions, new_versions, possible, partial_matches):
     exact = []
     for x in old_versions:
         if o.text and x.text and o.text.replace("'", "") == x.text.replace("'", ""):
             exact.append(x)
     if len(exact) == 1:
-        print(f"URL fell through exact URL matching: {o.original}")
         return ItemId(o, exact[0], ad is not None, False)
     elif ad and old_versions:
-        print(f"URL fell through exact URL matching: {o.original}")
         return ItemId(o, old_versions[-1], True, False)
     elif new_versions:
-        print(f"URL fell through exact URL matching: {o.original}")
         return ItemId(o, new_versions[-1], ad is not None, False)
     elif old_versions:
-        print(f"URL fell through exact URL matching: {o.original}")
         return ItemId(o, old_versions[-1], ad is not None, False)
     elif possible:
-        print(f"URL fell through exact URL matching: {o.original}")
         return ItemId(o, possible[-1], False, False)
     if partial_matches:
-        print(f"URL fell through exact URL matching: {o.original}")
         return ItemId(o, partial_matches[0], False, False)
     return None

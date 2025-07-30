@@ -117,6 +117,10 @@ def match_header(header: str, infobox):
         return "Appearances"
     elif h in ["in universe appearances", "in universe"]:
         return "In-universe appearances"
+    elif h in ["non-canonical appearances"]:
+        return "Non-Canon Appearances"
+    elif h in ["non-canonical sources"]:
+        return "Non-Canon Sources"
     elif h in ["out of universe appearances", "out of universe", "real world appearances"]:
         return "Out-of-universe appearances"
     elif h in ["adaptation", "adaptations", "adaption", "adaptions", "tie in media", "merchandising", "merchandise",
@@ -324,17 +328,6 @@ def detect_adaptation(sections, title, text, appearances, sources):
                 if get_listings(f"{z} (episode)", appearances, sources) and y != "episode":
                     return "{{Plot-link|" + z + " (episode)}}"
 
-        x = re.search("(adapts|adaptation) .*?\[\[(Star Wars: Episode .*?)(\|.*?)?]]", text)
-        if x:
-            print(x.group(2), x.group(0))
-            if any(i.template == "Film" for i in get_listings(x.group(2), appearances, sources)):
-                return "{{Plot-link|" + x.group(2) + "}}"
-        x = re.search("(adapts|adaptation) .*?\[\[(.*?)(\|.*?)?]]", text)
-        if x:
-            print(x.group(2), x.group(0))
-            z = get_listings(x.group(2), appearances, sources)
-            if z:
-                return "{{Plot-link|" + x.group(2) + "}}"
     return None
 
 

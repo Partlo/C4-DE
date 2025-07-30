@@ -2,11 +2,12 @@ import re
 import traceback
 from datetime import datetime
 
+import pywikibot
 from pywikibot import Page
 from typing import List, Tuple, Union, Dict, Optional, Set
 
 from c4de.common import build_redirects, fix_redirects, fix_disambigs, prepare_title
-from c4de.sources.cleanup import initial_cleanup
+from c4de.sources.cleanup import initial_cleanup, PAGE_NUMBER_REGEX
 from c4de.sources.determine import determine_id_for_item
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, SectionComponents, SectionLeaf
 from c4de.sources.external import prepare_basic_url
@@ -70,8 +71,8 @@ def check_format_text(o: ItemId, x: Item):
 
 def _check_format_text(t, y):
     return t and y and "(" in t and (
-            t.split("(")[0].strip().lower().replace("novelization", "novel") not in y.replace("''", "").lower().replace("novelization", "novel") and
-            t.replace("(", "").replace(")", "").strip().lower().replace("novelization", "novel") not in y.replace("''", "").lower().replace("novelization", "novel")
+            t.split("(")[0].strip().lower().replace("novelization", "novel").replace("''", "") not in y.replace("''", "").lower().replace("novelization", "novel") and
+            t.replace("(", "").replace(")", "").strip().lower().replace("novelization", "novel").replace("''", "") not in y.replace("''", "").lower().replace("novelization", "novel")
     )
 
 
@@ -89,7 +90,7 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_c
         manual = manual or target.get(force=True)
         manual, redirects = fix_template_redirects(target, manual)
 
-    before, infobox, original = initial_cleanup(target, all_infoboxes, before=manual, keep_page_numbers=keep_page_numbers)
+    before, infobox, original = initial_cleanup(target, all_infoboxes, before=manual)
 
     # print(f"cleanup: {(datetime.now() - now).microseconds / 1000} microseconds")
     if "{{otheruses" in before.lower() or "{{youmay" in before.lower():
@@ -97,13 +98,7 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_c
             if t in disambigs or "(disambiguation)" in t:
                 before = fix_disambigs(r, t, before)
 
-    canon = False
-    legends = False
-    real = False
-    media = False
-    person = False
-    non_canon = False
-    unlicensed = False
+    canon, legends, real, media, person, non_canon, unlicensed = False, False, False, False, False, False, False
     app_mode = BY_INDEX
     flag = []
     for c in target.categories():
@@ -182,7 +177,8 @@ def split_by_section(text: str, results: PageComponents) -> Tuple[Dict[str, Sect
         needs_app = (line.endswith("{{App") or "{{App|" in line) and "appearances" not in (current or '').lower() and results.infobox != "MagazineDepartment"
 
         if "===non-canon appearances===" in line.strip().lower() and "Appearances" not in by_section:
-            intro.append(line)
+            z = int(line.count("=") / 2)
+            intro.append("="*z + "Non-canon content" + "="*z)
         elif not results.real and level >= 2 and match_iu_header(line.strip()):
             current = match_iu_header(line.strip())
             by_section[current] = SectionLeaf(current, line.strip(), 1, level)
@@ -349,8 +345,8 @@ def build_page_sections(target: Page, text: str, results: PageComponents, redire
             nav_lines += remove_nav_templates(section, types)
         # the 6 master sections should be parsed by the Engine, except the Appearances section of a real-world article
         elif master_header in MASTER_STRUCTURE and not (results.real and master_header == "Appearances"):
-            parse_data(results, section.lines, master_header, redirects, disambigs, types, remap, extra, unknown, log)
             nav_lines += remove_nav_templates(section, types)
+            parse_data(results, section.lines, master_header, redirects, disambigs, types, remap, extra, unknown, log)
             continue
         elif master_header:
             fix_section_redirects(section, redirects, header, disambigs, remap, False)
@@ -657,7 +653,6 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
 
     found = False
     for y in zs:
-        print(y)
         t = extract_item(convert_issue_to_template(y), is_appearances, name, types)
         if t and not t.invalid:
             if is_official_link(t):
@@ -669,12 +664,17 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
             t.ab = ab
             t.bold = bold
             t.is_exception = is_exception
-            ex = re.search("<!-- ?(Exception|Override)?:? ?([0-9X-]+)?\?? ?-->", s)
+            ex = re.search("<!-- ?.*?(Exception|Override)?:? ?([0-9X-]+)?\?? ?-->", s)
             if ex and ex.group(1):
                 t.override = ex.group(1)
                 t.override_date = ex.group(2)
+                t.original_date = ex.group(2)
             elif ex:
                 t.original_date = ex.group(2)
+            y = re.search("<!-- ((([Nn]on-?)?[Cc]anon|NCA|NCS) ([Ee]xception|[Oo]verride))(:.*?)? ?-->", s)
+            if y:
+                t.canon_override = y.group(1)
+
             unique_ids[t.unique_id()] = t
     if not found:
         if not data and s.count("[") == 0 and s.count("]") == 0:
@@ -704,12 +704,16 @@ def build_card_text(o: ItemId, c: ItemId, replace_parent=True):
     ot = c.current.original
     if c.master.template and c.master.mode == "Minis" and c.master.card:
         ot = c.master.original
+    zx = f"{ot}"
     if c.current.subset and "subset=" not in ot:
         ot = re.sub("({{[^|}]*?\|(set=)?[^|}]*?\|(s?text=.*?\|)?)", f"\\1subset={o.current.subset}|", ot)
     while ot.count("|subset=") > 1:
         ot = re.sub("(\|subset=.*?)\\1", "\\1", ot)
     if o.master.template and o.master.master_page:
-        ot = re.sub("\{\{([A-z0-9]+)\|.*?\|(url=|subset=|scenario=|pack=|mission=|cardname=|(swg)?(alt)?link=)", re.sub("\|p=.*?(\|.*?)?}}", "\\1", o.master.original.replace("}}", "")) + "|\\2", ot)
+        y = re.sub("\|p=.*?(\|.*?)?}}", "\\1", o.master.original.replace("}}", ""))
+        z = re.search("\{\{([A-z0-9]+)(\|.*?)\|(num=|url=|subset=|scenario=|pack=|unit=|mission=|cardname=|(swg)?(alt)?link=)", y)
+        if z and z.group(2) and not re.search("\|(num=|url=|subset=|scenario=|pack=|unit=|mission=|cardname=|(swg)?(alt)?link=)", z.group(2)):
+            ot = ot.replace(z.group(0), y + "|" + z.group(3))
         if (o.master.mode == "Minis" or o.master.template == "SWIA") and c.master.card:
             ot = re.sub("\|link=.*?(\|.*?)?}}", "\\1}}", ot)
             if "link=" in ot:
@@ -724,29 +728,53 @@ def build_card_text(o: ItemId, c: ItemId, replace_parent=True):
     ot = re.sub("\|stext=(.*?)\|\\1\|", "|stext=\\1|", ot)
     ot = re.sub("(\|(ship|pack|cardname)=.*?)\\1(\|.*?)?}}", "\\1\\3}}", ot)
     ot = ot.replace("–", "&ndash;").replace("—", "&mdash;").replace("  ", " ")
+    ot = re.sub("(\|reprint=1)\\1+", "\\1", ot)
     if replace_parent:
         ot = ot.replace("|parent=1", "")
     return ot
 
 
+def match_unlinked(x, appearances, sources):
+    for c in ["", " (novel)", " (sourcebook)"]:
+        if x + c in appearances.target:
+            return appearances.target[x + c][0].original
+        elif x.replace("Star Wars ", "Star Wars: ") + c in appearances.target:
+            return appearances.target[x.replace("Star Wars ", "Star Wars: ") + c][0].original
+        elif x + c in sources.target:
+            return sources.target[x + c][0].original
+        elif x.replace("Star Wars ", "Star Wars: ") + c in sources.target:
+            return sources.target[x.replace("Star Wars ", "Star Wars: ") + c][0].original
+    return None
+
+
+TEMPLATE_SKIPS = ["Blogspot", "Cite", "PageNumber", "UnlinkedRef", "C|", "SWG", "TORcite", "TCWA"]
+
+
 def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearances: FullListData, sources: FullListData,
                      remap: dict, disambigs: dict, redirects, canon: bool, media: bool, log: bool):
     try:
-        new_ref = re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", ref).replace("{{PageNumber}} ", "")
+        new_ref = re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", ref).replace("{{PageNumber}} ", "").replace("{{UnlinkedRef}} ", "")
         new_ref = re.sub("\|set=(.*?) \(.*?\)\|(sformatt?e?d?|stext)=.*?\|", "|set=\\1|", new_ref)
-        if "<ref>" in full_ref and new_ref.count('[') == 0 and new_ref.count("]") == 0:
-            x = re.search("^'*(.*?)'*$", new_ref)
-            if x and x.group(1) in appearances.target:
-                new_ref = appearances.target[x.group(1)][0].original
-            elif x and x.group(1) in sources.target:
-                new_ref = sources.target[x.group(1)][0].original
-        if not media:
-            x = re.search(",? (page|pg\.?|p?p\.|chapters?|ch\.) ?([0-9-]+|one|two|three|four|five)(?!])[,.]?", new_ref)
-            if x:
-                print(f"Found page/chapter numbers in reference: \"{x.group(0)}\" -> \"{new_ref}\"")
-                # new_ref = new_ref.replace(x.group(0), "")
-                new_ref = "{{PageNumber}} " + new_ref
+        page_num = ""
+        # if not media:
+        #     if new_ref.count('[') == 0 and new_ref.count("]") == 0 and new_ref.count("{") == 0:
+        #         x = re.search("^('*(.*?)'*)(" + PAGE_NUMBER_REGEX.replace("</ref>", "") + ")?$", new_ref)
+        #         if x and x.group(2):
+        #             tx = match_unlinked(x.group(2).replace("''", ""), appearances, sources)
+        #             if not tx and len(x.group(2)) < 100:
+        #                 px = Page(page.site, x.group(2).replace("''", ""))
+        #                 if px.exists() and px.isRedirectPage():
+        #                     tx = match_unlinked(px.getRedirectTarget().title(), appearances, sources)
+        #             if tx:
+        #                 new_ref = new_ref.replace(x.group(1), tx)
+        #
+        #     if "|url=" not in new_ref and "|TORTYPE=" not in new_ref:
+        #         x = re.search(PAGE_NUMBER_REGEX.replace("</ref>", ""), new_ref)
+        #         if x:
+        #             print(f"Found page/chapter numbers in reference: \"{x.group(0)}\" -> \"{new_ref}\"")
+        #             page_num = x.group(0)
         new_ref = convert_issue_to_template(new_ref).replace("{{=}}", "=")
+        # check_ref = new_ref.replace(page_num, "") if page_num else new_ref
         links = re.findall("(['\"]*\[\[(?![Ww]:c:).*?(\|.*?)?]]['\"]*)", new_ref)
         templates = re.findall("(\{\{[^{}\n]+}})", new_ref)
         templates += re.findall("(\{\{[^{}\n]+\{\{[^{}\n]+}}[^{}\n]+}})", new_ref)
@@ -760,7 +788,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                 o = determine_id_for_item(x, page, appearances.unique, appearances.urls, appearances.target, sources.unique, sources.urls, sources.target, remap, canon, log)
                 if o and not o.use_original_text and o.replace_references:
                     found.append(o)
-                    if o.master.template and not x.template and x.target and not re.search("^['\"]*\[\[" + prepare_title(x.target) + "(\|.*?)?]]['\"]*$", new_ref):
+                    if o.master.template and not x.template and x.target and not re.search("^['\"]*\[\[" + prepare_title(x.target) + "(\|.*?)?]][,'\"]*$", new_ref):
                         if o.master.template != "Film" and f'"[[{x.target}]]"' not in new_ref:
                             print(f"Skipping {link[0]} due to extraneous text")
                     elif link[0].startswith('"') and link[0].endswith('"') and (len(ref) - len(link[0])) > 5:
@@ -777,11 +805,15 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                     elif x.target in SPECIAL and x.original in SPECIAL[x.target]:
                         print(f"Skipping exempt {link[0]}")
                     elif re.search("^['\"]*\[\[" + x.target.replace("(", "\(").replace(")", "\)") + "(\|.*?)?]]['\"]*", new_ref):
-                        if link[0] != o.master.original:
-                            new_links.append((link[0], o.master.original))
+                        if link[0] != o.master.original.replace("|audiobook=1", "").split(" {{Ab|")[0]:
+                            # if page_num and o.master.template and new_ref.endswith(page_num):
+                            #     new_ref = re.sub(",?(\")?" + re.escape(page_num), "", new_ref)
+                            new_links.append((link[0], o.master.original.replace("|audiobook=1", "").split(" {{Ab|")[0]))
                     elif o.current.original_target and re.search("^['\"]*\[\[" + o.current.original_target.replace("(", "\(").replace(")", "\)") + "(\|.*?)?]]['\"]*", new_ref):
-                        if link[0] != o.master.original:
-                            new_links.append((link[0], o.master.original))
+                        if link[0] != o.master.original.replace("|audiobook=1", "").split(" {{Ab|")[0]:
+                            # if page_num and o.master.template and new_ref.endswith(page_num):
+                            #     new_ref = re.sub(",?(\")?" + re.escape(page_num), "", new_ref)
+                            new_links.append((link[0], o.master.original.replace("|audiobook=1", "").split(" {{Ab|")[0]))
                 elif o:
                     found.append(o)
                 elif x.mode == "Basic":
@@ -792,8 +824,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
 
         new_templates = []
         for t in templates:
-            if ("bypass=1" in t or t == "{{'s}}" or "{{TORcite" in t or "{{TCWA" in t or "{{SWG" in t or t.startswith("{{C|") or
-                    t.startswith("{{Blogspot") or t.startswith("{{Cite") or t.startswith("{{PageNumber")):
+            if "bypass=1" in t or t == "{{'s}}" or any(t.lower().startswith("{{" + i.lower()) for i in [*TEMPLATE_SKIPS, *types["Dates"]]):
                 continue
             x = extract_item(t, False, "reference", types)
             if x:
@@ -834,7 +865,12 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                 new_ref = re.sub("\|parent=1(?!}}( is set| \{\{C\|))", "", new_ref)
 
         new_ref = fix_redirects(redirects, new_ref, "Reference", disambigs, remap)
-        final_ref = re.sub("\{\{[Aa]b\|.*?}}", "", full_ref.replace(ref, new_ref))
+        if not media and new_ref.count('[') == 0 and new_ref.count("]") == 0 and new_ref.count("{") == 0:
+            new_ref = "{{UnlinkedRef}} " + new_ref
+        # if not media and re.search(PAGE_NUMBER_REGEX.replace("</ref>", ""), new_ref):
+        #     if "|url=" not in new_ref and not re.search("(SWGcite|Sony).*?Chapter [0-9]+: ", new_ref):
+        #         page_number = "{{PageNumber}} "
+        final_ref = re.sub("\{\{[Aa]b\|.*?}}", "", full_ref.replace(">" + ref, ">" + new_ref))
         if "<ref>" in final_ref:
             if len(found) == 1 and found[0].master.target:
                 z = found[0].master.target.replace('"', '').replace('(', '').replace(')', '')

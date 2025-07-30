@@ -4,7 +4,7 @@ import time
 import requests
 import traceback
 from json import JSONDecodeError
-from pywikibot import Page, Category, pagegenerators
+from pywikibot import Page, Category, pagegenerators, showDiff
 from datetime import datetime
 from typing import Dict, List, Union
 
@@ -232,8 +232,7 @@ MULTIPLE_ISSUE_CONVERSION = {
     "stayontarget": "StayOnTarget"
 }
 COMBINE = ["catneeded", "citation", "cleanup", "confirm", "contradict", "disputed", "expand", "imageReal",
-           "imagePerson", "image", "moresources", "npov", "oou", "plot", "redlink", "split", "stayontarget", "tense",
-           "tone"]
+           "imagePerson", "image", "moresources", "oou", "plot", "redlink", "split", "stayontarget", "tense"]
 
 
 def should_move_to_multiple_issues(x):
@@ -332,7 +331,9 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
                         text = re.sub("\[\[" + x + "(\|" + prepare_title(t) + ")?]]", f"[[{t}]]", text)
 
                 text = re.sub("(''')?('')?\[\[" + x + "\|('')?(" + prepare_title(t) + ")('')?]](s)?(''')?('')?", f"\\1\\2\\3[[\\4]]\\6\\2\\3", text)
-                if file or r.replace("Star Wars: Republic: ", "Star Wars: ") == t \
+                if r.startswith("File:"):
+                    text = re.sub("\[\[(" + x + ")(\|.*?)?]]", f"[[{t}\\2]]", text)
+                elif file or r.replace("Star Wars: Republic: ", "Star Wars: ") == t \
                         or r.startswith("File:") or (overwrite and "/Legends" not in t and "/Canon" not in t):
                     text = re.sub("\[\[(" + x + ")(s)?]]", f"[[{t}]]\\2", text)
                     text = re.sub("\[\[" + x + "(\|.*?)]](s)?", f"[[{t}]]\\2", text)
@@ -355,7 +356,18 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
     return text
 
 
-def do_final_replacements(new_txt, replace):
+def handle_repeated_references(text, status):
+    if "{{FamilyTree" not in text and re.search("(?<!>)((<ref name=\"[^\"\n>]+?\")(>((?!(<ref|\{\{Fact}})[^\n])*?</ref>| ?/>)(((?!<ref).)*?)\\2 ?/>))(?!<ref)", text):
+        nx = text.splitlines()
+        for i in range(len(nx)):
+            if nx[i].startswith("|") or "{{RepeatedRef" in nx[i]:
+                continue
+            nx[i] = re.sub("(?<!>)((<ref name=\"[^\"\n>]+?\")(>((?!<ref)[^\n])*?</ref>| ?/>)(((?!<ref).)*?)\\2 ?/>)(?!<ref)", "{{RepeatedRef}}\\1" if status else "\\5\\2\\3", nx[i])
+        return "\n".join(nx)
+    return text
+
+
+def remove_links_from_quotes(new_txt):
     for x in re.findall("((\{\{[Qq]uote\|[^{}\[\]|\n]*)(\[\[([^{}\[\]\n]*?\|)?[^{}\[\]\n]*?]][^{}\n]*?)(\|audio=[^|{}\[\]]*?)?\|<ref.*?}})", new_txt):
         new_quote, attr, link, bc = "", "", "", 0
         for c in x[2]:
@@ -375,6 +387,13 @@ def do_final_replacements(new_txt, replace):
             else:
                 new_quote += c
         new_txt = new_txt.replace(x[2], f"{new_quote}{attr}")
+    return new_txt
+
+
+def do_final_replacements(new_txt, replace, is_status):
+    new_txt = remove_links_from_quotes(new_txt)
+    new_txt = new_txt.replace("TORTYPE", "type")
+    new_txt = re.sub("(==(Sources|Appearances)==)\n\n(===Non-canon (appearances|sources)===)", "\\1\n\\3", new_txt)
 
     while replace:
         new_txt2 = re.sub("(\[\[(?!File:)[^\[\]|\r\n]+)&ndash;", "\\1–",
@@ -383,6 +402,9 @@ def do_final_replacements(new_txt, replace):
                           re.sub("(\[\[(?!File:)[^\[\]|\n]+—[^\[\]|\r\n]+\|[^\[\]|\r1\n]+)&mdash;", "\\1—", new_txt2))
         new_txt2 = re.sub("\[\[(.*?)\|\\1((?!(Bestoon)[^\n \[\]}{])*?)]]", "[[\\1]]\\2", new_txt2)
         new_txt2 = re.sub("(\|set=(.*?) \(.*?\))\|(s?text|sformatt?e?d?)=\\2([|}])", "\\1\\4", new_txt2)
+        new_txt2 = handle_repeated_references(new_txt2, is_status)
+
+        # italicization & apostrophes
         new_txt2 = re.sub("([^']''[^' ][^']+?'')'s ", "\\1{{'s}} ", new_txt2)
         new_txt2 = re.sub("([^']''((?!-class)[^' ])+?[^']+?s'')' ", "\\1{{'}} ", new_txt2)
         new_txt2 = new_txt2.replace("{{'}}s", "{{'s}}")
@@ -409,14 +431,6 @@ def do_final_replacements(new_txt, replace):
         if "''{{Film|" in new_txt2:
             new_txt2 = re.sub("(?<!')''(\{\{Film\|.*?}})'*", "\\1", new_txt2)
 
-        # TODO: remove
-        for ix in re.findall(
-                "((\{\{(BuildFalconCite|BuildR2Cite|BuildXWingCite|BustCollectionCite|DarthVaderCite|FalconCite|FigurineCite|HelmetCollectionCite|ShipsandVehiclesCite|StarshipsVehiclesCite)\|[0-9]+\|[^|\[{}]+?)(\|((?!reprint).)*?)}})",
-                new_txt2):
-            new_txt2 = new_txt2.replace(ix[0], ix[1] + "}}")
-
-        # new_txt2 = re.sub("}} \{\{C\|Reissued in (\[\[.*?)}}", "reissued=\\1}}", new_txt2)
-        # new_txt2 = re.sub("(reissus?ed?=.*?\[\[.*?\|)''(.*?)'']]", "\\1\\2]]", new_txt2)
         new_txt2 = re.sub("2012 edition}} \{\{C\|\[*2012]* edition}}", "2012 edition}}", new_txt2)
         new_txt2 = re.sub("(\{\{SWMiniCite\|set=[^\n}]+?\|)cardname=", "\\1pack=", new_txt2)
         new_txt2 = new_txt2.replace(" (SWGTCG)|scenario=", "|scenario=")
@@ -590,7 +604,7 @@ def archive_url(url, force_new=False, timeout=30, enabled=True, skip=False, star
                 if skip:
                     return False, "No archive has been recorded for this site"
         except (TimeoutError, ConnectionError, requests.exceptions.ReadTimeout, requests.exceptions.ConnectionError, urllib3.exceptions.MaxRetryError) as e:
-            log(f"ERROR: {type(e)} while attempting to archive {url}")
+            log(f"ERROR: {type(e)} while fetching archive for {url}")
             time.sleep(15)
         except Exception as e:
             error_log(url, type(e), e)

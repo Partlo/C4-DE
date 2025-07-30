@@ -69,6 +69,7 @@ REVIEW_CHANNEL = "status-article-reviews"
 SOCIAL_MEDIA = "social-media-team"
 UPDATES = "star-wars-news"
 SITE_URL = "https://starwars.fandom.com/wiki"
+SIMPLE_TITLE = "<h1.*?>(.*?)</h1>"
 
 THUMBS_UP = "👍"
 THUMBS_DOWN = "👎"
@@ -124,10 +125,10 @@ class C4DE_Bot(commands.Bot):
         self.site = self.reload_site()
         self.refresh = 0
 
-        self.admin_users = {
+        self.custom_users = {
             "Imperators II": "Imperators",
-            "Master Fredcerique": "MasterFred",
-            "Zed42": "Zed"
+            "Master Fredcerique": "masterfredster",
+            "Stake black": "stakeblack",
         }
         self.bots = ["01miki10-bot", "C4-DE Bot", "EcksBot", "JocastaBot", "RoboCade", "PLUMEBOT", "TOM-E Macaron.ii"]
 
@@ -221,7 +222,6 @@ class C4DE_Bot(commands.Bot):
 
                 self.check_internal_rss.start()
                 self.check_external_rss.start()
-                self.check_altaya.start()
             else:
                 try:
                     info = report_version_info(self.site, self.version)
@@ -233,7 +233,7 @@ class C4DE_Bot(commands.Bot):
 
                 self.check_empty_usage_categories.start()
                 self.check_future_products.start()
-                self.run_canon_legends_switch.start()
+                # self.run_canon_legends_switch.start()
                 self.check_for_sources_rebuild.start()
                 self.load_isbns.start()
                 self.check_edelweiss.start()
@@ -267,14 +267,18 @@ class C4DE_Bot(commands.Bot):
     def get_user_ids(self):
         results = {}
         for user in self.text_channel(MAIN).guild.members:
-            results[user.display_name.lower().replace("_", "").replace(" ", "")] = user.id
+            results[user.name.lower()] = user.id
+            results[user.display_name.lower()] = user.id
+            results[user.display_name.lower().replace("_", "").replace(" ", "").replace(".", "")] = user.id
+            if user.nick:
+                results[user.nick.lower()] = user.id
         return results
 
     def get_user_id(self, editor, user_ids=None):
         if not user_ids:
             user_ids = self.get_user_ids()
-        z = editor.replace("_", "").replace(" ", "")
-        user_id = user_ids.get(self.admin_users.get(editor, z.lower()), user_ids.get(z.lower()))
+        z = editor.replace("_", "").replace(" ", "").replace(".", "")
+        user_id = user_ids.get(self.custom_users.get(editor, z.lower()), user_ids.get(z.lower()))
         return f"<@{user_id}>" if user_id else editor
 
     async def report_error(self, command, text, *args):
@@ -308,6 +312,7 @@ class C4DE_Bot(commands.Bot):
     }
     source_command_search = {
         "create archive category": "create_archive_categories",
+        "create archive categories": "create_archive_categories",
         "recheck nominations": "recheck_nominations",
         "rebuild sources": "build_sources",
         "reload sources": "build_sources",
@@ -1053,7 +1058,7 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def flatten_text(t):
-        z = re.sub("<!--.*?-->", "", t.replace("&ndash;", "-").replace("&mdash;", "-").replace("—", "-").replace("—", "-"))
+        z = re.sub("<!--.*?-->", "", t.replace("&ndash;", "-").replace("&mdash;", "-").replace("—", "-").replace("—", "-")).replace("|coord=", "|coordinates=")
         while re.search("([\n[]File:[^ \n|\]\[]+) ", z):
             z = re.sub("([\n[]File:[^ \n|\]\[]+) ", "\\1_", z)
         z = re.sub("(\|book=.*?)(\|story=.*?)(\|.*?)?}}", "\\2\\1\\3}}", z.replace("\n", "").replace(" ", "")).replace("{{!}}", "|").replace("{{Journal|", "{{JournalCite|")
@@ -1261,7 +1266,16 @@ class C4DE_Bot(commands.Bot):
 
     @tasks.loop(hours=4)
     async def check_senate_hall_threads(self):
+        log("Archiving Senate Hall threads")
         archive_stagnant_senate_hall_threads(self.site, self.timezone_offset)
+
+        r = requests.get("https://www.starwars.com/star-wars-galaxy-map")
+        current = "https://cdnvideo.dolimg.com/cdn_assets/ff2066584bf86e5376fdfc3b26f0479b8795c403.pdf"
+        current_image = "https://lumiere-a.akamaihd.net/v1/images/star_wars_galaxy_map_4000x4000_20250625_ccff9272.jpeg"
+        x = re.search("<a.*?href=\"(.*?)\".*?title=\"Appendix of Star Systems", r.text)
+        if x and x.group(1) != current:
+            await self.text_channel(UPDATES).send(f"[New version of the Galaxy Map Appendix detected!]({x.group(1)}")
+            await self.text_channel("astrography").send(f"[New version of the Galaxy Map Appendix detected!]({x.group(1)}")
 
     @tasks.loop(hours=1)
     async def check_spoiler_templates_and_cleanup(self):
@@ -1311,26 +1325,6 @@ class C4DE_Bot(commands.Bot):
         self.reload_maintenance_categories()
         self.reload_templates()
         log(f"{len(self.maintenance_cats)} maintenance categories")
-
-    @tasks.loop(hours=4)
-    async def check_altaya(self):
-        log("Scheduled Operation: Checking Altaya")
-        try:
-            with open("C:/Users/cadec/Documents/projects/C4DE/c4de/data/altaya.txt", "r") as f:
-                current = "\n".join(f.readlines()).strip()
-
-            x = requests.get("https://www.altaya.fr/fr/miniatures-figurines/star-wars-vaisseaux")
-            items = re.findall("<option .*?value=\"([0-9]+)\">[\n\t ]*.*?\+ ?(.*?)[\n\t ]*</option>", x.text)
-            latest = str(max(int(a) + 1 for a, b in items))
-            log(f"Current Altaya listing: {latest} -> {current}")
-            if latest:
-                if current != latest:
-                    await self.text_channel(UPDATES).send(f"New *Star Wars Starships & Vehicles* issue {latest} found in [Altaya's website](<https://www.altaya.fr/fr/miniatures-figurines/star-wars-vaisseaux>)")
-                with open("C:/Users/cadec/Documents/projects/C4DE/c4de/data/altaya.txt", "w") as f:
-                    print(latest)
-                    f.writelines(latest)
-        except Exception as e:
-            error_log(f"Encountered {type(e)} while checking Altaya", e)
 
     @tasks.loop(hours=1)
     async def check_edelweiss(self):
@@ -1782,8 +1776,9 @@ class C4DE_Bot(commands.Bot):
 
     async def check_sites(self, site, site_data, messages_to_post, db_archive, templates, new_db_entries, custom_date=None):
         db = None
+        title = site_data.get("title", SIMPLE_TITLE)
         if site == "StarWars.com":
-            messages = check_sw_news_page(site_data["url"], self.external_rss_cache["sites"], site_data["title"])
+            messages = check_sw_news_page(site_data["url"], self.external_rss_cache["sites"], title)
             try:
                 other, db = compare_site_map(self.site, [], messages,
                                              self.external_rss_cache["sites"]["StarWars.com"])
@@ -1803,9 +1798,9 @@ class C4DE_Bot(commands.Bot):
         elif site_data["template"] == "EA":
             messages = check_ea_news(site, site_data["baseUrl"], site_data["rss"], self.external_rss_cache["sites"])
         elif site_data.get("url"):
-            messages = check_latest_url(site_data["url"], self.external_rss_cache["sites"], site, site_data["title"])
+            messages = check_latest_url(site_data["url"], self.external_rss_cache["sites"], site, title)
         else:
-            messages = check_rss_feed(site_data["rss"], self.external_rss_cache["sites"], site, site_data["title"],
+            messages = check_rss_feed(site_data["rss"], self.external_rss_cache["sites"], site, title,
                                       site_data.get("nonSW", False))
 
         archive = self.parse_archive(site_data["template"])
@@ -1859,7 +1854,10 @@ class C4DE_Bot(commands.Bot):
 
         for channel, message in messages_to_post:
             try:
-                await self.text_channel(channel).send(message)
+                if "Star Wars Kids" in message and "®" not in message and "™" not in message and emoji.emoji_count(message) > 1:
+                    pass
+                elif "(Repost)" not in message:
+                    await self.text_channel(channel).send(message)
             except Exception as e:
                 await self.report_error(f"RSS: {message}", type(e), e)
 
@@ -1959,10 +1957,14 @@ class C4DE_Bot(commands.Bot):
         if youtube:
             target = m["videoId"]
         else:
+            m["url"] = m["url"].replace("http:", "https:")
             target = m["url"].replace(base_url + "/", "")
 
         if target.endswith("/"):
             target = target[:-1]
+        if target.startswith("/"):
+            target = target[1:]
+
         if m['site'] == "Databank":
             target = target.replace("databank/", "")
         already_archived = archive and archive.get(target)
@@ -1992,7 +1994,7 @@ class C4DE_Bot(commands.Bot):
         if youtube:
             t = f"New Video on the official {m['site']} YouTube channel"
             x = re.search("\|.*?\|(Star Wars:? )?(,*?) ?&#124; ?(.*?) ?&#124; ?(Disney\+|Star Wars|@?Star ?Wars ?Kids) *}}", f)
-            if (x and x.group(2) in REPOSTS) or f.endswith("Full Episode") or " Full Episode " in f:
+            if (x and x.group(2) in REPOSTS) or f.endswith("Full Episode") or " Full Episode " in f or ("Compilation" in f and "Kids" in m['site']):
                 date = f"R: {date}"
                 t += " (Repost)"
         elif m["site"] == "Databank":

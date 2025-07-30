@@ -63,7 +63,7 @@ def identify_infobox(t, infoboxes):
 
 
 def analyze_page(page, text, category, infobox):
-    dates, _ = extract_release_date(page.title(), text)
+    dates, _, _ = extract_release_date(page.title(), text)
     if dates:
         now = datetime.now()
         if all(now > d[1] for d in dates):
@@ -223,22 +223,44 @@ def dates_match(dates: List[Tuple[str, datetime, str]], master, infobox):
     return False
 
 
-def compare_dates(title, text, target, items, mismatch, no_dates, infobox=None):
-    dates, strs = extract_release_date(title, text)
+def compare_dates(title, text, target, items, mismatch, no_dates, infobox):
+    dates, strs, other = extract_release_date(title, text)
     if dates:
         if not dates_match(dates, items[0].date, infobox):
             print(title, items[0].date, build_date(dates))
-            mismatch[target] = (build_date(dates), items[0].date)
-    elif items[0].date:
-        no_dates[target] = (strs[0] if strs else None, items[0].date)
+            mismatch[target] = (items[0].master_page, build_date(dates), items[0].date)
+    elif not items[0].date:
+        return
+    elif other:
+        if other[0] == "None" and items[0].date in ["Canceled", "Future", "Unknown"]:
+            return
+        if not any(d.lower() == items[0].date for d in other):
+            mismatch[target] = (items[0].master_page, other[0], items[0].date)
+    elif items[0].date.startswith("20") and items[0].date > datetime.now().strftime("%Y-%m-%d"):
+        print(f"(Expected) No date value found for future ({items[0].date}) item: {items[0].original}")
+    elif items[0].date in ["Canceled", "Future"] or infobox in ["MagazineDepartment"]:
+        print(f"(Expected) No date value found for {items[0].date} item: {items[0].original}")
+        pass
+    else:
+        if strs:
+            if re.sub("^(Fall|Summer|Spring|Winter|Autumn) ([0-9]+)$", "\\2", strs[0][0]) == \
+                    re.sub("([0-9]+)-[0-9X]+-XX[A-Z]?$", "\\1", items[0].date):
+                return
+
+        no_dates[target] = (f"{items[0].master_page}-{infobox}", strs[0] if strs else None, items[0].date)
         print(f"No date? {items[0].date} -> {items[0].original}")
 
 
-def compare_all_dates(site, by_target: Dict[str, List[Item]], mismatch, no_dates):
+def compare_all_dates(site, by_target: Dict[str, List[Item]], mismatch, no_dates, infoboxes):
+    i, total = 0, len(by_target)
     for target, items in by_target.items():
+        if i % 50 == 0:
+            print(f"{i / total * 100}% ({i} of {total}) -> {len(mismatch)}, {len(no_dates)}")
+        i += 1
         p = Page(site, target)
-        if p.exists() and not p.isRedirectPage():
-            compare_dates(p.title(), p.get(), target, items, mismatch, no_dates)
+        if p.exists() and not p.isRedirectPage() and not any(i.unlicensed for i in items):
+            infobox = identify_infobox(p.get(), infoboxes)
+            compare_dates(p.title(), p.get(), target, items, mismatch, no_dates, infobox)
     return mismatch, no_dates
 
 
@@ -265,7 +287,7 @@ def search_for_missing(site, appearances, sources, infoboxes=None, check_dates=F
         for p in c.articles(namespaces=0):
             pages_checked.add(p.title())
         for sc in c.subcategories(recurse=True):
-            if sc.title(with_ns=False) in ["Real-world albums"]:
+            if sc.title(with_ns=False) in ["Real-world albums"] or "soundtracks" in sc.title().lower():
                 continue
             cats_checked.add(sc.title())
             for p in sc.articles(namespaces=0):
@@ -356,9 +378,9 @@ def check_category(c: Category, cats_checked, pages_checked, tracked, infoboxes,
         except Exception as e:
             print(p.title(), e)
     for k, v in dates_mismatch.items():
-        diff_dates.append(f"Mismatch: {k}\t{v[0]}\t{v[1]}")
+        diff_dates.append(f"Mismatch: {k}\t{v[0]}\t{v[1]}\t{v[2]}")
     for k, v in no_dates.items():
-        diff_dates.append(f"No Date: {k}\t{v[0]}\t{v[1]}")
+        diff_dates.append(f"No Date: {k}\t{v[0]}\t{v[1]}\t{v[2]}")
     # return
 
     for sc in sorted(list(c.subcategories()), key=lambda a: not a.title().endswith("by type")):
@@ -556,7 +578,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
     post = re.search("==Post-([0-9]+)==", page.get())
     post = post.group(1) if post else None
     post_found = False
-    for f in sorted(final, key=lambda a: (a[4], "StoryCite" in a[0] if key == "Audiobook" else False, " abridged" not in a[0], a[1], (a[2] or 200), a[3], a[0])):
+    for f in sorted(final, key=lambda a: (a[4], "StoryCite" in a[0] if key == "Audiobooks" else False, " abridged" not in a[0], a[1], (a[2] or 200), a[3], a[0])):
         txt, d, i = f[0], f[1], f[2]
         if use_sections:
             if d.startswith("Cancel"):

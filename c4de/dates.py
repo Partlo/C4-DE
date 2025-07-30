@@ -123,34 +123,40 @@ def get_reference_for_release_date(site, target, formatted, date, refs: dict, co
     return ''
 
 
-def extract_release_date(title, text) -> Tuple[List[Tuple[str, datetime, str]], List[Tuple[str, str]]]:
+def extract_release_date(title, text) -> Tuple[List[Tuple[str, datetime, str]], List[Tuple[str, str]], List[str]]:
     date_strs = []
-    m = re.search("\|(publish date|publication date|first aired|airdate|start date|first date|release date|released|published)=(?P<d1>.*?)(?P<r1><ref.*?)?\n(\*(?P<d2>.*?)(?P<r2><ref.*?)?\n)?(\*(?P<d3>.*?)(?P<r3><ref.*?)?\n)?", text)
+    m = re.search("\|(publish date|premiere date|publication date|first aired|airdate|start date|first date|release date|released|published)=(?P<d1>.*?)(?P<r1><ref.*?)?\n(\*(?P<d2>.*?)(?P<r2><ref.*?)?\n)?(\*(?P<d3>.*?)(?P<r3><ref.*?)?\n)?", text)
     if m:
         for i in range(1, 4):
             if m.groupdict()[f"d{i}"]:
                 d = m.groupdict()[f"d{i}"]
+                d = re.sub("\[\[([A-z]+)([ 0-9]+)?]]&ndash;\[\[([A-z]+)( [0-9]+)?\|.*?]]", "\\1\\2", d)
                 d = re.sub("\[\[([A-z]+)( [0-9]+)?\|[A-z]+\.?( [0-9]+)?]]", "\\1\\2", d).replace("c. ", "")
                 d = d.replace("[", "").replace("]", "").replace("*", "").strip().replace(',', '')
                 if "{{c|reprint" in d.lower() or "(reprint" in d.lower() or d.lower().startswith("cancel") or d.lower().startswith("future"):
                     continue
                 d = re.sub("\{\{C\|.*?}}", "", d)
-                d = re.sub("([A-z]+ ?[0-9]*)(-|&[mn]dash;)([A-z]+ ?[0-9]*) ", "\\1 ", d)
-                d = re.sub("&[mn]dash; ?[A-z]+ [0-9|]+", "", d)
+                d = re.sub("([A-z]+ ?[0-9]*) ?(-|&[mn]dash;) ?([A-z]+ ?[0-9]*) ", "\\1 ", d)
+                d = re.sub(" ?&[mn]dash; ?[A-z]+ [0-9|]+", "", d)
                 d = re.sub("\([A-Z]+\)", "", d)
+                d = re.sub(" of ([0-9]+)", " \\1", d)
                 d = re.sub("([A-z]+ ?[0-9]*) ([0-9]{4})( .*?)$", "\\1 \\2", d)
+                d = re.sub("^([A-z]+)/([A-z]+) ([0-9]{4})", "\\1 \\3", d)
                 d = d.replace("Late ", "").replace("Early ", "")
+                # d = re.sub("^(Late|Early|Autumn|Spring|Fall|Winter|Summer) ", "", d)
                 d = re.sub("  +", " ", d)
-                d = d.split("<br")[0]
+                d = d.split("<br")[0].replace(".", "").replace("  ", " ")
                 date_strs.append((d.split("-")[0], m.groupdict().get(f"r{i}")))
 
-    page_dates = []
+    page_dates, other = [], []
     for d, r in date_strs:
-        if d and d.lower() != "none" and d.lower() != "future" and d.lower() != "canceled":
+        if d and d.lower() in ["none", "future", "canceled"]:
+            other.append(d)
+        elif d:
             t, z = parse_date_string(d, title)
             if t and z:
                 page_dates.append((t, z, r))
-    return page_dates, date_strs
+    return page_dates, date_strs, other
 
 
 def extract_release_date_reference(site, target, date: datetime) -> Tuple[Optional[str], Optional[str]]:
@@ -160,7 +166,7 @@ def extract_release_date_reference(site, target, date: datetime) -> Tuple[Option
     if not page.exists():
         return '', None
     text = page.get()
-    dates, date_strs = extract_release_date(page.title(), text)
+    dates, date_strs, _ = extract_release_date(page.title(), text)
     dates = [d for d in dates if d and d[1]]
     if not dates:
         return '', None

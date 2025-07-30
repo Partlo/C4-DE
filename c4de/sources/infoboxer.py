@@ -299,7 +299,8 @@ REMAP = {
     "media_type": "type",
     "prev": "previous",
     "card": "figures",
-    "composer": "author",
+    "home": "origin",
+    "composer": "author"
 }
 
 
@@ -307,6 +308,7 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
     extract = True
 
     original_text = f"{text}"
+    text = text.replace("|coord=", "|coordinates=")
     data, pre, post, found, original, scroll_box = parse_infobox(text, all_infoboxes)
     if scroll_box:
         print(f"Scroll box found in infobox; cannot parse {page.title()}")
@@ -347,6 +349,7 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
     params = [*extra, *infobox.params]
     i = -1
     intro_only = text.split("==", 1)[0]
+    iu_media = found.lower().replace("_", " ") in ["iu media", "inuniversemedia"]
     for f in params:
         i += 1
         v = data.get(f)
@@ -360,7 +363,7 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
                 # x = [k for k, v in REMAP.items() if v == f and data.get(k) and data.get(k) != "new"]
                 x = [k for k, v in REMAP.items() if v == f and data.get(k)]
                 v = data.get(x[0] if x else '') or v
-            if f == "release date" and found.lower().replace("_", " ") != "iu media":
+            if f == "release date" and not iu_media:
                 x = re.search("([Pp]ublished|[Rr]eleased|[Ii]ncluded|from) (in|on)? ?((\[*(January|February|March|April|May|June|July|August|September|October|November|December|fall|spring|winter|autumn)/?]* ?)*?([0-9\[\], ]*)?(of )?\[*?[0-9]{4}]*)",
                               intro_only)
                 if x:
@@ -373,7 +376,7 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
                     x = re.search("article (in \[\[.*?]] )?by (?P<t>\[\[.*?]])", intro_only)
                 if x:
                     v = x.group('t')
-            if f == "published in" and not v and found.lower().replace("_", " ") != "iu media":
+            if f == "published in" and not v and not iu_media:
                 v = data.get("issue") or ''
                 if re.search("\[\[(.*?) ([0-9]+)\|\\2( of .*?)?]]", v):
                     v = re.sub("\[\[(.*?) ([0-9]+)\|\\2( of .*?)?]]", "[[\\1 \\2|''\\1'' \\2]]", v)
@@ -395,7 +398,7 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
                 continue
             data[f] = v
 
-    if data.get("published in") and "release date" in data and not data["release date"] and found.lower().replace("_", " ") != "iu media":
+    if data.get("published in") and "release date" in data and not data["release date"] and not iu_media:
         p = re.search("\[\[(.*?)(\|.*?)?]]", data["published in"])
         if p:
             parent = Page(page.site, p.group(1))
@@ -438,4 +441,5 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
     if new_text.replace("\n}}", "}}") != original_text.replace("\n}}", "}}").replace("{{" + original, "{{" + found):
         print(f"Found changes for {found} infobox")
         showDiff(original_text.replace("\n}}", "}}").replace("{{" + original, "{{" + found), new_text.replace("\n}}", "}}"))
+        print("End")
     return "\n".join([*pre, *new_infobox, *post]), found if found else None, original

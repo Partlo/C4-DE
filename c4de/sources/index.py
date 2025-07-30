@@ -5,7 +5,7 @@ import re
 
 from c4de.common import fix_redirects, build_redirects
 from c4de.dates import parse_date_string, build_date, build_date_and_ref
-from c4de.protocols.cleanup import clean_archive_usages
+from c4de.sources.archive import clean_archive_usages
 from c4de.sources.domain import Item, ItemId, AnalysisResults
 
 
@@ -39,7 +39,7 @@ def prepare_results(results: AnalysisResults) -> Tuple[List[ItemId], List[ItemId
     for x in [results.apps, results.nca, results.src, results.ncs]:
         for i in x:
             if i.master.sort_index(results.canon) is None:
-                print(i.master.target, i.master.original)
+                print("No index?", i.master.target, i.master.original)
         flatten(x, found, missing)
     for x in results.reprints.values():
         for i in x:
@@ -68,6 +68,8 @@ def clean(x):
 
 def create_index(site, page: Page, results: AnalysisResults, appearances: dict, sources: dict, save: bool):
     found, missing = prepare_results(results)
+    for i in missing:
+        print(i)
 
     current_page = Page(site, f"Index:{page.title()}")
     current = {}
@@ -134,7 +136,8 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
     x = page.title()
     title = re.search("(?<!SucessionBox)\n\|(name|title)=(.*?)\n", page.get())
     if title:
-        x = re.sub("<br ?/?>", " ", title.group(2)).replace("  ", "")
+        x = re.sub("<br ?/?>\{\{C\|.*?$", "", title.group(2))
+        x = re.sub("<br ?/?>", " ", x).replace("  ", "")
     elif x.endswith("/Legends") or x.endswith("/Canon"):
         x = page.title().replace("/Legends", "").replace("/Canon", "")
     if x.startswith("Unidentified"):
@@ -185,7 +188,7 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
 
     index = Page(site, f"Index:{page.title()}")
     old_id = index.latest_revision_id if index.exists() else None
-    new_txt = clean_archive_usages(index, "\n".join(lines), None)
+    new_txt, _ = clean_archive_usages(index, "\n".join(lines), None)
     if save and not index.exists():
         index.put(new_txt, "Source Engine: Generating Index page", botflag=False)
     else:

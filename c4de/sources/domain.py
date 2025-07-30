@@ -93,6 +93,7 @@ class Item:
         self.override = None
         self.override_date = None
         self.original_date = None
+        self.canon_override = False
         self.future = False
         self.archivedate = archivedate
 
@@ -190,6 +191,8 @@ REF_MAGAZINE_ORDERING = {
     "BustCollectionCite": ["Character", "Star Wars Universe", "Behind the Cameras"],
     "DarthVaderCite": ["The Dark Side", "Planets (department)", "Villains of the Galaxy"],
     "FalconCite": ["Starship Fact File", "Secrets of Spaceflight", "Build the Falcon"],
+    "FigurineCite": ["Heroes and Villains", "A Galaxy Far, Far Away", "Concepts", "Spaceships and Vehicles", "Droids",
+                     "Species and Beings", "The Phenomenon"],
     "HelmetCollectionCite": ["Databank A-Z", "Helmets", "Weapons & Uniforms", "Highlights of the Saga"],
     "ShipsandVehiclesCite": ["History of the Ship", "Pilots and Crew Members", "Starships and Vehicles"],
     "StarshipsVehiclesCite": ["Legendary Craft", "Action Stations", "Welcome On Board", "Starship & Vehicle Directory",
@@ -225,6 +228,11 @@ class ItemId:
         elif master.template == "SWArchive" or master.template == "SW":
             if current.url and "_picview" in current.url:
                 self.replace_references = False
+
+    def fix_fc_date(self, canon):
+        if any(x.template == "ForceCollection" or x.target == "Star Wars: Force Collection" for x in [self.master, self.current]):
+            self.master.date = "2018-04-23" if canon else "2014-04-22"
+            self.current.date = self.master.date
 
     def sort_date(self):
         if self.current.override_date:
@@ -306,6 +314,9 @@ class PageComponents:
     def get_navs(self):
         return [*self.nav_templates, *self.apps.nav, *self.nca.nav, *self.src.nav, *self.ncs.nav, *self.links.nav]
 
+    def sections_have_media_cat(self):
+        return self.apps.has_media_cat() or self.src.has_media_cat() or self.nca.has_media_cat() or self.ncs.has_media_cat() or self.links.has_media_cat()
+
 
 class AnalysisResults:
     def __init__(self, apps: List[ItemId], nca: List[ItemId], src: List[ItemId], ncs: List[ItemId], canon: bool, abridged: list, mismatch: List[ItemId], reprints: Dict[str, List[Item]]):
@@ -332,6 +343,7 @@ class SectionItemIds:
         self.is_appearances = name and "appearances" in name.lower()
         self.expanded = expanded
         self.mark_as_non_canon = ""
+        self.keep_empty = False
 
     def merge(self, other):
         """:type other: SectionItemIds """
@@ -389,7 +401,7 @@ class SectionLeaf:
         if self.invalid:
             f = "{{SectionFlag|bts}}" if 'Behind the scenes' in header_line else "{{SectionFlag}}"
             header_line = re.sub("(===?.*?)(===?)", f"\\1 {f}\\2", header_line)
-        if any("{{mediacat" in ln for ln in self.lines):
+        if any("{{mediacat" in ln.lower() for ln in self.lines):
             lines = [header_line]
             added_media_cat = True
         elif media_cat and (has_lines or self.subsections):
@@ -482,12 +494,16 @@ class SectionComponents:
     def has_text(self):
         return self.preceding or self.trailing or self.after
 
+    def has_media_cat(self):
+        return any(any(y and "{{mediacat" in y.lower() for y in x) for x in [self.preceding, self.trailing, self.after])
+
 
 class FinishedSection:
-    def __init__(self, name, rows: int, text: str):
+    def __init__(self, name, rows: int, text: str, keep_empty=False):
         self.name = name
         self.rows = rows
         self.text = text
+        self.keep_empty = keep_empty
 
 
 class NewComponents:

@@ -2,7 +2,6 @@ from c4de.sources.engine import load_template_types
 from pywikibot import Page, Site, Category, showDiff
 import re
 import requests
-from c4de.protocols.cleanup import parse_archive
 from c4de.common import archive_url
 
 YEARLY = ['news/happy-star-wars-day', 'news/star-wars-black-friday-and-cyber-week-deals', 'news/star-wars-day-deals',
@@ -42,6 +41,20 @@ __EXPECTUNUSEDCATEGORY__
         cp.put(tx, "Creating maintenance category")
 
 
+def parse_archive(site, template):
+    page = Page(site, f"Module:ArchiveAccess/{template}")
+    if not page.exists():
+        return None
+    archive = {}
+    for u, d in re.findall("\[['\"](.+?)/*?['\"]] ?= ?['\"]?(.*?)['\"]?[, ]*\n", page.get()):
+        if u.startswith("/") and u != "/":
+            u = u[1:]
+        if template == "Rebelscum":
+            u = re.sub("^(https?://)?w*\.?rebelscum\.com/", "", u)
+        archive[u.replace("\\'", "'").replace("{{=}}", "=").lower()] = d
+    return archive
+
+
 def build_missing_and_new(page, types, archives, new_data, skip):
     if not new_data:
         new_data = {}
@@ -57,11 +70,16 @@ def build_missing_and_new(page, types, archives, new_data, skip):
             continue
         if not tx.title().startswith("Template:") or tx.title(with_ns=False) in skip:
             continue
+        elif tx.title(with_ns=False) in types["Nav"]:
+            continue
+        elif tx.title(with_ns=False) in types["Dates"]:
+            continue
         actual.append(tx)
     for tx in actual:
         template = tx.title(with_ns=False)
         youtube = "YouTube" in template or types.get(template.lower()) == "YT"
         archive_template = "YouTube" if youtube else template
+        archive_template = "SideshowCite" if template in ["HotToysCite", "IronStudiosCite"] else archive_template
         if archive_template not in archives:
             if types.get(template.lower()) not in ["Web", "YT", "DB", "Publisher", "Commercial", "External", "Social", "Cards", "Toys"]:
                 print(f"Skipping {types.get(template.lower())} template {template}")
@@ -89,6 +107,8 @@ def build_missing_and_new(page, types, archives, new_data, skip):
                     if "|url=" not in i[0]:
                         zx.append((i[0], i[3]))
         for a, x in zx:
+            if "na=video file" in a:
+                continue
             x = x.replace("{{=}}", "=").strip()
             if re.search("^([0-9]|[a-z]+)=(...+?)$", x):
                 x = re.sub("^([0-9]|[a-z]+)=", "", x)
@@ -139,9 +159,9 @@ def handle_parameters(ux, a, param):
     if "{{{" + param + "|" in ux and f"|{param}=" in a:
         b = re.search("\|" + param + "=(.*?)(\|.*?)?}}", a)
         if b:
-            ux = re.sub("\{\{\{" + param + "\|.*?}}}", b.group(1), ux)
+            ux = re.sub("\{\{\{" + param + "\|(\{\{.*?}}})?.*?}}}", b.group(1), ux)
     if "{{{" + param + "|" in ux:
-        ux = re.sub("\{\{\{" + param + "\|(.*?)}}}", "\\1", ux)
+        ux = re.sub("\{\{\{" + param + "\|((\{\{.*?}}})?.*?)}}}", "\\1", ux)
     return ux
 
 
@@ -150,18 +170,27 @@ def handle_if_statement(ux):
     result = f"{ux}"
     while (ux.count("#if:") + ux.count("#ifeq:")) > 0 and past != result:
         past = f"{result}"
-        z = re.search("^.*(\{\{#if:?(.*?)\|([^|{}]*)\|([^|{}]*)}})", result)
+        z = re.search("^.*(\{\{#if:(.*?)\|([^|{}]*)\|([^|{}]*)}})", result)
         if z and "{{" not in z.group(2):
             if z.group(2).strip():
                 result = result.replace(z.group(1), z.group(3))
             else:
                 result = result.replace(z.group(1), z.group(4))
-        z = re.search("^.*(\{\{#ifeq:?(.*?)\|([^|{}]*)\|([^|{}]*)\|([^|{}]*)}})", result)
+        z = re.search("^.*(\{\{#ifeq:(.*?)\|([^|{}]*)\|([^|{}]*)\|([^|{}]*)}})", result)
         if z and "{{" not in z.group(3):
             if z.group(2).strip() == z.group(3).strip():
                 result = result.replace(z.group(1), z.group(4))
             else:
                 result = result.replace(z.group(1), z.group(5))
+    while ux.count("#switch") > 0 and past != result:
+        past = f"{result}"
+        z = re.search("\{\{#switch:([^{}]*?)\|([^{}]*)*?}}", result)
+        if z:
+            y = {x.split("=", 1)[0].strip(): x.split("=", 1)[1].strip() for x in z.group(2).split("|")}
+            if z.group(2) in y:
+                result = result.replace(z.group(0), y[z.group(2)])
+            else:
+                result = result.replace(z.group(0), y.get("#default", ""))
     return result
 
 
@@ -189,7 +218,7 @@ def build_to_check(site, data):
                             print(f"unknown: {t} -> {x}, {y}, {z}, {v['full']}")
                             continue
 
-                        for px in re.findall("\{\{\{(.*?)(?=[|}])", ux):
+                        for px in set(re.findall("\{\{\{(.*?)(?=[|}])", ux)):
                             ux = handle_parameters(ux, v['full'], px)
                             print(ux, px)
                         new_url = handle_if_statement(ux)
@@ -198,6 +227,7 @@ def build_to_check(site, data):
             else:
                 y = re.search("\|base_url=(.*?)\n", tx)
                 z = re.search("\|target_url=(.*?)\{\{\{(url|1)", tx)
+                w = re.search("\|full_url=(.*?)\n", tx)
                 if y and z:
                     for k, v in urls.items():
                         ux = y.group(1)
@@ -208,6 +238,16 @@ def build_to_check(site, data):
                             new_url = f"{ux}/{k}" if not (ux.endswith("/") or k.startswith("/")) else f"{ux}{k}"
                             print(k, new_url)
                             to_check[t][k] = new_url
+                elif w:
+                    for k, v in urls.items():
+                        ux = w.group(1)
+                        if not (v and v.get('value')):
+                            for px in re.findall("\{\{\{(.*?)(?=[|}])", ux):
+                                ux = handle_parameters(ux, v['full'], px)
+                            new_url = handle_if_statement(ux)
+                            print(k, new_url)
+                            to_check[t][k] = new_url
+
     return to_check
 
 
@@ -222,6 +262,8 @@ def populate_archives(to_check, skip=False, start=None):
                     success, archivedate = archive_url(v, skip=skip, start=start)
                     if success:
                         archives[k] = archivedate
+                except KeyboardInterrupt:
+                    return archives
                 except Exception as e:
                     print(f"Encountered {str(e)} for {v}")
     except KeyboardInterrupt:
@@ -231,11 +273,11 @@ def populate_archives(to_check, skip=False, start=None):
 
 def build_archive_module_text(text, new_items: dict):
     new_text = []
-    found, start = False, False
+    in_map, found, start = False, False, False
     skip = []
     for line in text.splitlines():
         if not start:
-            start = line.strip().startswith("[")
+            start = line.strip().startswith("[") or "knownArchiveDates" in line.strip()
         elif not found:
             x = [k for k in new_items.keys() if f"['{k.lower()}']" in line.lower() or f'["{k.lower()}"]' in line.lower()]
             for i in x:
@@ -298,14 +340,23 @@ def do_work(site, types=None):
                 data[t][k] = y
 
 
-def clean_archive_usages(page: Page, text, archive_data: dict):
+def clean_archive_usages(page: Page, text, archive_data: dict, redo=False):
     templates_to_check = set()
-    for c in page.categories():
-        if c.title().endswith("same archivedate value") or c.title().endswith("with custom archivedate"):
-            templates_to_check.add(re.search("^(.*?) usages with.*?$", c.title(with_ns=False)).group(1))
+    if redo:
+        for x in re.findall("\{\{([^\n|{}]+?)\|[^\n{}]+?\|archive(url|date)=.*?}}", text):
+            if x[0] != "WebCite":
+                templates_to_check.add(x[0])
+    else:
+        for c in page.categories():
+            if c.title().endswith("same archivedate value") or c.title().endswith("with custom archivedate"):
+                templates_to_check.add(re.search("^(.*?) usages with.*?$", c.title(with_ns=False)).group(1))
     if not templates_to_check:
         return text, archive_data
 
+    if "Topps" in templates_to_check:
+        templates_to_check.add("ToppsLivingSet")
+        templates_to_check.add("ForceAttax")
+        templates_to_check.add("ToppsNow")
     if "SWArchive" in templates_to_check and "CargoBay" not in templates_to_check:
         templates_to_check.add("CargoBay")
     if "SWYouTube" in templates_to_check:
@@ -315,6 +366,7 @@ def clean_archive_usages(page: Page, text, archive_data: dict):
     chunks = text.split("</ref>")
     for t in templates_to_check:
         tx = "SWYouTube" if t in ["ThisWeek", "HighRepublicShow", "StarWarsShow"] else t
+        tx = "Topps" if t in ["ToppsNow", "ToppsLivingSet", "ForceAttax"] else t
         tx = "Blogspot" if tx == "DailyswCite" else tx
         if tx not in archive_data:
             archive_data[tx] = parse_archive(page.site, tx)
@@ -348,7 +400,15 @@ def clean_archive_usages(page: Page, text, archive_data: dict):
                         continue
                     text = text.replace(x[5], "")
             elif archive and "YouTube" in t:
-                for x in re.findall("(\{\{" + t + "\|(video=)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                for x in re.findall("(\{\{.*?\|video=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    if "oldversion" in x[0] or x[1].lower() not in archive:
+                        continue
+                    text = text.replace(x[3], "")
+                for x in re.findall("(\{\{.*?YouTube\|(channel=)([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    if "oldversion" in x[0] or "video=" in x[0] or x[2].lower() not in archive:
+                        continue
+                    text = text.replace(x[4], "")
+                for x in re.findall("(\{\{.*?YouTube\|(video=)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
                     if "oldversion" in x[0] or x[2].lower() not in archive:
                         continue
                     text = text.replace(x[4], "")
@@ -368,6 +428,10 @@ def clean_archive_usages(page: Page, text, archive_data: dict):
                     #     continue
                     text = text.replace(x[4], "")
             elif archive:
+                for x in re.findall("(\{\{" + t + "\|(subdomain=|username=)([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    if "oldversion" in x[0] or "|url=" in x[0] or x[2].lower() not in archive:
+                        continue
+                    text = text.replace(x[4], "")
                 for x in re.findall("(\{\{" + t + "\|(.*?\|)?(url|id|a?l?t?link)=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
                     if "oldversion" in x[0] or x[3].lower() not in archive or x[3].lower() in YEARLY:
                         continue

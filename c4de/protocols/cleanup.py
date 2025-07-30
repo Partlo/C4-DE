@@ -1,7 +1,6 @@
 import re
 from datetime import datetime, timedelta
 
-from c4de.sources.domain import FullListData
 from pywikibot import Category, Page, showDiff
 from pywikibot.exceptions import LockedPageError
 
@@ -12,6 +11,16 @@ bots = ["01miki10-bot", "C4-DE Bot", "EcksBot", "JocastaBot", "RoboCade", "PLUME
 
 def archive_stagnant_senate_hall_threads(site, offset):
     for page in Category(site, "Senate Hall").articles(namespaces=100):
+        try:
+            archive_senate_hall_thread(site, page, offset)
+        except LockedPageError:
+            continue
+    for page in Category(site, "Administrators' noticeboard").articles(namespaces=100):
+        try:
+            archive_senate_hall_thread(site, page, offset)
+        except LockedPageError:
+            continue
+    for page in Category(site, "Social Media Team noticeboard").articles(namespaces=100):
         try:
             archive_senate_hall_thread(site, page, offset)
         except LockedPageError:
@@ -35,17 +44,18 @@ def archive_senate_hall_thread(site, page: Page, offset):
 
     if stagnant:
         new_text = text.replace("{{Shtop}}", "{{subst:SHarchive|~~~~}}\n{{Shtop-arc}}").replace("{{shtop}}", "{{subst:SHarchive|~~~~}}\n{{Shtop-arc}}")
+        new_text = new_text.replace("{{Nbtop}}", "{{Nbtop-arc}}").replace("{{SMTNbtop}}", "{{SMTNbtop-arc}}")
         if text == new_text:
             print("ERROR: cannot find {{Shtop}}")
         else:
-            page.put(new_text, f"Archiving stagnant Senate Hall thread", botflag=False)
+            page.put(new_text, f"Archiving stagnant thread", botflag=False)
 
 
 def remove_spoiler_tags_from_page(site, page, tv_dates, tv_default, limit=30, offset=5):
     text = page.get()
 
-    text = re.sub("(\{\{(Movie|Show|TV)?[Ss]poiler\|([^\n]+?)}})\{\{", "\\1{{", text)
-    line = re.search("\n\{\{(Movie|Show|TV)?[Ss]poiler\|(.*?)}}.*?\n", text)
+    text = re.sub("(\{\{(Movie|Show|TV)?[Ss]poiler(Film|TV)?\|([^\n]+?)}})\{\{", "\\1{{", text)
+    line = re.search("\n\{\{(Movie|Show|TV)?[Ss]poiler(Film|TV)?\|(.*?)}}.*?\n", text)
     if not line:
         print(f"Cannot find spoiler tag on {page.title()}")
         return "no-tag"
@@ -85,7 +95,7 @@ def remove_spoiler_tags_from_page(site, page, tv_dates, tv_default, limit=30, of
         if time > (datetime.now() + timedelta(hours=offset)):
             print(f"{page.title()}: Spoilers for {t} do not expire until {time}")
             return time
-        new_text = re.sub("\{\{(Movie|TV|Show)?[Ss]poiler.*?}}.*?\n", "", text)
+        new_text = re.sub("\{\{(Movie|TV|Show)?[Ss]poiler(Film|TV)?.*?}}.*?\n", "", text)
     else:
         time, new_text = remove_expired_fields(site, text, fields, named, limit=limit)
 
@@ -280,154 +290,6 @@ def check_infobox_category(site):
             preload_results[template.title()] = missing_from_preload
 
     return preload_results, check_results
-
-
-def parse_archive(site, template):
-    page = Page(site, f"Module:ArchiveAccess/{template}")
-    if not page.exists():
-        return None
-    archive = {}
-    for u, d in re.findall("\[['\"](.+?)/*?['\"]] ?= ?['\"]?(.*?)['\"]?[, ]*\n", page.get()):
-        if u.startswith("/") and u != "/":
-            u = u[1:]
-        if template == "Rebelscum":
-            u = re.sub("^(https?://)?w*\.?rebelscum\.com/", "", u)
-        archive[u.replace("\\'", "'").replace("{{=}}", "=").lower()] = d
-    return archive
-
-
-def clean_archive_usages(page: Page, text, data: FullListData = None, redo=False):
-    txt, _ = _clean_archive_usages(page, text, data.archive_data if data else {}, redo)
-    return txt
-
-YEARLY = ['news/happy-star-wars-day', 'news/star-wars-black-friday-and-cyber-week-deals', 'news/star-wars-day-deals', 'news/star-wars-day-merchandise', 'news/star-wars-day-video-game-deals', 'news/star-wars-fathers-day-gift-guide', 'news/star-wars-halloween-shopping-guide', 'news/star-wars-holiday-gift-guide', 'news/star-wars-mothers-day-gift-guide', 'news/star-wars-reads', 'news/star-wars-valentines-day-gift-guide']
-
-
-def _clean_archive_usages(page: Page, text, archive_data: dict, redo=False):
-    templates_to_check = set()
-    if redo:
-        for x in re.findall("\{\{([^\n|{}]+?)\|[^\n{}]+?\|archive(url|date)=.*?}}", text):
-            if x[0] != "WebCite":
-                templates_to_check.add(x[0])
-    else:
-        for c in page.categories():
-            if c.title().endswith("same archivedate value") or c.title().endswith("with custom archivedate"):
-                templates_to_check.add(re.search("^(.*?) usages with.*?$", c.title(with_ns=False)).group(1))
-    if not templates_to_check:
-        return text, archive_data
-
-    if "SWArchive" in templates_to_check and "CargoBay" not in templates_to_check:
-        templates_to_check.add("CargoBay")
-    if "SWYouTube" in templates_to_check:
-        templates_to_check.add("ThisWeek")
-        templates_to_check.add("HighRepublicShow")
-        templates_to_check.add("StarWarsShow")
-    chunks = text.split("</ref>")
-    for t in templates_to_check:
-        if t not in archive_data:
-            archive_data[t] = parse_archive(page.site, t)
-        archive = archive_data.get(t) or {}
-        if not archive:
-            continue
-
-        for c in chunks:
-            if archive and t == "Blogspot":
-                for x in re.findall("(\{\{" + t + "\|(.*?\|)?(url|id|a?l?t?link)=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if "oldversion" in x[0] or (x[3].lower() not in archive and f"search/label/{x[3]}".lower() not in archive):
-                        continue
-                    # elif "nolive=" in x[0] and x[8] != archive[x[3].lower()]:
-                    #     continue
-                    text = text.replace(x[5], "")
-                for x in re.findall("(\{\{" + t + "\|(.*?\|)?(blogspoturl)=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if "oldversion" in x[0] or x[3].lower() not in archive or "|url=" in x[0]:
-                        continue
-                    text = text.replace(x[5], "")
-            elif archive and "YouTube" in t:
-                for x in re.findall("(\{\{.*?\|video=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if "oldversion" in x[0] or x[1].lower() not in archive:
-                        continue
-                    text = text.replace(x[3], "")
-                for x in re.findall("(\{\{.*?YouTube\|(channel=)([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if "oldversion" in x[0] or "video=" in x[0] or x[2].lower() not in archive:
-                        continue
-                    text = text.replace(x[4], "")
-                for x in re.findall("(\{\{.*?YouTube\|(video=)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if "oldversion" in x[0] or x[2].lower() not in archive:
-                        continue
-                    text = text.replace(x[4], "")
-            elif archive and t == "SWE":
-                for x in re.findall("(\{\{" + t + "\|(url=)?([^\n{}|]*?)/?\|([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]*?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    z = f"{x[2]}/{x[3]}"
-                    if "oldversion" in x[0] or z.lower() not in archive:
-                        continue
-                    # elif "nolive=" in x[0] and x[7] != archive[x[2].lower()]:
-                    #     continue
-                    text = text.replace(x[5], "")
-            elif archive and t == "Databank":
-                for x in re.findall("(\{\{" + t + "\|(url=)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]*?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if "oldversion" in x[0] or x[2].lower() not in archive:
-                        continue
-                    # elif "nolive=" in x[0] and x[7] != archive[x[2].lower()]:
-                    #     continue
-                    text = text.replace(x[4], "")
-            elif archive:
-                for x in re.findall("(\{\{" + t + "\|(subdomain=|username=)([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if "oldversion" in x[0] or "|url=" in x[0] or x[2].lower() not in archive:
-                        continue
-                    text = text.replace(x[4], "")
-                for x in re.findall("(\{\{" + t + "\|(.*?\|)?(url|id|a?l?t?link)=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if "oldversion" in x[0] or x[3].lower() not in archive or x[3].lower() in YEARLY:
-                        continue
-                    # elif "nolive=" in x[0] and x[8] != archive[x[3].lower()]:
-                    #     continue
-                    text = text.replace(x[5], "")
-                for x in re.findall("(\{\{" + t + "\|((?!(url|id|a?l?t?link)=)[^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+?)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if "oldversion" in x[0] or x[1].lower() not in archive or x[1].lower() in YEARLY:
-                        continue
-                    # elif "nolive=" in x[0] and x[7] != archive[x[1].lower()]:
-                    #     continue
-                    text = text.replace(x[4], "")
-                if t == "Rebelscum":
-                    for x in re.findall(
-                            "(\{\{KennerCite\|(.*?\|)?link=(h?t?t?.*?rebelscum\.com/)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?\|archive(date|url)=([^\n{}|]+?) ?)(\|[^\n{}]*?)?}})",
-                            c):
-                        if "oldversion" in x[0] or x[3].lower() not in archive:
-                            continue
-                        # elif "nolive=" in x[0] and x[7] != archive[x[3].lower()]:
-                        #     continue
-                        text = text.replace(x[5], "").replace(f"link={x[2]}{x[3]}", f"link={x[3]}")
-                    for x in re.findall(
-                            "(\{\{[A-z0-9 _]+\|(.*?\|)?(url|a?l?t?link)=([^\n{}|]*?rebelscum[^\n{}|]*?)/?(\|[^\n{}]*?)?( ?\|archive(date|url)=[^\n{}|]*? ?)(\|[^\n{}]*?)?}})",
-                            c):
-                        if "nolive=" in x[0] or "oldversion" in x[0]:
-                            continue
-                        if re.sub("(https?://)?w*\.?rebelscum\.com/", "", x[3].lower()) not in archive:
-                            continue
-                        text = text.replace(x[5], "")
-    return text, archive_data
-
-
-def clean_up_archive_dates(site, t=None):
-    mapping = {}
-    pages = set()
-    for category in Category(site, "Same archivedate usages").subcategories(recurse=True):
-        if category.isEmptyCategory():
-            continue
-        template = category.title(with_ns=False).split(" usages")[0]
-        if template == t:
-            pages = set(category.articles())
-        elif not t:
-            pages = pages.union(category.articles())
-        mapping[template] = parse_archive(site, template)
-
-    for page in pages:
-        text = page.get()
-        for template, data in mapping.items():
-            if f"{{{{{template}|" in text or f"{{{{{template.replace(' ', '_')}|" in text:
-                for x in re.findall("(({{" + template + "\|(url=|domain=.*?\|(url=)?)?(.*?)\|.*?)\|archivedate=([0-9]+)(\|.*?)?}})", text):
-                    if x[4] in data and x[5] == data[x[4]]:
-                        text = text.replace(x[0], x[1] + x[6] + "}}")
-        page.put(text, "Clearing stored archivedates")
 
 
 MAINTENANCE_CATS = ["High-priority template and page issues", "Low-priority template and page issues", "File maintenance",

@@ -235,3 +235,5 @@
 **More media parsing logic tweaks
 *'''4.6.2''': June 10, 2025
 **Various bug fixes/tweaks
+*'''4.6.3''': July 29, 2025
+**Various bug fixes/tweaks from the sweep

@@ -18,7 +18,7 @@ from c4de.sources.parsing import BY_INDEX, BY_DATE, UNCHANGED, is_official_link,
 
 
 KEEP_TEMPLATES = ["CalendarCite"]
-DO_NOT_MOVE = ["GEAttr", "DatapadCite"]
+DO_NOT_MOVE = ["GEAttr", "DatapadCite", "Star Wars: Datapad (Galactic Starcruiser)"]
 
 FC = "ForceCollection"
 
@@ -156,7 +156,6 @@ def find_matching_parent_audiobook(a: ItemId, existing: list, appearances: FullL
 
     results = []
     audiobook_name = AUDIOBOOK_MAPPING.get(z, f"{z} (audiobook)")
-    # audiobook_name = AUDIOBOOK_MAPPING.get(z, f"{z} (audiobook)") or GERMAN_MAPPING.get(z, f"{z}")
     if z and a.master.target in appearances.target:
         for t in appearances.target[a.master.target]:
             if t.parent == audiobook_name and f"{a.master.target}|{audiobook_name}" not in existing:
@@ -241,14 +240,18 @@ def handle_non_canon_items(results: PageComponents, new_apps: SectionItemIds, ne
         if log:
             print(f"Moving {len(new_apps.non_canon)} 'appearances' to the Non-canon Appearances")
         new_nca.found += new_apps.non_canon
+        new_apps.non_canon = []
     if new_nca.non_canon:
         if log:
             print(f"Moving {len(new_nca.non_canon)} 'non-canon' appearances to the main Appearances")
         new_apps.found += new_nca.non_canon
+        new_nca.non_canon = []
     if new_src.non_canon:
         new_ncs.found += new_src.non_canon
+        new_src.non_canon = []
     if new_ncs.non_canon:
         new_src.found += new_ncs.non_canon
+        new_nca.non_canon = []
 
     if new_apps.wrong or new_nca.wrong:
         if log:
@@ -312,15 +315,9 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
         new_src.found += wrong
 
     if new_nca.found and not (new_apps.found or new_apps.group_ids or new_apps.group_items):
-        new_nca.name = new_apps.name
-        new_apps = new_nca
-        new_apps.mark_as_non_canon = "{{Nc}}"
-        new_nca = None
+        new_apps.keep_empty = True
     if new_ncs.found and not (new_src.found or new_src.group_ids or new_src.group_items):
-        new_ncs.name = new_src.name
-        new_src = new_ncs
-        new_src.mark_as_non_canon = "{{Ncs}}"
-        new_ncs = None
+        new_src.keep_empty = True
 
     # now = datetime.now()
     abridged = augment_appearances(new_apps, appearances, collapse_audiobooks, index=index)
@@ -360,10 +357,15 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
 def prepare_reprints(appearances: FullListData, sources: FullListData, items: List[ItemId]):
     reprints = {}
     for i in items:
-        if i.master.target and i.master.target in appearances.reprints:
-            reprints[i.master.target] = appearances.reprints[i.master.target]
-        elif i.master.target and i.master.target in sources.reprints:
-            reprints[i.master.target] = sources.reprints[i.master.target]
+        if i.master.target:
+            if i.master.target in appearances.reprints:
+                reprints[i.master.target] = appearances.reprints[i.master.target]
+            elif i.master.target in sources.reprints:
+                reprints[i.master.target] = sources.reprints[i.master.target]
+            elif i.master.issue:
+                z = f"{i.master.target.replace(' (department)', '')}|{i.master.issue}"
+                if z in sources.reprints:
+                    reprints[z] = sources.reprints[z]
 
     return reprints
 
@@ -383,6 +385,11 @@ def add_to_list(items, key, item):
 
 
 TEMP_REMAP = {
+    "Empire Day (episode)": "Empire Day (comic story)",
+    "Gathering Forces": "Gathering Forces (comic story)",
+    "Path of the Jedi": "Path of the Jedi (comic story)",
+    "Vision of Hope": "Vision of Hope (comic story)",
+    "Call to Action": "Call to Action (comic story)",
     "Rookies (episode)": "Rookies (short story)",
     "Downfall of a Droid": "Downfall of a Droid (short story)",
     "Duel of the Droids": "Downfall of a Droid (short story)",
@@ -399,7 +406,6 @@ def expand_listing(target: str, o: Item, data: FullListData, expanded: int):
         x.extra = re.sub("\{\{1stm.*?}}", "{{Mo}}", x.extra).strip()
         x.extra = re.sub("\{\{1st.*?}}", "", x.extra).strip()
     x.extra_date = o.extra_date
-    expanded += 1
     return ItemId(x, data.target[target][0], False)
 
 
@@ -458,31 +464,34 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
                             page_links.append(TEMP_REMAP[p.title()])
                     page_links.append(p.title())
 
-            expanded = 0
+            expanded, existing = 0, 0
             for vol, parts in to_check.items():
-                if any(p in page_links or p in already for p in parts):
-                    any_expanded.append(expand_listing(vol, o, data, expanded))
-            if expanded:
-                print(f"Expanded series/arc listing of {d.master.target} to {expanded} issues")
+                if any(p in already for p in parts):
+                    existing += 1
+                else:
+                    for p in parts:
+                        if p in page_links:
+                            any_expanded.append(expand_listing(p, o, data, expanded))
+                            expanded += 1
+            if expanded or existing:
+                print(f"Expanded series/arc listing of {d.master.target} to {expanded} new / {existing} existing")
                 continue
             else:
                 print(f"Unable to expand series/arc listing of {d.master.target} on {page.title()}")
                 unexpanded += 1
 
-        if d and (o.template == FC or o.target == "Star Wars: Force Collection"):
-            d.master.date = "2018-04-23" if canon else "2014-04-22"
-            d.current.date = d.master.date
-
         if d and (o.is_card_or_mini() or o.template == FC):
+            d.fix_fc_date(canon)
             handle_card_item(d, o, group_items, src.found if (src and "scenario" not in o.original) else found, src.wrong if src else wrong, extra, name, log)
         elif d and d.current.template and d.current.template.startswith("FactFile") and d.master.target:
             add_to_list(group_items, d.master.target, d)
-        elif d and d.current.ref_magazine and d.master.parent:
+        elif d and d.current.ref_magazine and d.master.parent and not o.override_date:
             add_to_list(group_items, d.master.parent, d)
         elif o.mode != "Toys" and (is_official_product_page(o, real) or is_external_link(d, o, unknown)):
             if d:
                 o.master_text = d.master.original
-            links.append(o)
+            if not (not real and o.template == "SW" and o.url and o.url.startswith("films/")):
+                links.append(o)
         elif d and d.current.template in KEEP_TEMPLATES:
             found.append(d)
         elif d and name == "Collections":
@@ -500,20 +509,19 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
         elif d and d.master.unlicensed:
             found.append(d)
         elif d and d.from_other_data and "databank" not in (o.extra or '').lower() \
-                and d.current.template not in DO_NOT_MOVE \
-                and d.current.target != 'Star Wars: Datapad (Galactic Starcruiser)'\
+                and d.current.template not in DO_NOT_MOVE and d.current.target not in DO_NOT_MOVE \
                 and not real and (d.master.is_reprint or not d.master.from_extra):
             if log:
                 print(f"({name}) Listed in wrong section: {o.original} -> {d.master.is_appearance} {d.master.full_id()}")
             wrong.append(d)
-        # elif d and not real and d.master.german_ad:
-        #     found.append(d)
         elif d and not real and d.master.is_audiobook and not d.master.is_abridged and collapse_audiobooks:
             continue    # ignore audiobooks
-        elif d and not real and d.master.non_canon and not name.startswith("Non-canon") \
+        elif d and not real and d.master.non_canon and not name.startswith("Non-canon") and not o.canon_override \
                 and d.master.target != "Star Tours: The Adventures Continue" and not page.title().endswith("/LEGO"):
             non_canon.append(d)
-        elif d and not real and not d.master.non_canon and name.startswith("Non-canon") and not ("cameo" in d.current.extra or "{{C|" in d.current.extra or d.current.template == "TFU" or d.current.target == "Star Wars: The Force Unleashed II"):
+        elif d and not real and not d.master.non_canon and name.startswith("Non-canon") and not o.canon_override and not \
+                ("cameo" in d.current.extra or "{{C|" in d.current.extra or d.current.template == "TFU" or d.current.target == "Star Wars: The Force Unleashed II"):
+            # move listings out of NCA/NCS and tag them with the Nc/Ncm templates
             if d.master.template not in ["JTC", "Tales", "TFU"] and "appearances" in name.lower():
                 if "{{Nc" not in d.current.extra:
                     if "{{Mo}}" in d.current.extra:
@@ -528,7 +536,8 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
         elif media and d and d.master.master_page == "Web/Repost":
             links.append(o)
         elif d and d.master.master_page in ["Web/Target", "Web/Publisher"]:
-            links.append(o)
+            if not (not real and o.template == "SW" and o.url and o.url.startswith("films/")):
+                links.append(o)
         elif d:
             found.append(d)
             if d.by_parent:
@@ -545,7 +554,7 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
                 p = Page(page.site, o.target)
                 if not o.target.lower().startswith("w:c:") and p.exists() and not p.isRedirectPage():
                     cats = [c.title() for c in p.categories()]
-                    if "Category:Media that should be listed in Appearances" in cats:
+                    if "Category:Media that should be listed in Appearances" not in cats:
                         if log:
                             print(f"Removing non-Appearance entry on {page.title()}: {o.original}")
                         save = False
@@ -563,10 +572,10 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
     if name.startswith("File:"):
         pass
     elif src:
-        handle_groups(group_items, data, other, src.found, src.group_ids, extra, unknown, src)
+        handle_groups(group_items, data, other, src.found, src.group_ids, extra, unknown, canon, src)
         group_items = {}
     else:
-        handle_groups(group_items, data, other, found, group_ids, extra, unknown)
+        handle_groups(group_items, data, other, found, group_ids, extra, unknown, canon)
 
     found += list(extra.values())
     if any_expanded:
@@ -577,7 +586,8 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
     return SectionItemIds(name, found, wrong, non_canon, group_items, group_ids, links, len(any_expanded) > 0 or other_extra)
 
 
-def handle_groups(groups: Dict[str, List[ItemId]], data: FullListData, other: FullListData, found: List[ItemId], group_ids: dict, extra: dict, unknown, src: SectionItemIds=None):
+def handle_groups(groups: Dict[str, List[ItemId]], data: FullListData, other: FullListData, found: List[ItemId],
+                  group_ids: dict, extra: dict, unknown, canon: bool, src: SectionItemIds=None):
     unknown_sets = {}
     already_found = {}
     for x in found:
@@ -587,6 +597,12 @@ def handle_groups(groups: Dict[str, List[ItemId]], data: FullListData, other: Fu
     for s, c in groups.items():
         if not c:
             continue
+        if s in already_found:
+            group_ids[already_found[s].current.unique_id()] = s
+            if already_found[s].current.target in extra:
+                extra.pop(already_found[s].current.target)
+            continue
+
         t = data.target.get(s)
         if not t and other.target:
             t = other.target.get(s)
@@ -604,17 +620,15 @@ def handle_groups(groups: Dict[str, List[ItemId]], data: FullListData, other: Fu
                 unknown_sets[s].unknown = True
             t = [unknown_sets[s]]
 
-        if t and s in already_found:
-            group_ids[already_found[s].current.unique_id()] = s
-            if already_found[s].current.target in extra:
-                extra.pop(already_found[s].current.target)
-        elif t:
+        if t:
             if len(t) > 1 and c[0].master.template != "SWCT":   # preventing collision between SWCT sets and others
                 t = [x for x in t if x.template != "SWCT"]
             t[0].index = c[0].current.index
             if c[0].current.subset:
                 t[0].subset = c[0].current.subset
-            found.append(ItemId(t[0], t[0], False))
+            d = ItemId(t[0], t[0], False)
+            d.fix_fc_date(canon)
+            found.append(d)
             group_ids[t[0].unique_id()] = s
             if t[0].target in extra:
                 extra.pop(t[0].target)
@@ -644,15 +658,19 @@ def handle_card_item(d: ItemId, o: Item, cards: Dict[str, List[ItemId]], found: 
         d.master.date = f"{parent_set[:4]}-XX-XX"
     if o.template == "SWCT" and (not parent_set or parent_set == "Star Wars: Card Trader"):
         parent_set = d.master.card or parent_set
-    if parent_set == "Topps Star Wars Living Set":
+    if parent_set == "Topps Star Wars Living Set" or o.template == "ToppsLivingSet":
         d.current.unknown = True
-        if o.card and o.card.strip().startswith('#'):
+        n = None
+        if o.special and o.special.isnumeric():
+            n = int(o.special)
+        elif o.card and o.card.strip().startswith('#'):
             num = re.sub("^#([0-9]+):? .*?$", "\\1", o.card.strip())
             if num.isnumeric():
                 n = int(num)
-                date = datetime(2019, 6, 4) + timedelta(days=(n - (n % 2)) / 2 * 7)
-                d.master.date = date.strftime("%Y-%m-%d")
-                d.current.unknown = False
+        if n:
+            date = datetime(2019, 6, 4) + timedelta(days=(n - (n % 2)) / 2 * 7)
+            d.current.override_date = date.strftime("%Y-%m-%d")
+            d.current.unknown = False
         found.append(d)
         return
     if parent_set not in cards:
@@ -714,11 +732,9 @@ WRONG = "Wrong"
 def determine_if_wrong(page: Page, o: Item, d: ItemId, real: bool, media: bool):
     if media:
         if d:
-            if d.master.master_page in ["Web/Target", "Web/Publisher"]:
+            if d.master.master_page in ["Web/Target", "Web/Publisher", "Web/Repost"]:
                 return PUBLISHER_OR_TARGET
             elif d.master.target and (d.master.target == page.title() or d.master.master_page in ["Appearances/Legends", "Appearances/Canon"]):
-                return PUBLISHER_OR_TARGET
-            elif d.master.master_page == "Web/Repost":
                 return PUBLISHER_OR_TARGET
             elif is_target_external_link(d, page):
                 return None
@@ -753,11 +769,6 @@ def build_new_external_links(page: Page, results: PageComponents, original: List
     wrong = []
     has_publisher = False
     for i, o in enumerate(original):
-        if o.template == "DarkHorse" and ("|text=Preview" in o.original or "/preview" in o.original or "preview" in (o.text or '').lower() or "profile/profile" in o.original.lower()):
-            continue
-        elif o.template == "WebCite" and o.url and "theforce.net/books/reviews" in o.url:
-            continue
-
         if o.mode == "Basic":
             t, zx = prepare_basic_url(o)
             unknown.append(zx.replace("*", ""))
@@ -797,16 +808,14 @@ def build_new_external_links(page: Page, results: PageComponents, original: List
 
         is_external_link(d, o, [])
         wrong_or_publisher = determine_if_wrong(page, o, d, results.real, results.media)
-        is_wrong = wrong_or_publisher == WRONG
-        if wrong_or_publisher == PUBLISHER_OR_TARGET:
-            o.publisher_listing = True
-        elif wrong_or_publisher == HAS_PUBLISHER:
-            o.publisher_listing = True
-            has_publisher = True
-
-        if is_wrong:
+        if wrong_or_publisher == WRONG:
             wrong.append(d if d else ItemId(o, o, True, False))
-        elif d:
+            continue
+        elif wrong_or_publisher:
+            o.publisher_listing = True
+            has_publisher = wrong_or_publisher == HAS_PUBLISHER
+
+        if d:
             # if o.template not in ["WP"] and o.mode not in ["Interwiki", "Social", "Profile"]:
             #     unknown.append(f"Tracked-{o.mode}: {o.original}")
             zn = d.current.original if d.use_original_text else d.master.original
@@ -832,7 +841,6 @@ def build_new_external_links(page: Page, results: PageComponents, original: List
             if o.template not in ["WP"] and o.mode not in ["Interwiki", "Social", "Profile"]:
                 unknown.append(f"{o.mode}: {o.original}")
             zn = re.sub("\{\{[Ss]eriesListing.*?}} ?", "", o.original)
-            # u = "{{UnknownListing|ex=1}} " if o.mode == "General" else ""
             u = "{{UnknownListing|ex=1}} " if "{{PAGENAME}}" in zn else ""
             z = f"*{u}{zn} {o.extra}".strip()
             if z not in done:
@@ -924,6 +932,9 @@ def build_new_section(title, name, section: SectionItemIds, results: PageCompone
 
         d = build_date_text(o, include_date).replace("E -->", " -->")
         itext = None
+        if o.current.template == "ToppsLivingSet":
+            print(o.current.unique_id() in section.group_ids)
+
         if o.current.unique_id() in section.group_ids:
             rows += build_card_block(o, d, section, sl, final_without_extra, final_items, new_text)
         elif not results.real and o.master.is_reprint and not o.master.has_content and o.master.target in targets:
@@ -953,7 +964,7 @@ def build_new_section(title, name, section: SectionItemIds, results: PageCompone
                 and o.master.target not in both_continuities and "{{BtsOnly}}" not in o.current.extra:
             mismatch.append(o)
 
-    return FinishedSection(name, rows, "\n".join(new_text)), final_items
+    return FinishedSection(name, rows, "\n".join(new_text), section.keep_empty), final_items
 
 
 def build_card_block(o: ItemId, d: str, section: SectionItemIds, sl: str, final_without_extra: list,
@@ -985,7 +996,9 @@ def build_card_block(o: ItemId, d: str, section: SectionItemIds, sl: str, final_
         parent = f"{master} {o.current.extra}".strip()
     items = []
     for c in set_items:
-        if c.current.card:
+        if c.current.card == "parent=1":
+            continue
+        elif c.current.card:
             ot = build_card_text(o, c).replace("|parent=1", "")
         else:
             ot = c.master.original
@@ -1054,9 +1067,9 @@ def build_flags(o: ItemId, sl, section_name, is_file=False):
     elif is_extra(o, o.current.extra or ''):
         if o.master.future or is_file or o.master.has_content or "Collect" in section_name:
             return ""
-        elif o.current.extra and "{{c|cut}}" in o.current.extra.lower():
+        elif "{{c|cut}}" in (o.current.extra or "").lower():
             return ""
-        elif o.master.collection_type and o.current.extra and "{{crawl}}" in o.current.extra.lower():
+        elif o.master.collection_type and "{{crawl}}" in (o.current.extra or "").lower():
             return ""
         else:
             return f"{{{{SeriesListing{sl}}}}} "
@@ -1098,6 +1111,9 @@ def build_item_text(o: ItemId, d: str, sl: str, final_without_extra: list, final
     if o.current.template == "TCW" and "|d=y" in o.current.original and "|d=y" not in zn:
         zn = re.sub("(\{\{TCW\|.*?)}}", "\\1|d=y}}", zn)
 
+    if nc == "{{Nc}}" and ("{{mo}}" in o.current.extra.lower() or "{{1stm" in o.current.extra.lower()):
+        nc = "{{Ncm}}"
+
     if zn in final_without_extra and "{{crp}}" not in o.current.extra.lower():
         if log:
             print(f"Skipping duplicate {zn}")
@@ -1115,7 +1131,11 @@ def build_item_text(o: ItemId, d: str, sl: str, final_without_extra: list, final
         if section_name.startswith("Non-canon"):
             e = re.sub("\{\{[Nn]cm}}", "{{Mo}}", re.sub("\{\{[Nn]cs?(\|.*?)?}}", "", e))
         elif nc and nc.lower() not in e.lower():
+            if nc == "{{Nc}}" and ("{{mo}}" in o.current.extra.lower() or "{{1stm" in o.current.extra.lower()):
+                nc = "{{Ncm}}"
             e = f"{e} {nc}"
+            if nc == "{{Ncm}}":
+                e = e.replace("{{Mo}}", "")
         if o.master.unlicensed and not unlicensed and "{{Un}}" not in e and "{{un}}" not in e:
             e += " {{Un}}"
         z = swap_parameters(f"{zn} {e}").strip()
@@ -1133,22 +1153,24 @@ def build_item_text(o: ItemId, d: str, sl: str, final_without_extra: list, final
 
 
 def build_date_text(o: ItemId, include_date):
-    if o.current.override and o.current.override_date:
-        return f"<!-- {o.current.override}: {o.current.override_date} -->"
-    elif o.current.override_date:
-        return f"<!-- {o.current.override_date} -->"
-    elif o.current.unknown and o.current.original_date:
-        return f'<!-- {o.current.original_date}? -->'
-    elif not o.master.has_date() and o.current.original_date:
-        return f'<!-- {o.current.original_date}? -->'
+    if o.current.override_date:
+        d = o.current.override_date
+    elif o.current.original_date and (o.current.unknown or not o.master.has_date()):
+        d = f"{o.current.original_date}?"
     elif not o.master.has_date():
-        return '<!-- Unknown -->'
-    elif include_date:
-        return f"<!-- {o.master.date} -->" if o.master.date != 'Current' else ''
+        d = "Unknown"
+    elif include_date and o.master.date != "Current":
+        d = o.master.date
     elif o.master.has_date() or o.master.date == 'Future' or o.master.date == 'Canceled':
-        return ''
+        d = ''
     else:
-        return '<!-- Unknown -->'
+        d = "Unknown"
+    return _build_date_text(o.current.canon_override, o.current.override, d)
+
+
+def _build_date_text(*d):
+    x = ': '.join(i for i in d if i and isinstance(i, str))
+    return f"<!-- {x} -->" if x else ""
 
 
 def compile_found(section: SectionItemIds, mode, canon):
