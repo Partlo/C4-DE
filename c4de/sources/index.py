@@ -63,7 +63,7 @@ def prepare_ordered_list(results: AnalysisResults):
 
 
 def clean(x):
-    return re.sub("(\{\{(BuildR2Cite|BuildXWingCite|BuildFalconCite|FalconCite|HelmetCollectionCite|BustCollectionCite)\|[0-9]+\|[^{}\n]*?)\|[^{}\n]*?}}", "\\1}}", x)
+    return re.sub(r"(\{\{(BuildR2Cite|BuildXWingCite|BuildFalconCite|FalconCite|HelmetCollectionCite|BustCollectionCite)\|[0-9]+\|[^{}\n]*?)\|[^{}\n]*?}}", "\\1}}", x)
 
 
 def create_index(site, page: Page, results: AnalysisResults, appearances: dict, sources: dict, save: bool):

@@ -1,4 +1,7 @@
 import codecs
+import warnings
+warnings.simplefilter("ignore", SyntaxWarning)
+
 import re
 import sys
 import traceback
@@ -35,9 +38,9 @@ def flatten(x):
          .replace("{{New Republic Era}}", "{{NewRepublicEraNav}}").replace("{{New_Republic_Era}}", "{{NewRepublicEraNav}}")
          .replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]")
          .replace("=Collections=", "=Collected in=").replace("]]\n{{RelatedCategories", "]]\n\n{{RelatedCategories"))
-    z = re.sub("(\{\{[A-Z][a-z]+)[ _]([A-z])([A-z _]+)([ _]?Nav)?(\n|}})", lambda a: a.group(1) + a.group(2).upper() + a.group(3) + a.group(5), z)
-    z = re.sub("(\{\{[A-Z][a-z]+)[ _]([A-z])([A-z _]+)([ _]?Nav)?(\n|}})", lambda a: a.group(1) + a.group(2).upper() + a.group(3) + a.group(5), z)
-    return re.sub("\{\{1stID\|.*?}}", "{{1stID}}", re.sub("\|title=\"(.*?)\"", "|title=\\1", re.sub("<!--.*?-->", "", z)))
+    z = re.sub(r"(\{\{[A-Z][a-z]+)[ _]([A-z])([A-z _]+)([ _]?Nav)?(\n|}})", lambda a: a.group(1) + a.group(2).upper() + a.group(3) + a.group(5), z)
+    z = re.sub(r"(\{\{[A-Z][a-z]+)[ _]([A-z])([A-z _]+)([ _]?Nav)?(\n|}})", lambda a: a.group(1) + a.group(2).upper() + a.group(3) + a.group(5), z)
+    return re.sub(r"\{\{1stID\|.*?}}", "{{1stID}}", re.sub(r"\|title=\"(.*?)\"", "|title=\\1", re.sub("<!--.*?-->", "", z)))
 
 
 def analyze(*args, to_save):
@@ -178,15 +181,15 @@ def analyze(*args, to_save):
             text, u1, u2 = build_new_text(page, infoboxes, types, [], appearances, sources, cats, remap, include_date,
                                           checked, log=log, collapse_audiobooks=True, manual=old_revision, extra=extra, keep_pages=False, redo=redo)
 
-            z1 = re.sub("(\|[A-z _0-9]+=.*?(\n.+?)?)}}(\n((The |A )?'''|\{\{Quote))", "\\1\n}}\\3",
-                        re.sub("(\|.*?=)}}\n", "\\1\n}}\n", text.replace("{{!}}", "|")))
-            z1 = re.sub("\[\[([Cc])redit]](s)?", "[[Galactic Credit Standard|\\1redit\\2]]", z1)
-            z2 = re.sub("(\|[A-z _0-9]+=.*?(\n.+?)?)}}(\n((The |A )?'''|\{\{Quote))", "\\1\n}}\\3",
-                        re.sub("(\|.*?=)}}\n", "\\1\n}}\n", re.sub("(\|book=[^\n}]*?)(\|story=[^\n}]*?)(\|.*?)?}}", "\\2\\1\\3}}", old_text.replace("text=SWCC 2022", "text=SWCA 2022").replace("{{!}}", "|"))))
-            z2 = re.sub("(\{\{1st.*?\|\[\[(.*?) \(.*?audiobook\)\|)''\\2'' (.*?audiobook)", "\\1\\3", z2)
-            z2 = re.sub("\[\[([Cc])redit]](s)?", "[[Galactic Credit Standard|\\1redit\\2]]", z2)
+            z1 = re.sub(r"(\|[A-z _0-9]+=.*?(\n.+?)?)}}(\n((The |A )?'''|\{\{Quote))", "\\1\n}}\\3",
+                        re.sub(r"(\|.*?=)}}\n", "\\1\n}}\n", text.replace("{{!}}", "|")))
+            z1 = re.sub(r"\[\[([Cc])redit]](s)?", "[[Galactic Credit Standard|\\1redit\\2]]", z1)
+            z2 = re.sub(r"(\|[A-z _0-9]+=.*?(\n.+?)?)}}(\n((The |A )?'''|\{\{Quote))", "\\1\n}}\\3",
+                        re.sub(r"(\|.*?=)}}\n", "\\1\n}}\n", re.sub(r"(\|book=[^\n}]*?)(\|story=[^\n}]*?)(\|.*?)?}}", "\\2\\1\\3}}", old_text.replace("text=SWCC 2022", "text=SWCA 2022").replace("{{!}}", "|"))))
+            z2 = re.sub(r"(\{\{1st.*?\|\[\[(.*?) \(.*?audiobook\)\|)''\\2'' (.*?audiobook)", "\\1\\3", z2)
+            z2 = re.sub(r"\[\[([Cc])redit]](s)?", "[[Galactic Credit Standard|\\1redit\\2]]", z2)
 
-            for ix in re.findall("((\{\{(BuildFalconCite|BuildR2Cite|BuildXWingCite|BustCollectionCite|DarthVaderCite|FalconCite|FigurineCite|HelmetCollectionCite|ShipsandVehiclesCite|StarshipsVehiclesCite)\|[0-9]+\|[^|\[{}]+?)(\|((?!reprint).)*?)}})", text):
+            for ix in re.findall(r"((\{\{(BuildFalconCite|BuildR2Cite|BuildXWingCite|BustCollectionCite|DarthVaderCite|FalconCite|FigurineCite|HelmetCollectionCite|ShipsandVehiclesCite|StarshipsVehiclesCite)\|[0-9]+\|[^|\[{}]+?)(\|((?!reprint).)*?)}})", text):
                 text = text.replace(ix[0], ix[1] + "}}")
                 if ix[1] + "}}" in old_text:
                     z1 = z1.replace(ix[0], ix[1] + "}}")
@@ -220,8 +223,8 @@ def analyze(*args, to_save):
                 continue
 
             # showDiff(old_text, text, context=1)
-            z1 = re.sub("\|stext=.*?(\|.*?)?}}", "\\1}}", z1).replace("Journal|", "JournalCite|").replace("=Collections=", "=Collected in=") + "\n"
-            z2 = re.sub("\|stext=.*?(\|.*?)?}}", "\\1}}", z2).replace("Journal|", "JournalCite|").replace("=Collections=", "=Collected in=") + "\n"
+            z1 = re.sub(r"\|stext=.*?(\|.*?)?}}", "\\1}}", z1).replace("Journal|", "JournalCite|").replace("=Collections=", "=Collected in=") + "\n"
+            z2 = re.sub(r"\|stext=.*?(\|.*?)?}}", "\\1}}", z2).replace("Journal|", "JournalCite|").replace("=Collections=", "=Collected in=") + "\n"
 
             if include_date:
                 showDiff(z2, z1, context=1)

@@ -19,7 +19,7 @@ FEED_URLS = [
 ]
 
 ANNOUNCEMENTS = "announcements"
-ADMIN_REQUESTS = "admin-requests"
+ADMIN_REQUESTS = "automated-reports"
 
 
 def fix_title(title: str):
@@ -203,7 +203,7 @@ def check_abuse_log(site, cache):
 
         for user, fx in records.items():
             total = sum(len(fx[f]) for f in fx)
-            if total >= 5:
+            if total >= 5 or "15" in fx:
                 u = User(site, user).full_url()
                 for fid, lx in fx.items():
                     results.append(f"[{user}](<{u}>) has triggered [filter #{fid}](<https://starwars.fandom.com/wiki/Special:AbuseLog?wpSearchFilter={fid}>) ({filter_names.get(fid, 'Unknown?')}) {len(lx)} times in the last day")
@@ -551,7 +551,7 @@ def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, che
     try:
         x = requests.get(feed_url, timeout=15).text
     except Exception as e:
-        error_log(type(e))
+        error_log(feed_url, type(e))
     if not x:
         return []
 
@@ -680,7 +680,7 @@ def check_title_formatting(text, title_regex, title):
     return clean_title(title)
 
 def clean_title(title):
-    title = re.sub(" ", " ", title)
+    title = re.sub(" ", " ", title).replace("<br>", "")
     title = re.sub(r"<[ie]m?>( )?[ \n]*</[ie]m?>", r"\1", title)
     title = re.sub(r"<[ie]m?><[ie]m?>( )?(.*?)( )?</[ie]m?>( )?</[ie]m?>", r"\1''\2''\3\4", title)
     title = re.sub(r"<em.*?>( )?(.*?)( )?</em>", r"\1''\2''\3", title)

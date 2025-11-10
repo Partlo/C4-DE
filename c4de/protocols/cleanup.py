@@ -60,7 +60,7 @@ def remove_spoiler_tags_from_page(site, page, tv_dates, tv_default, limit=30, of
         print(f"Cannot find spoiler tag on {page.title()}")
         return "no-tag"
 
-    target = line.group(2).replace("||", "|").split("|")
+    target = line.group(3).replace("||", "|").split("|")
     fields = []
     named = {}
     for field in target:
@@ -309,6 +309,13 @@ def mark_as_non_empty(text):
     return text
 
 
+def is_special_empty(c: Category, cat_name, *expected):
+    if c.title() == cat_name:
+        z = [x.title() for x in c.articles()]
+        return set(z) == set(expected)
+    return False
+
+
 def clean_up_archive_categories(site):
     done = []
 
@@ -320,6 +327,8 @@ def clean_up_archive_categories(site):
                 continue
             done.append(c.title())
             if not c.isEmptyCategory():
+                if is_special_empty(c, "Category:Pages with script errors", "Template:RandomStatus"):
+                    continue
                 text = mark_as_non_empty(c.get())
                 if text != c.get():
                     c.put(text, "Marking as non-empty")
@@ -332,3 +341,25 @@ def clean_up_archive_categories(site):
                 text = mark_as_empty(c.get())
                 if text != c.get():
                     c.put(text, "Marking as empty")
+            elif is_special_empty(c, "Category:Pages with script errors", "Template:RandomStatus"):
+                text = mark_as_empty(c.get())
+                if text != c.get():
+                    c.put(text, "Marking as empty")
+
+
+def handle_figure(f):
+    data = {}
+    num = f.find(class_="figureNumberAboveFigure")
+    if num:
+        data['num'] = num.text.strip()
+    img = f.find("a", href=lambda a: a.startswith('/figureDetails'))
+    if img:
+        data['link'] = img['href'].strip()
+    data['name'] = f.find("span", class_="d-block").text.strip()
+    subtitle = []
+    for x in f.find(class_="figureTextWrapper").find_all("span", class_="figureTextSubtitle"):
+        subtitle.append(x.text.strip())
+    data['subTitle'] = ": ".join(subtitle)
+
+    return data
+

@@ -4,6 +4,7 @@ import traceback
 from datetime import datetime
 from typing import Tuple, Optional, List, Dict
 
+from c4de.sources.cleanup import EXTRA
 from pywikibot import Page, Category
 from c4de.sources.domain import Item, FullListData
 from c4de.sources.extract import extract_item, TEMPLATE_MAPPING
@@ -17,7 +18,7 @@ SUBPAGES = [
     "Canon/Miniatures", "Legends/Miniatures", "Reprint", "Soundtracks", "CardTrader"
 ]
 
-LIST_AT_START = ["Star Wars: Galactic Defense", "Star Wars: Force Arena", "Star Wars: Starfighter Missions"]
+LIST_AT_START = ["Star Wars: Galactic Defense", "Star Wars: Force Arena", "Star Wars: Starfighter Missions", "Unlock!: Star Wars Escape Game"]
 LIST_AT_END = ["Star Wars: Galaxy of Heroes"]
 
 EXPANSION = {
@@ -43,7 +44,8 @@ EXPANSION = {
     "Young Jedi Adventures: My First Comic Reader Level 1": [
         "¡Que Empiece el Entrenamiento!", "Una Nueva Perspectiva", "Pord Recibe una Lección",
         "La Visita del Maestro Yoda", "Entrenando Con Remotos", "La Carrera Contra Taborr"
-    ]
+    ],
+    "Andor Season 2": ["One Year Later", "Sagrona Teema", "Harvest", "Ever Been to Ghorman?", "I Have Friends Everywhere", "What a Festive Evening", "Messenger", "Who Are You?", "Welcome to the Rebellion", "Make It Stop", "Who Else Knows?", "Jedha, Kyber, Erso"]
 }
 
 MANGA = {
@@ -251,7 +253,7 @@ def load_source_lists(site, log, include_web=True):
             for o, line in enumerate(lines):
                 if "/Header}}" in line or line.startswith("----"):
                     continue
-                x = re.search("\*([RP]: )?(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? *(?P<t>.*?) ?†?( {{C\|1?=?(original|alternate): (?P<a>.*?)}})?( {{C\|int: (?P<i>.*?)}})?( {{C\|d: [0-9X-]+?}})?$", line)
+                x = re.search("\*([RP]: )?(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? *(?P<t>.*?) ?†?( {{C\|1?=?(original|alternate): (?P<a>.*?)}})?( {{C\|int: (?P<i>.*?)}})?( {{C\|d: [0-9X-]+?}})? ?†?$", line)
                 if x:
                     i += 1
                     data.append({"index": i, "page": "Web/Repost" if y == "Special" else f"Web/{y}", "date": x.group("d"), "item": x.group("t"),
@@ -266,7 +268,7 @@ def load_source_lists(site, log, include_web=True):
     for line in p.get().splitlines():
         if "/Header}}" in line or line.startswith("----"):
             continue
-        x = re.search("\*Current:(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?)( †)?( {{C\|1?=?(original|alternate): (?P<a>.*?)}})?$", line)
+        x = re.search("\*Current:(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?)( †)?( {{C\|1?=?(original|alternate): (?P<a>.*?)}})? ?†?$", line)
         if x:
             i += 1
             data.append({"index": i, "page": "Web/Current", "date": "Current", "item": x.group("t"),
@@ -345,11 +347,10 @@ ISSUE_REPRINTS = ["A Certain Point of View", "Classic Moment", "Behind the Magic
 def remove_templates(s):
     if s.count("{{") > 0:
         s = re.sub(" ?\{+[Cc]rp}}", "", s)
-        y = re.sub(
-            '( ?\{+ ?(1st[A-z]*|V?[A-z][od]|[Ff]act|DLC|[Ll]n|[Cc]rp|[Uu]n|[Nn]cm?|[Aa]mbig|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Uu]nborn|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene|[Cc]rawl) ?[|}].*?$)',
-            "", s)
+        y = re.sub('( ?' + EXTRA + '.*?$)', "", s)
         if y != s:
             print(f"Unexpected template found: {s}")
+            print(y)
         return y
     return s
 
@@ -381,8 +382,11 @@ def store_data(x: Item, i: dict, old: str, extra: str, parenthetical: str, alter
     x.parenthetical = parenthetical
     x.is_reprint = is_reprint
     x.alternate_url = x.alternate_url or alternate
-    x.unlicensed = "Unlicensed" in i['page'] or "{{c|unlicensed" in old.lower() or "{{un}}" in old.lower()
-    x.non_canon = "{{c|non-canon" in old.lower() or "{{nc" in old.lower()
+    if "Unlicensed" in i['page'] or "{{c|unlicensed" in old.lower() or "{{un}}" in old.lower():
+        x.unlicensed = True
+        x.non_canon = "MyComyc" not in old and "Star Wars: The Power of the Force" not in old
+    else:
+        x.non_canon = "{{c|non-canon" in old.lower() or "{{nc" in old.lower()
 
     if i.get("int"):
         x.target = f"{i['int']}"
@@ -669,7 +673,6 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                     if c:
                         no_canon_index.append(x)
                     if l:
-                        print(x.original)
                         no_legends_index.append(x)
 
                 if is_reprint:

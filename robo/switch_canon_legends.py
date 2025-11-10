@@ -1,6 +1,9 @@
 import codecs
 import re
 from typing import Set
+
+from pywikibot.bot_choice import QuitKeyboardInterrupt
+
 import pywikibot
 from pywikibot import pagegenerators, Page, textlib, Category
 
@@ -50,6 +53,7 @@ class CanonLegendsSwitcher:
                 (f"{{ACprobe|{ct}/Canon|", f"{{ACprobe|{ct}/Canon|newpage={ct}|"),
                 (f"{{ECprobe|{ct}/Canon|", f"{{ECprobe|{ct}/Canon|newpage={ct}|"),
                 (f"{{Inqprobe|{ct}/Canon|", f"{{Inqprobe|{ct}/Canon|newpage={ct}|"),
+                (f"[[{{{{#titleparts:Wookieepedia:Comprehensive article nominations/{ct}/Canon||2}}}}]]", f"[[{ct}]]"),
                 (f"[[{ct}/Canon|{ct}]]", f"[[{ct}]]"),
                 (f"[[{func(ct)}/Canon|{ct}]]", f"[[{ct}]]"),
                 (f"[[{ct}/Canon|{func(ct)}]]", f"[[{func(ct)}]]"),
@@ -59,6 +63,7 @@ class CanonLegendsSwitcher:
             ]
 
         else:
+            tx = title.replace("'", "&#39;")
             repl = [("\[\[%s\]\](?!'')(?P<suffix>[A-Za-z']+)" % title,
                      lambda m: f"[[{title}/Legends|{title}{m.group('suffix')}]]"),
                     ("\[\[%s\]\](?!'')(?P<suffix>[A-Za-z']+)" % func(title),
@@ -66,6 +71,7 @@ class CanonLegendsSwitcher:
                     (f"[[{title}]]", f"[[{title}/Legends|{title}]]"),
                     (f"[[{func(title)}]]", f"[[{title}/Legends|{func(title)}]]"),
                     (f"[[{title}|", f"[[{title}/Legends|"),
+                    (f"[[{title} |", f"[[{title}/Legends |"),
                     (f"[[{func(title)}|", f"[[{title}/Legends|"),
                     (f"{{Main|{title}}}", f"{{Main|{title}/Legends}}"),
                     (f"{{main|{title}}}", f"{{Main|{title}/Legends}}"),
@@ -83,9 +89,18 @@ class CanonLegendsSwitcher:
                     (f"{{see also|{title}|", f"{{SeeAlso|{title}/Legends|"),
                     (f"{{SeeAlso|{title}|", f"{{SeeAlso|{title}/Legends|"),
                     (f"{{seeAlso|{title}|", f"{{SeeAlso|{title}/Legends|"),
+                    (f"[[{{{{#titleparts:Wookieepedia:Comprehensive article nominations/{title}||2}}}}]]", f"[[{title}/Legends]]"),
                     (f"{{ACprobe|{title}|", f"{{ACprobe|{title}|newpage={title}/Legends|"),
                     (f"{{ECprobe|{title}|", f"{{ECprobe|{title}|newpage={title}/Legends|"),
                     (f"{{Inqprobe|{title}|", f"{{Inqprobe|{title}|newpage={title}/Legends|"),
+                    (f"{{CANvotes|{title}|", f"{{CANvotes|{title}/Legends|"),
+                    (f"{{GANvotes|{title}|", f"{{GANvotes|{title}/Legends|"),
+                    (f"{{FANvotes|{title}|", f"{{FANvotes|{title}/Legends|"),
+                    (f"{{#titleparts:{title}|", f"{{#titleparts:{title}/Legends|"),
+                    (f"|link={title}\n", f"|link={title}/Legends\n"),
+                    (f"|link={tx}\n", f"|link={title}/Legends\n"),
+                    (f"|article={title}\n", f"|article={title}/Legends\n"),
+                    (f"|article={tx}\n", f"|article={title}/Legends\n"),
                     ]
 
         flags = re.UNICODE
@@ -97,19 +112,36 @@ class CanonLegendsSwitcher:
             results.append((old_r, new))
         return results
 
-    def fix_redirects(self, text, replacements, rep=None):
+    def fix_redirects(self, text, replacements, is_canon, rep=None):
         exceptions = []
 
         if rep:
             oldR = re.compile(re.escape(rep[0]), re.UNICODE)
             return textlib.replaceExcept(text, oldR, rep[1], exceptions)
 
+        if is_canon:
+            text1, s, text2 = text.partition("==Behind the scenes==")
+        else:
+            text1, s, text2 = text, "", ""
+
         for old, new in replacements:
-            text = textlib.replaceExcept(text, old, new, exceptions)
+            text1 = textlib.replaceExcept(text1, old, new, exceptions)
+            if isinstance(old, str) and " " in old:
+                text1 = textlib.replaceExcept(text1, old.replace(" ", "_"), new, exceptions)
 
-        return text
+        return text1 + s + text2
 
-    def check_page(self, page, master_replacements, ghost=False):
+    @staticmethod
+    def get_moved_page(page: Page):
+        try:
+            if not page.exists():
+                target = page.moved_target()
+                return target
+        except Exception as e:
+            print(f"Encountered {type(e)} while checking for {page.title()}")
+        return page
+
+    def check_page(self, page: Page, master_replacements, ghost=False, moved: dict=None):
         if page.isRedirectPage():
             target = page.getRedirectTarget()
             if "/Canon" in target.title():
@@ -117,16 +149,30 @@ class CanonLegendsSwitcher:
             else:
                 page.set_redirect_target(target_page=target.title() + "/Legends")
             return True
+        elif not page.exists():
+            if page.title() in moved:
+                page = Page(page.site, moved[page.title()])
+            elif page.title(with_ns=False) in moved:
+                page = Page(page.site, page.title().replace(page.title(with_ns=False), moved[page.title(with_ns=False)]))
+            if not page.exists():
+                page = page.moved_target()
 
         try:
             old_text = page.get()
             new_text = page.get()
-        except pywikibot.exceptions.NoPageError:
+            if "/Canon" in page.title():
+                is_canon = True
+            elif "/Legends" in page.title():
+                is_canon = False
+            else:
+                is_canon = any(c.title() == "Category:Canon articles" for c in page.categories())
+        except Exception as e:
+            print(type(e))
             print(f"{page.title()} no longer exists")
             return False
 
         for target, replacements in master_replacements.items():
-            new_text = self.fix_redirects(new_text, replacements)
+            new_text = self.fix_redirects(new_text, replacements, is_canon)
 
             if new_text == old_text:
                 continue
@@ -144,7 +190,7 @@ class CanonLegendsSwitcher:
             if choice == 'e':
                 err = pywikibot.input(u'Enter the target text:', )
                 fix = pywikibot.input(u'Enter the target replacement:', )
-                new_text = self.fix_redirects(old_text, [], rep=[err, fix])
+                new_text = self.fix_redirects(old_text, [], is_canon=is_canon, rep=[err, fix])
             if choice == 'y':
                 old_text = new_text
 
@@ -159,6 +205,39 @@ class CanonLegendsSwitcher:
             print(f"{page.title()}: {e}")
 
         return True
+
+
+def build_references(title, target: Page, references, reference_names, templates, ghost):
+    c = 0
+    for p in target.backlinks(filter_redirects=True):
+        if p.title() not in [title, f"{title}/Canon", f"{title}/Legends"]:
+            if p.title() not in reference_names:
+                references.append(p)
+                reference_names.add(p.title())
+            c += 1
+    for p in target.getReferences(follow_redirects=False):
+        if p.namespace() in [2, 2900]:
+            continue
+        elif p.namespace() == 10:
+            print(target.title(), p.title())
+            if p.title() not in templates and p.title(with_ns=False) not in ["App", "RandomStatus", "ArticleShowcase",
+                                                                             "Mainpage Box Showcase"]:
+                templates[p.title()] = list(p.getReferences(follow_redirects=False))
+            ghost[title] = True
+        elif "article nominations" in p.title() and title in p.title():
+            if p.title() not in reference_names:
+                references.append(p)
+                reference_names.add(p.title())
+            c += 1
+        elif p.title() not in [title, f"{title}/Canon", f"{title}/Legends"]:
+            if p.title() not in reference_names:
+                references.append(p)
+                reference_names.add(p.title())
+            c += 1
+        else:
+            references.append(p)
+            reference_names.add(p.title())
+    return c
 
 
 def do_work(fixer, titles, always):
@@ -208,70 +287,74 @@ def do_work(fixer, titles, always):
             canon_page = main_page
         canon_pages.append(canon_page)
 
-        c = 0
-        for p in main_page.backlinks(filter_redirects=True):
-            if p.title() not in [title, f"{title}/Canon", f"{title}/Legends"]:
-                if p.title() not in legends_reference_names:
-                    legends_references.append(p)
-                    legends_reference_names.add(p.title())
-                c += 1
-        for p in main_page.getReferences(follow_redirects=False):
-            if p.namespace() == 2:
-                continue
-            elif p.namespace() == 10:
-                print(main_page.title(), p.title())
-                if p.title() not in legends_templates and p.title(with_ns=False) not in ["App", "RandomStatus", "ArticleShowcase", "Mainpage Box Showcase"]:
-                    legends_templates[p.title()] = list(p.getReferences(follow_redirects=False))
-                legends_ghost[title] = True
-            elif p.title() not in [title, f"{title}/Canon", f"{title}/Legends"]:
-                if p.title() not in legends_reference_names:
-                    legends_references.append(p)
-                    legends_reference_names.add(p.title())
-                c += 1
+        if at_legends and at_canon[f"{title}/Canon"] and pywikibot.Page(site, title).exists():
+            print(f"ERROR: {title}, {title}/Canon, and {title}/Legends exist")
+            continue
+
+        c = build_references(title, main_page, legends_references, legends_reference_names, legends_templates, legends_ghost)
         print(f"({ix}) {title}: {c}")
 
         legends_replacements[title] = fixer.build_replacements(title)
 
         if not at_legends:
-            to_move.append((legends_page, title))
+            to_move.append((legends_page, title, f"{title}/Legends"))
         else:
             print(f"{title} has already been moved to {title}/Legends")
             legends_moved[title] = f"{title}/Legends"
 
-        c = 0
-        for p in pywikibot.Page(site, f"{title}/Canon").backlinks(filter_redirects=True):
-            if p.title() not in [title, f"{title}/Canon", f"{title}/Legends"]:
-                if p.title() not in canon_reference_names:
-                    canon_references.append(p)
-                    canon_reference_names.add(p.title())
-                c += 1
-        for p in pywikibot.Page(site, f"{title}/Canon").getReferences(follow_redirects=False):
-            if p.namespace() == 2:
-                continue
-            elif p.namespace() == 10:
-                if p.title() not in canon_templates:
-                    canon_templates[p.title()] = list(p.getReferences(only_template_inclusion=True))
-                canon_ghost[title] = True
-            elif p.title() not in [title, f"{title}/Canon", f"{title}/Legends"]:
-                if p.title() not in canon_reference_names:
-                    canon_references.append(p)
-                    canon_reference_names.add(p.title())
-                c += 1
+        index = Page(site, f"Index:{title}")
+        if index.exists():
+            to_move.append((index, index.title(), f"{index.title()}/Legends"))
+
+        if legends_page.namespace().id == 0:
+            i = Page(site, f"Index:{title}")
+            if i.exists():
+                to_move.append((i, f"Index:{title}", f"Index:{title}/Legends"))
+                legends_replacements[f"Index:{title}"] = fixer.build_replacements(f"Index:{title}")
+                build_references(f"Index:{title}", i, legends_references, legends_reference_names, legends_templates, legends_ghost)
+
+            for nt in ["Featured", "Good", "Comprehensive"]:
+                nx = f"Wookieepedia:{nt} article nominations/{title}"
+                p = Page(site, nx)
+                if p.exists():
+                    to_move.append((p, nx, f"{nx}/Legends"))
+                legends_replacements[nx] = fixer.build_replacements(nx)
+                c = build_references(nx, p, legends_references,
+                                     legends_reference_names, legends_templates, legends_ghost)
+                if c:
+                    print(f"{nx}: {c}")
+                    for ni in ["second", "third", "fourth"]:
+                        p2 = Page(site, f"{nx} ({ni} nomination)")
+                        if p2.exists():
+                            to_move.append((p2, f"{nx} ({ni} nomination)", f"{nx}/Legends ({ni} nomination)"))
+                        c = build_references(f"{nx} ({ni} nomination)", p2, legends_references,
+                                             legends_reference_names, legends_templates, legends_ghost)
+                        legends_replacements[f"{nx} ({ni} nomination)"] = fixer.build_replacements(f"{nx} ({ni} nomination)")
+                        if c:
+                            print(f"{nx} ({ni} nomination): {c}")
+                        else:
+                            break
+
+        c = build_references(title, pywikibot.Page(site, f"{title}/Canon"), canon_references, canon_reference_names, canon_templates, canon_ghost)
         print(f"{title}/Canon: {c}")
 
         canon_replacements[title] = fixer.build_replacements(f"{title}/Canon")
 
-    if not always:
+    for lp, lt, l2 in to_move:
+        print(lt, l2)
+
+    if not always and to_move:
         choice = pywikibot.input_choice(
             u'Proceed with moving /Legends pages?',
             [['Yes', 'y'], ['No', 'n']], 'n')
         if choice != 'y':
             return
 
-    for lp, lt in to_move:
+    for lp, lt, l2 in to_move:
         try:
-            legends_moved[lt] = f"{lt}/Legends"
-            lp.move(f"{lt}/Legends", reason="/Legends /Canon switchover", movetalk=True, noredirect=True, movesubpages=False)
+            legends_moved[lt] = l2
+            print(f"Moving {lt} to {l2}")
+            lp.move(l2, reason="/Legends /Canon switchover", movetalk=True, noredirect=True, movesubpages=False)
         except Exception as e:
             print(e)
 
@@ -306,9 +389,89 @@ def do_work(fixer, titles, always):
         else:
             print(f"{page.title()} already moved to main page")
 
+        ix = Page(site, f"Index:{page.title()}")
+        if ix.exists():
+            try:
+                ix.move(page.title().replace('/Legends/Canon', '/Canon').replace('/Canon', ''),
+                        reason="/Legends /Canon switchover", movetalk=True, noredirect=True, movesubpages=False)
+            except Exception as e:
+                print(e)
+
     # Handle templates for Canon pages
     handle_references(site=site, fixer=fixer, replacements=canon_replacements, templates=canon_templates,
                       references=canon_references, moved=canon_moved)
+
+
+def do_legends_work(fixer, titles):
+
+    site = pywikibot.Site(user="RoboCade")
+    site.login(user="RoboCade")
+
+    main_pages = []
+    to_move = []
+    legends_reference_names = set()
+    legends_references = []
+    legends_templates = {}
+    legends_ghost = {}
+    legends_replacements = {}
+    legends_moved = {}
+    ix = 0
+    for title in titles:
+        ix += 1
+        main_page = pywikibot.Page(site, title)
+        main_pages.append(main_page)
+        at_legends = False
+        try:
+            legends_page = pywikibot.Page(site, f"{title}/Legends")
+            legends_page.get()
+            at_legends = True
+        except pywikibot.exceptions.NoPageError:
+            legends_page = main_page
+        except pywikibot.exceptions.IsRedirectPageError:
+            legends_page = main_page
+
+        c = build_references(title, main_page, legends_references, legends_reference_names, legends_templates, legends_ghost)
+        print(f"({ix}) {title}: {c}")
+
+        legends_replacements[title] = fixer.build_replacements(title)
+
+        if not at_legends:
+            to_move.append((legends_page, title, f"{title}/Legends"))
+        else:
+            print(f"{title} has already been moved to {title}/Legends")
+            legends_moved[title] = f"{title}/Legends"
+
+        for ni in ["second", "third", "fourth"]:
+            p2 = Page(site, f"{title} ({ni} nomination)")
+            if p2.exists():
+                to_move.append((p2, f"{title} ({ni} nomination)", f"{title}/Legends ({ni} nomination)"))
+                c = build_references(f"{title} ({ni} nomination)", p2, legends_references,
+                                     legends_reference_names, legends_templates, legends_ghost)
+                print(f"{title} ({ni} nomination): {c}")
+            else:
+                break
+
+    for lp, lt, l2 in to_move:
+        print(lt, l2)
+
+    if to_move:
+        choice = pywikibot.input_choice(
+            u'Proceed with moving /Legends pages?',
+            [['Yes', 'y'], ['No', 'n']], 'n')
+        if choice != 'y':
+            return
+
+    for lp, lt, l2 in to_move:
+        try:
+            legends_moved[lt] = l2
+            print(f"Moving {lt} to {l2}")
+            lp.move(l2, reason="/Legends /Canon switchover", movetalk=True, noredirect=True, movesubpages=False)
+        except Exception as e:
+            print(e)
+
+    # Handle templates for Legends pages
+    handle_references(site=site, fixer=fixer, replacements=legends_replacements, templates=legends_templates,
+                      references=legends_references, moved=legends_moved)
 
 
 def do_canon_work(fixer, titles):
@@ -333,25 +496,8 @@ def do_canon_work(fixer, titles):
             canon_page = main_page
         canon_pages.append(canon_page)
 
-        c = 0
-        for p in pywikibot.Page(site, f"{title}/Canon").backlinks(filter_redirects=True):
-            if p.title() not in [title, f"{title}/Canon", f"{title}/Legends"]:
-                if p.title() not in canon_reference_names:
-                    canon_references.append(p)
-                    canon_reference_names.add(p.title())
-                c += 1
-        for p in pywikibot.Page(site, f"{title}/Canon").getReferences(follow_redirects=False):
-            if p.namespace() == 2:
-                continue
-            elif p.namespace() == 10:
-                if p.title() not in canon_templates:
-                    canon_templates[p.title()] = list(p.getReferences(follow_redirects=False))
-                canon_ghost[title] = True
-            elif p.title() not in [title, f"{title}/Canon", f"{title}/Legends"]:
-                if p.title() not in canon_reference_names:
-                    canon_references.append(p)
-                    canon_reference_names.add(p.title())
-                c += 1
+        c = build_references(title, pywikibot.Page(site, f"{title}/Canon"), canon_references, canon_reference_names,
+                             canon_templates, canon_ghost)
         print(f"{title}/Canon: {c}")
 
         canon_replacements[title] = fixer.build_replacements(f"{title}/Canon")
@@ -362,25 +508,25 @@ def do_canon_work(fixer, titles):
 
 
 def handle_references(*, site, fixer: CanonLegendsSwitcher, replacements: dict, templates: dict, references: list, moved: dict):
-    # fixer.accept_all = False
+    fixer.accept_all = True
     canon_template_refs = []
     for template, refs in templates.items():
         t = pywikibot.Page(site, template)
-        fixer.check_page(t, replacements)
+        fixer.check_page(t, replacements, False, moved)
         for ref in refs:
             if ref.namespace() != 2 and ref.title() not in canon_template_refs:
-                result = fixer.check_page(ref, replacements, True)
+                result = fixer.check_page(ref, replacements, True, moved)
                 if result:
                     canon_template_refs.append(ref.title())
                 else:
                     print(ref.title())
 
-    # fixer.accept_all = False
+    fixer.accept_all = True
 
     for ref in references:
-        if ref.title() in moved:
-            ref = Page(site, moved[ref.title()])
-        result = fixer.check_page(ref, replacements)
+        if ref.title(with_ns=False) in moved:
+            ref = Page(site, ref.title().replace(ref.title(with_ns=False), moved[ref.title(with_ns=False)]))
+        result = fixer.check_page(ref, replacements, False, moved)
         if not result:
             print(f"{ref.title()}")
 
@@ -417,5 +563,7 @@ def main(*args):
 if __name__ == "__main__":
     try:
         main()
+    except QuitKeyboardInterrupt:
+        pass
     finally:
         pywikibot.stopme()

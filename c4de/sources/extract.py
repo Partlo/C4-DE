@@ -12,7 +12,8 @@ IGNORE_TEMPLATES = ["BookCite", "=", "Subtitles", "PAGENAME", "Planetnamia"]
 COLLAPSE = {
     "HighRepublicReaderGuide": "Star Wars: The High Republic: Chronological Reader's Guide",
     "GalaxyMapAppendix": "Star Systems of the Galaxy",
-    "TheStarWarsGalaxy": "The Star Wars Galaxy",
+    "GalaxyMapPoster": "Star Wars Galaxy Map (poster)",
+    "StarWarsGalaxyMap": "Star Wars Galaxy Map",
     "GalaxiesAED": "Star Wars Galaxies: An Empire Divided",
     "GalaxiesNGE": "Star Wars Galaxies",
     "FindtheForce": "Find the Force",
@@ -282,12 +283,13 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         if i.split('\\', 1)[0].lower() in s.lower():
             m = re.search("\{\{" + i + "\|([0-9]+)(\|(.*?))?(\|(.*?))?}}", s)
             mode = types.get(i, "General")
+            zx = re.sub("'*?(\{\{(?!FactFile)[A-z0-9]+\|[0-9]+\|.*?)(\|.*?(\{\{'s?}})?.*?)?}}'*?", "\\1}}", s)
             if m and m.group(3) and "|parent=" in m.group(0):
-                return Item(z, mode, a, target=k.replace("<x>", m.group(1)), template=i, issue=m.group(1), ref_magazine=True)
+                return Item(zx, mode, a, target=k.replace("<x>", m.group(1)), template=i, issue=m.group(1), ref_magazine=True)
             elif m and m.group(3):
-                return Item(z, mode, a, parent=k.replace("<x>", m.group(1)), template=i, issue=m.group(1), target=m.group(3), text=m.group(5), ref_magazine=True)
+                return Item(zx, mode, a, parent=k.replace("<x>", m.group(1)), template=i, issue=m.group(1), target=m.group(3), text=m.group(5), ref_magazine=True)
             elif m:
-                return Item(z, mode, a, parent=k.replace("<x>", m.group(1)), template=i, issue=m.group(1), text=m.group(2), collapsed=True, ref_magazine=True)
+                return Item(zx, mode, a, parent=k.replace("<x>", m.group(1)), template=i, issue=m.group(1), text=m.group(2), collapsed=True, ref_magazine=True)
 
     template = re_if(re.search('\{\{([^|\[}\n]+)[|}]', s), 1, '')
     if template and template[0].islower():
@@ -327,11 +329,11 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
             return Item(z, mode, a, target=None, parent=f"HoloNet News Vol. 531 {i}", template="HoloNetNewsAd",
                         url=m.group(1))
     elif template == "Holonet" or template == "HolonetOld":
-        m = re.search("\{\{Holonet\|(.*?\|.*?)\|(.*?)(\|.*?)?}}", s)
+        m = re.search("\{\{Holonet(Old)?\|(.*?\|.*?)\|(.*?)(\|.*?)?}}", s)
         if m:
             ux = "info/holonet" if template == "HolonetOld" else "holonet/"
-            return Item(z, mode, a, target=None, template=template, parent="Holonet", url=ux + m.group(1).replace("|", "/"),
-                        text=m.group(2))
+            return Item(z, mode, a, target=None, template=template, parent="Holonet", url=ux + m.group(2).replace("|", "/"),
+                        text=m.group(3))
     elif template == "CelebrationTrailer":
         m = re.search("\{\{CelebrationTrailer\|['\[]*(?P<m>.*?)(\|.*?)?['\]]*\|(?P<c>.*?)}}", s)
         if m:

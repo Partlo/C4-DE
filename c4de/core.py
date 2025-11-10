@@ -54,6 +54,7 @@ import logging
 # noinspection PyUnresolvedReferences
 logging.getLogger("discord").setLevel(logging.WARN)
 
+LISTS = ["List of ", "Timeline of ", "Bitizen", "Content cut from Star Wars", "Memorial to Star Wars creators", "Post-credits scenes of Star Wars", "Retroactive continuity", "Saturday Night Live", "Star Wars home video releases", "Star Wars multimedia projects", "Tuckerization"]
 
 SELF = 880096997217013801
 CADE = 346767878005194772
@@ -63,7 +64,7 @@ MAIN = "wookieepedia"
 COMMANDS = "other-commands"
 REQUESTS = "bot-requests"
 ANNOUNCEMENTS = "announcements"
-ADMIN_REQUESTS = "admin-requests"
+ADMIN_REQUESTS = "automated-reports"
 NOM_CHANNEL = "status-article-nominations"
 REVIEW_CHANNEL = "status-article-reviews"
 SOCIAL_MEDIA = "social-media-team"
@@ -82,8 +83,8 @@ BOARD_EMOTES = {"EduCorps": "EC", "AgriCorps": "AC", "Inquisitorius": "Inq"}
 REPOSTS = ["Ahsoka", "Skeleton Crew", "Obi-Wan Kenobi", "Rebels", "Resistance", "The Clone Wars", "The Bad Batch",
            "Tales of the Empire", "Tales of the Jedi", "The Book of Boba Fett", "Visions",
            "The Phantom Menace", "Attack of the Clones", "Revenge of the Sith", "A New Hope", "The Empire Strikes Back",
-           "Return of the Jedi", "The Force Awakens", "The Last Jedi", "The Rise of SKywalker",
-           "Rogue One", "Rogue One: A Story"]
+           "Return of the Jedi", "The Force Awakens", "The Last Jedi", "The Rise of Skywalker",
+           "Rogue One", "Rogue One: A Story", "LEGO Star Wars: Rebuild the Galaxy"]
 
 
 # noinspection PyPep8Naming
@@ -233,9 +234,10 @@ class C4DE_Bot(commands.Bot):
 
                 self.check_empty_usage_categories.start()
                 self.check_future_products.start()
-                # self.run_canon_legends_switch.start()
+                self.run_canon_legends_switch.start()
                 self.check_for_sources_rebuild.start()
                 self.load_isbns.start()
+                self.manage_archive.start()
                 self.check_edelweiss.start()
                 await self.build_sources()
                 self.check_index_requests.start()
@@ -290,6 +292,7 @@ class C4DE_Bot(commands.Bot):
 
     rss_commands = {
         "is_check_target_command": "handle_target_url_check",
+        "is_check_archive_command": "handle_check_archive_command",
         "is_archive_url_command": "handle_archive_url_command",
         "is_record_url_command": "handle_record_source_command",
     }
@@ -326,7 +329,7 @@ class C4DE_Bot(commands.Bot):
             u = re.search("/wiki/Wookieepedia:.*?_article_nominations/(.*?)(_\(.*?nomination\))?>", message.content)
             if u:
                 return {"user": m.group(1), "article": u.group(1)}
-        m = re.search("New review.*? requested for .*?(Featured|Good|Comprehensive) article: \[(.*?)\].*?$", message.content)
+        m = re.search("New review.*? requested for .*?(Featured|Good|Comprehensive) article: \[(.*?)([_ ]\(.*?review\))?\].*?$", message.content)
         if m:
             return {"user": None, "article": m.group(2)}
         return None
@@ -527,7 +530,7 @@ class C4DE_Bot(commands.Bot):
         related = [
             "**Additional Protocols:**",
             f"- Reports new Senate Hall and Administrator's Noticeboard threads, Consensus Track and Trash Compactor "
-            f"votes, file rename requests, and articles flagged for deletion to #announcements and #admin-requests. "
+            f"votes, file rename requests, and articles flagged for deletion to #announcements and #automated-reports. "
             f"(runs every 5 minutes)",
             f"- Checks the RSS feeds of a variety of sites, such as StarWars.com and SWTOR.com, and reports new "
             f"articles to #star-wars-news",
@@ -805,6 +808,26 @@ class C4DE_Bot(commands.Bot):
         subprocess.run(f"""cd C:/Users/cadec/Documents/projects/C4DE/robo & C:/Users/cadec/Envs/C4DE/Scripts/python switch_canon_legends.py""", shell=True)
 
     @staticmethod
+    def is_check_archive_command(message: Message):
+        return re.search("(check|manage|handle|store|retrieve) archive(date)s", message.content.lower())
+
+    async def handle_check_archive_command(self, message: Message, _):
+        self._manage_archive()
+        await message.add_reaction(THUMBS_UP)
+
+    @tasks.loop(minutes=60)
+    async def manage_archive(self):
+        now = datetime.now()
+        if not now.hour == 15:
+            return
+
+        self._manage_archive()
+
+    def _manage_archive(self):
+        log("Beginning archival cleanup")
+        subprocess.run(f"""C:/Users/cadec/Envs/C4DE/Scripts/python test_archive.py""", shell=True)
+
+    @staticmethod
     def is_single_preload_command(message: Message):
         return "preload for Template:" in message.content
 
@@ -985,6 +1008,8 @@ class C4DE_Bot(commands.Bot):
                 log(f"Skipping Source Engine processing of real-world article {a}")
                 return
 
+            # <:Sadme:979683950316384266> [New review](<https://starwars.fandom.com/wiki/Wookieepedia:Good_article_reviews/Moogan_Tea_(second_review)>) requested for **Good article: [Moogan Tea (second review)](<https://starwars.fandom.com/wiki/Moogan_Tea>)**
+
             rev_id = target.latest_revision_id
             old_text = target.get()
 
@@ -1025,6 +1050,11 @@ class C4DE_Bot(commands.Bot):
 
     async def handle_analyze_source_command(self, message: Message, command: dict):
         try:
+            if command['article'] in LISTS or command['article'].startswith("List of") or command['article'].startswith("Timeline of"):
+                await message.add_reaction(EXCLAMATION)
+                await message.channel.send(f"{command['article']} cannot be analyzed")
+                return
+
             target = Page(self.site, command['article'])
             if not target.exists():
                 await message.add_reaction(EXCLAMATION)
@@ -1270,12 +1300,14 @@ class C4DE_Bot(commands.Bot):
         archive_stagnant_senate_hall_threads(self.site, self.timezone_offset)
 
         r = requests.get("https://www.starwars.com/star-wars-galaxy-map")
-        current = "https://cdnvideo.dolimg.com/cdn_assets/ff2066584bf86e5376fdfc3b26f0479b8795c403.pdf"
+        # current = "https://cdnvideo.dolimg.com/cdn_assets/ff2066584bf86e5376fdfc3b26f0479b8795c403.pdf"
+        current = "https://cdnvideo.dolimg.com/cdn_assets/02834527f17e4165d39a069a88161e5e330cd883.pdf"
         current_image = "https://lumiere-a.akamaihd.net/v1/images/star_wars_galaxy_map_4000x4000_20250625_ccff9272.jpeg"
+        current_image = "https://lumiere-a.akamaihd.net/v1/images/star_wars_galaxy_map_4000x4000_20251009_3c4d0e08.jpeg"
         x = re.search("<a.*?href=\"(.*?)\".*?title=\"Appendix of Star Systems", r.text)
         if x and x.group(1) != current:
-            await self.text_channel(UPDATES).send(f"[New version of the Galaxy Map Appendix detected!]({x.group(1)}")
-            await self.text_channel("astrography").send(f"[New version of the Galaxy Map Appendix detected!]({x.group(1)}")
+            await self.text_channel(UPDATES).send(f"[New version of the Galaxy Map Appendix detected!]({x.group(1)})")
+            await self.text_channel("astrography").send(f"[New version of the Galaxy Map Appendix detected!]({x.group(1)})")
 
     @tasks.loop(hours=1)
     async def check_spoiler_templates_and_cleanup(self):
@@ -1296,13 +1328,13 @@ class C4DE_Bot(commands.Bot):
 
     def extract_tv_spoiler_data(self):
         data = re.findall("\| ([A-z]+) ([0-9]+[AB]?) = .*?\|([0-9]+-[0-9]+-[0-9]+)\|",
-                          Page(self.site, "Template:TVspoiler/data").get())
+                          Page(self.site, "Template:SpoilerTV/data").get())
         tv_dates = {}
         for s, n, d in data:
             if s not in tv_dates:
                 tv_dates[s] = {}
             tv_dates[s][n] = d
-        default_show = re.search("{{{show\|([a-z]+)}}}", Page(self.site, "Template:TVspoiler").get()).group(1)
+        default_show = re.search("{{{show\|([a-z]+)}}}", Page(self.site, "Template:SpoilerTV").get()).group(1)
         return tv_dates, default_show
 
     @tasks.loop(hours=1)
@@ -1582,8 +1614,8 @@ class C4DE_Bot(commands.Bot):
             for f in files:
                 try:
                     if f.title() not in self.files_to_be_renamed:
-                        x = re.search("\{\{FTBR\|.*\|(.*?)}}", f.get())
-                        new_name_text = f" to **{x.group(1)}**" if x else ""
+                        x = re.search("\{\{(FileRenameRequest|FTBR)\|.*\|(.*?)}}", f.get())
+                        new_name_text = f" to **{x.group(2)}**" if x else ""
                         m = f"⚠️ **{f.lastNonBotUser()}** requested [**{f.title()}**](<{f.full_url()}>) be renamed{new_name_text}\n"
                         msg = await self.text_channel(ADMIN_REQUESTS).send(m)
                         self.admin_messages[msg.id] = f.title()
@@ -1993,8 +2025,12 @@ class C4DE_Bot(commands.Bot):
 
         if youtube:
             t = f"New Video on the official {m['site']} YouTube channel"
-            x = re.search("\|.*?\|(Star Wars:? )?(,*?) ?&#124; ?(.*?) ?&#124; ?(Disney\+|Star Wars|@?Star ?Wars ?Kids) *}}", f)
-            if (x and x.group(2) in REPOSTS) or f.endswith("Full Episode") or " Full Episode " in f or ("Compilation" in f and "Kids" in m['site']):
+            x = re.search("\|.*?\|(Star Wars:? )?(.*?) ?&#124; ?(.*?) ?&#124; ?(Disney\+|Star Wars|@?Star ?Wars ?Kids) *}}", f)
+            skip = (x and x.group(2) in REPOSTS) or f.endswith("Full Episode") or " Full Episode " in f or "Compilation" in f
+            if not skip:
+                x = re.search("\|.*?\|.*? &#124; (Star Wars:? )?(Episode [IXV]+ ?-? ?)?(.*?)( \(Episode [IXV]+\))? ?&#124; ?(Disney\+|Star Wars|@?Star ?Wars ?Kids|Official Clip) *}}", f)
+                skip = (x and x.group(3) in REPOSTS) or f.endswith("Full Episode") or " Full Episode " in f or "Compilation" in f
+            if skip:
                 date = f"R: {date}"
                 t += " (Repost)"
         elif m["site"] == "Databank":

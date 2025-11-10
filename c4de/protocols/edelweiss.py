@@ -5,6 +5,7 @@ import json
 import re
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime, timedelta
+
 from pywikibot import Site, Page, Category, showDiff
 from get_chrome_driver import GetChromeDriver
 
@@ -13,6 +14,7 @@ from selenium.webdriver import Remote as WebDriver, Chrome, ChromeService, Firef
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.webdriver.common.by import By
+from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -33,7 +35,7 @@ def build_driver(headless=True, firefox=True):
         return Firefox(options=options, service=s)
     else:
         options = ChromeOptions()
-        s = ChromeService("C:/Users/cadec/Documents/Drivers/chromedriver.exe")
+        s = Chrome("C:/Users/cadec/Documents/Drivers/chromedriver.exe")
         if headless:
             options.add_argument("headless")
             options.add_argument("no-sandbox")
@@ -49,14 +51,14 @@ def build_driver(headless=True, firefox=True):
 
 
 def extract_isbns(title, text, data):
-    if re.search("\[\[Category:.*?authors[|\]]", text):
+    if re.search(r"\[\[Category:.*?authors[|\]]", text):
         return
     isbns = []
-    for i in re.findall("\n\|isbn=([- 0-9A-Z]+?)\n", text):
+    for i in re.findall(r"\n\|isbn=([- 0-9A-Z]+?)\n", text):
         x = i.replace("-", "").replace(" ", "").strip()
         if x:
             isbns.append(x)
-    for i in re.findall("\*{{ISBN\|([0-9]+)}}", text):
+    for i in re.findall(r"\*{{ISBN\|([0-9]+)}}", text):
         if i:
             isbns.append(i)
     if isbns:
@@ -111,154 +113,148 @@ def load_false_positives(site):
     return []
 
 
+def handle_entry(item: WebElement, sku_list, search_term):
+    body = item.find_element(By.CSS_SELECTOR, "div[class^='productRowBody']")
+    publisher_line = item.find_element(By.CSS_SELECTOR, "div[class^='itemHeader']")
+    publisher = re.sub(r"^[0-9]+ \([0-9]+\)\.? (.*?)$", "\\1", publisher_line.text.strip().splitlines()[0])
+    no_image = bool(body.find_elements(By.CSS_SELECTOR, "div[class^='noJacketImage']"))
+
+    info = body.find_element(By.CSS_SELECTOR, "div[class^='biblioOneAndTwo']")
+    if not info:
+        log("Error: cannot find biblio")
+        return None
+
+    data = info.find_elements(By.CSS_SELECTOR, "div.dotDot")
+    status, date, _ = re.split(r" ?\| ?", data[0].text, 2)
+    isbn, sku = data[1].text.split(",", 1)
+    fmt = data[2].text
+    if sku in sku_list:
+        return None
+    else:
+        sku_list.append(sku)
+
+    title_link = body.find_element(By.ID, "title-actions-button")
+    title = title_link.text
+    sn = title_link.find_elements(By.CSS_SELECTOR, "span[class^='subTitleName']")
+    subtitle = sn[0].text if sn else ""
+    if subtitle:
+        title = re.sub(r"^(.*?):$", "\\1", title.splitlines()[0].strip())
+
+    if search_term.lower() not in body.get_attribute("innerHTML").lower():
+        log(f"{search_term} not mentioned in {title}; skipping")
+        return None
+
+    print(title, no_image)
+
+    categories = ""
+    for c in info.find_element(By.TAG_NAME, "div").find_elements(By.TAG_NAME, "div"):
+        if "BISAC" in c.text:
+            categories = c.text.replace("BISAC: ", "")
+            break
+
+    if "CANCELED" in status or "CANCELLED" in status:
+        print(f"Skipping canceled product: {title}")
+        return None
+    elif "BACKLIST" in status:
+        return None
+    elif "Thomas Kinkade Studios" in title:
+        return None
+    elif "Non-Classifiable" in categories:
+        return None
+
+    return {
+        "title": title.replace("[", "(").replace("]", ")"),
+        "subTitle": subtitle,
+        "publicationDate": date.strip(),
+        "hasImage": not no_image,
+        "isbn": isbn.strip(),
+        "sku": sku.strip(),
+        "status": status,
+        "publisher": publisher,
+        "format": fmt,
+        "categories": categories
+    }
+
+
 def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[str]) -> List[dict]:
     """ Loads the product listings from the Edelweiss website, using Selenium to traverse and parse the webpage. """
 
     driver.get(f"https://www.edelweiss.plus/#keywordSearch&q={search_term.replace(' ', '+')}")
-    time.sleep(30)
+    time.sleep(15)
 
     try:
         # wait for "Not Yet Published" button
         log("Waiting for Not Yet Published button")
 
-        buttons = driver.find_elements(By.ID, "f_4_2")
-        if not buttons:
-            chevron = driver.find_elements(By.CLASS_NAME, "leftNavLeftArrow")
-            if chevron:
-                chevron[0].click()
-
-        WebDriverWait(driver, 30).until(EC.visibility_of_element_located((By.ID, "f_4_2")))
-        button = driver.find_element(By.ID, "f_4_2")
-        # driver.execute_script("arguments[0].scrollIntoView()", button)
+        WebDriverWait(driver, 30).until(EC.visibility_of_element_located((By.CLASS_NAME, "ListView__filterButton")))
+        button = driver.find_element(By.CLASS_NAME, "ListView__filterButton")
         try:
             button.click()
         except WebDriverException:
             driver.execute_script("arguments[0].scrollIntoView()", button)
             button.click()
 
-        if not driver.find_elements(By.CSS_SELECTOR, "#f_4_2.box_checked"):
-            button = driver.find_element(By.ID, "f_4_2")
-            # driver.execute_script("arguments[0].scrollIntoView()", button)
-            try:
-                button.click()
-            except WebDriverException:
-                driver.execute_script("arguments[0].scrollIntoView()", button)
-                button.click()
+        WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.ID, "filterDrawerId")))
+        WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.CLASS_NAME, "MuiListItem-root")))
+
+        found = None
+        for x in driver.find_elements(By.CLASS_NAME, "MuiListItem-root"):
+            b = x.find_element(By.CSS_SELECTOR, "button.MuiButtonBase-root")
+            if b and b.text == "Publishing Status":
+                found = x
+                b.click()
+                time.sleep(1)
+                for s in x.find_elements(By.CSS_SELECTOR, "span.MuiFormControlLabel-label"):
+                    if "Forthcoming" in s.text:
+                        s.click()
+
+        if not found:
+            raise Exception
+
+        close = driver.find_element(By.CSS_SELECTOR, "#filterDrawerId button[aria-label='Close Modal']")
+        try:
+            close.click()
+        except WebDriverException:
+            driver.execute_script("arguments[0].scrollIntoView()", button)
+            close.click()
+
     except Exception as e:
         print(f"Encountered {type(e)} while looking for Not Yet Published button")
 
+    time.sleep(3)
     log("Waiting for results")
     try:
-        WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.ID, "totalResults")))
+        WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.CSS_SELECTOR, "div[class^='listViewItemsCount']")))
     except Exception:
         driver.get(f"https://www.edelweiss.plus/#keywordSearch&q={search_term.replace(' ', '+')}")
-        WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.ID, "totalResults")))
+        WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.CSS_SELECTOR, "div[class^='listViewItemsCount']")))
 
-    x = driver.find_elements(By.ID, "results")
+    x = driver.find_elements(By.CSS_SELECTOR, "div[class^='listViewItemsCount']")
     if not x:
-        x = driver.find_elements(By.ID, "totalResults")
-    total = x[0].text.replace("of", "").strip()
+        x = driver.find_elements(By.CSS_SELECTOR, "div[class^='listViewItemsCount']")
+    total = re.sub("^.*?filtered to ([0-9]+).*?$", "\\1", x[0].text.replace("\n", ""))
     total = int(total) if total else 500
-
-    chevron = driver.find_elements(By.CLASS_NAME, "leftNavLeftArrow")
-    if chevron:
-        chevron[0].click()
 
     i, j = 0, 1
     results = []
     while i < total:
         log(f"Processing page {j}")
-        # toggle = driver.find_elements(By.CSS_SELECTOR, ".visibility-toggle-anchor.visible")
-        # if toggle:
-        #     toggle[0].click()
-        # time.sleep(5)
 
-        # WebDriverWait(driver, 30).until(EC.visibility_of_element_located((By.CLASS_NAME, "ltRow")))
-
-        container_ids = [c.get_attribute('id') for c in driver.find_elements(By.CLASS_NAME, "tempListContainer")]
-        for cid in container_ids:
-            k = 0
-            num_items = len(driver.find_elements(By.XPATH, f".//div[@id='{cid}']//div[@class='ltRow']"))
-            while k < num_items:
-                try:
-                    k += 1
-                    item = driver.find_element(By.XPATH, f".//div[@id='{cid}']//div[contains(@class, 'ltRow')][{k}]")
-                    title_type = item.find_elements(By.CLASS_NAME, "pve_titletype")
-                    if title_type and "BACKLIST" in title_type[0].get_attribute("innerHTML"):
-                        continue
-
-                    isbn, sku = item.find_element(By.CSS_SELECTOR, ".pve_sku").text.split(",", 1)
-                    if sku in sku_list:
-                        continue
-                    else:
-                        sku_list.append(sku)
-                    title = item.find_element(By.CSS_SELECTOR, ".pve_title span.textLarge").text
-                    if search_term.lower() not in item.get_attribute("innerHTML").lower():
-                        log(f"{search_term} not mentioned in {title}; skipping")
-                        continue
-
-                    date = item.find_elements(By.CSS_SELECTOR, ".pve_shipDate span")
-                    if not date:
-                        date = item.find_elements(By.CSS_SELECTOR, ".pve_shipDate")
-                    if not date:
-                        log(f"Cannot find shipping date for {title}")
-                        continue
-                    publication_date = date[0].get_attribute("innerHTML").replace("On Sale Date:", "").replace("Ship Date:","").strip()
-                    if "<br>" in publication_date:
-                        possible, parts = [], []
-                        for p in publication_date.split("<br>"):
-                            if p.strip():
-                                if " 201" in p.strip() or " 202" in p.strip() or " 203" in p.strip():
-                                    possible.append(p)
-                                parts.append(p.strip())
-                        if possible or parts:
-                            publication_date = possible[0] if possible else parts[0]
-                        else:
-                            publication_date = publication_date.replace("<br>", "").strip()
-
-                    fmt = item.find_elements(By.CLASS_NAME, "pve_format")
-                    sub_names = item.find_elements(By.CLASS_NAME, "pve_subName")
-                    page_fields = item.find_elements(By.CLASS_NAME, "pve_numberOfPages")
-                    status = item.find_elements(By.CLASS_NAME, "publishing-status-02")
-                    status = status or item.find_elements(By.CLASS_NAME, "publishing-status-03")
-                    item = driver.find_element(By.XPATH, f".//div[@id='{cid}']//div[contains(@class, 'ltRow')][{k}]")
-                    imprint = item.find_element(By.CLASS_NAME, "headerImprint").text
-                    no_image = bool(item.find_elements(By.CLASS_NAME, "noThumbImageScroll"))
-                    categories = [c.text for c in item.find_elements(By.CSS_SELECTOR, ".pve_categories ul.categories li")]
-                    contents = [c.text for c in item.find_elements(By.CLASS_NAME, "expandContent")]
-
-                    if any("CANCELED" in s.text or "CANCELLED" in s.text for s in sub_names):
-                        print(f"Skipping canceled product: {title}")
-                        continue
-                    elif "Thomas Kinkade Studios" in title:
-                        continue
-                    elif "Non-Classifiable" in categories:
-                        continue
-
-                    results.append({
-                        "title": title.replace("[", "(").replace("]", ")"),
-                        "subTitle": sub_names[0].text if sub_names else "",
-                        "publicationDate": publication_date,
-                        "author": item.find_element(By.CSS_SELECTOR, ".title_Author").text,
-                        "hasImage": not no_image,
-                        "isbn": isbn.strip(),
-                        "sku": sku.strip(),
-                        "status": status[0].text if status else "",
-                        "publisher": imprint.split(".")[-1].strip(),
-                        "format": fmt[0].text if fmt else "",
-                        "collecting": any("collecting:" in c.lower() for c in contents),
-                        "categories": categories,
-                        "pageCount": page_fields[0].text if page_fields else ""
-                    })
-                except Exception as e:
-                    error_log(type(e), e.args)
+        for item in driver.find_elements(By.CSS_SELECTOR, "div[class^='productRow_']"):
+            try:
+                ix = handle_entry(item, sku_list, search_term)
+                if ix:
+                    results.append(ix)
+            except Exception as e:
+                error_log(type(e), e.args)
 
         i += 50
         j += 1
-        page_buttons = driver.find_elements(By.ID, f"pageOption{j}")
-        if page_buttons:
-            page_buttons[0].click()
-            time.sleep(3)
+        buttons = driver.find_elements(By.CSS_SELECTOR, "button.MuiButton-root.MuiButton-contained")
+        for b in buttons:
+            if b.text.lower() == "next page":
+                b.click()
+                time.sleep(3)
 
     return results
 
@@ -302,7 +298,7 @@ def determine_page(site: Site, title: str, item: dict, pages_by_isbn: Dict[str, 
         if page:
             return page, False
 
-    m = re.search("(.*?): Star Wars Legends( \((.*?)\))?$", title)
+    m = re.search(r"(.*?): Star Wars Legends( \((.*?)\))?$", title)
     if m:
         titles = [f"{m.group(3)}: {m.group(1)}", m.group(1)]
         if subtitle:
@@ -313,10 +309,10 @@ def determine_page(site: Site, title: str, item: dict, pages_by_isbn: Dict[str, 
                 return page, False
         return None, False
 
-    m = re.search("Star Wars: (.*?) \((.*?)\)", title.replace("World of Reading: ", ""))
+    m = re.search(r"Star Wars: (.*?) \((.*?)\)", title.replace("World of Reading: ", ""))
     if m:
         titles = [f"{m.group(2)}: {m.group(1)}", f"Star Wars: {m.group(2)}: {m.group(1)}"]
-        if re.search(".*?: .*?", m.group(1)):
+        if re.search(r".*?: .*?", m.group(1)):
             titles.append(m.group(1))
         if subtitle:
             titles += [f"{m.group(2)}: {m.group(1)}: {subtitle}", f"{m.group(2)}: {m.group(1)} — {subtitle}"]
@@ -367,8 +363,6 @@ def analyze_products(site, products: List[dict], search_terms):
             page, by_isbn = determine_page(site, item["title"], item, pages_by_isbn)
             if not item["hasImage"]:
                 new_missing_images.append(item["sku"])
-            elif item["title"] == "Star Wars Encyclopedia" and not item["hasImage"]:
-                continue
 
             if not page and any(s.lower() in item["title"].lower() for s in false_positives):
                 continue
@@ -376,7 +370,7 @@ def analyze_products(site, products: List[dict], search_terms):
                 results["newItems"].append((item['sku'], f"(Potential False Positive): {item['title']} - {url}{archive_sku(item['sku'])}"))
                 continue
             elif not (page and page.exists()):
-                if item["collecting"]:
+                if any("Graphic Novels" in c for c in item["categories"]):
                     results["newTPBs"].append((item['sku'], f"{item['title']} - {url}"))
                 else:
                     title = prepare_title(item['title'])
@@ -396,13 +390,13 @@ def analyze_products(site, products: List[dict], search_terms):
             page_url = page.full_url().replace(" ", "_")
             text = page.get()
             date_strs = []
-            m = re.search("\|(publish date|publication date|release date|released|published)=(.*?)(<.*?)?\n(\*(.*?)(<.*?)?\n)*", text)
+            m = re.search(r"\|(publish date|publication date|release date|released|published)=(.*?)(<.*?)?\n(\*(.*?)(<.*?)?\n)*", text)
             if m:
-                date1 = re.sub("\([A-Z]+\)", "", m.group(2).replace("[", "").replace("]", "").replace("*", "").replace(" ,", ",").strip())
-                date_strs.append(re.sub("([A-z]+ [0-9]+) ([0-9]+)", "\\1, \\2", date1))
+                date1 = re.sub(r"\([A-Z]+\)", "", m.group(2).replace("[", "").replace("]", "").replace("*", "").replace(" ,", ",").strip())
+                date_strs.append(re.sub(r"([A-z]+ [0-9]+) ([0-9]+)", "\\1, \\2", date1))
                 if m.group(5):
                     date2 = m.group(5).replace("[", "").replace("]", "").replace("*", "").strip()
-                    date_strs.append(re.sub("([A-z]+ [0-9]+) ([0-9]+)", "\\1, \\2", date2))
+                    date_strs.append(re.sub(r"([A-z]+ [0-9]+) ([0-9]+)", "\\1, \\2", date2))
 
             if "isbn=none" in text:
                 print(f"Saving new ISBN {item['isbn']} for {page.title()}")
@@ -433,7 +427,7 @@ def analyze_products(site, products: List[dict], search_terms):
 
             page_dates = []
             for d in date_strs:
-                c = re.sub("\([A-Z]+\)", "", d.split("{{C|")[0].strip()).replace(",", "")
+                c = re.sub(r"\([A-Z]+\)", "", d.split("{{C|")[0].strip()).replace(",", "")
                 if c:
                     try:
                         page_dates.append(datetime.strptime(c, "%B %d %Y"))
@@ -442,7 +436,7 @@ def analyze_products(site, products: List[dict], search_terms):
                             page_dates.append(datetime.strptime(c.replace(',', ''), "%B %Y"))
                         except Exception as e2:
                             print(e2)
-            item_date = datetime.strptime(item["publicationDate"], "%B %d, %Y")
+            item_date = datetime.strptime(item["publicationDate"], "%b %d, %Y")
 
             past = any([d < datetime.now() for d in page_dates])
             if item["sku"] in missing_images and item["hasImage"]:
@@ -475,7 +469,7 @@ def analyze_products(site, products: List[dict], search_terms):
 
 
 def different_isbn_and_already_listed(text, isbn):
-    infobox = re.search("\|isbn=([0-9X-]+)", text)
+    infobox = re.search(r"\|isbn=([0-9X-]+)", text)
     if infobox and infobox.group(1) and infobox.group(1) != isbn:
         s = "{{ISBN|" + isbn + "}}"
         return s in text and text.count("{{ISBN|") > 1
@@ -487,7 +481,7 @@ def run_edelweiss_protocol(site, cache, scheduled=False):
     sku_list = []
     products = []
     for term in search_terms:
-        driver = build_driver(headless=True, firefox=True)
+        driver = build_driver(headless=False, firefox=True)
         try:
             products += extract_items_from_edelweiss(driver, term, sku_list)
         except ElementNotInteractableException as e:
@@ -560,16 +554,16 @@ def save_reprint(site, title, entries: List[dict]):
         text = page.get()
         if "==Editions==" in text:
             i_header, international = "", ""
-            before, split1, after = re.split("(=+Editions=+\n)", text)
-            if re.search("=+[A-z]* ?[Gg]allery=+", after):
-                section, split2, after = re.split("(\n=+[A-z]* ?gallery=+)", after, 1)
-            elif re.search("\n==[A-Z]", after):
-                section, split2, after = re.split("(\n==[A-z].*?==)", after, 1)
+            before, split1, after = re.split(r"(=+Editions=+\n)", text)
+            if re.search(r"=+[A-z]* ?[Gg]allery=+", after):
+                section, split2, after = re.split(r"(\n=+[A-z]* ?gallery=+)", after, 1)
+            elif re.search(r"\n==[A-Z]", after):
+                section, split2, after = re.split(r"(\n==[A-z].*?==)", after, 1)
             else:
                 return f"- Cannot add {len(entries)} new reprints to {page.title()} due to malformed Editions section"
 
             if "===" in section:
-                section, i_header, international = re.split("(\n=+.*?=+)", section, 1)
+                section, i_header, international = re.split(r"(\n=+.*?=+)", section, 1)
 
             lines = [section.rstrip()]
             build_editions(lines, entries)
@@ -577,8 +571,8 @@ def save_reprint(site, title, entries: List[dict]):
             new_text = "".join([before, split1, "\n".join(lines), i_header, international, split2, after])
             page.put(new_text, f"Adding {len(entries)} new reprints to Editions", botflag=False)
 
-        elif re.search("=+[A-z]* ?[Gg]allery=+", text):
-            before, split, after = re.split("(=+[A-z]* ?[Gg]allery=+\n)", text, 1)
+        elif re.search(r"=+[A-z]* ?[Gg]allery=+", text):
+            before, split, after = re.split(r"(=+[A-z]* ?[Gg]allery=+\n)", text, 1)
             lines = []
             if "==Media==" in before:
                 pass
@@ -588,8 +582,8 @@ def save_reprint(site, title, entries: List[dict]):
             new_text = "".join([before, "\n".join(lines), after])
             page.put(new_text, f"Creating Editions section and adding {len(entries)} new reprints", botflag=False)
 
-        elif re.search("=+Appearances=+", text):
-            before, split, after = re.split("(=+Appearances=+)", text, 1)
+        elif re.search(r"=+Appearances=+", text):
+            before, split, after = re.split(r"(=+Appearances=+)", text, 1)
             lines = []
             if "==Media==" in before:
                 pass
@@ -617,11 +611,11 @@ def build_editions(lines: list, entries: list):
 def build_new_media_section(text, lines: list, entries: list):
     lines.append("==Media==")
     lines.append("===Editions===")
-    d = re.search("\|release date ?= ?\*?([\[\]A-Za-z, 0-9/]+)", text)
+    d = re.search(r"\|release date ?= ?\*?([\[\]A-Za-z, 0-9/]+)", text)
     date = ("; " + d.group(1)) if d else ""
-    p = re.search("\|publisher ?= ?\*?([\[\]A-Za-z., 0-9/]+)", text)
+    p = re.search(r"\|publisher ?= ?\*?([\[\]A-Za-z., 0-9/]+)", text)
     pub = ("; " + p.group(1)) if p else ""
-    for i in re.findall("\|isbn[23]? ?= ?([0-9-]+)", text):
+    for i in re.findall(r"\|isbn[23]? ?= ?([0-9-]+)", text):
         lines.append(f"\n*{{{{ISBN|{i}}}}}{date}{pub}")
 
     build_editions(lines, entries)

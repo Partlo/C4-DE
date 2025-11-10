@@ -206,7 +206,7 @@ def build_to_check(site, data):
             tx = Page(site, f"Template:{t}").get()
             if "ToyCitation" in tx:
                 x = re.search("\|baseUrl=(.*?)\n", tx)
-                y = re.search("\|link=(.*?[^\]])\n", tx)
+                y = re.search("\|link=(.*?[^]])\n", tx)
                 z = re.search("\|url=(.*?)\n", tx)
                 for k, v in urls.items():
                     if not (v and v.get('value')):
@@ -220,9 +220,7 @@ def build_to_check(site, data):
 
                         for px in set(re.findall("\{\{\{(.*?)(?=[|}])", ux)):
                             ux = handle_parameters(ux, v['full'], px)
-                            print(ux, px)
                         new_url = handle_if_statement(ux)
-                        print(k, new_url)
                         to_check[t][k] = new_url
             else:
                 y = re.search("\|base_url=(.*?)\n", tx)
@@ -366,8 +364,7 @@ def clean_archive_usages(page: Page, text, archive_data: dict, redo=False):
     chunks = text.split("</ref>")
     for t in templates_to_check:
         tx = "SWYouTube" if t in ["ThisWeek", "HighRepublicShow", "StarWarsShow"] else t
-        tx = "Topps" if t in ["ToppsNow", "ToppsLivingSet", "ForceAttax"] else t
-        tx = "Blogspot" if tx == "DailyswCite" else tx
+        tx = "Topps" if tx in ["ToppsNow", "ToppsLivingSet", "ForceAttax"] else tx
         if tx not in archive_data:
             archive_data[tx] = parse_archive(page.site, tx)
         archive = archive_data.get(tx) or {}

@@ -479,6 +479,8 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
             else:
                 print(f"Unable to expand series/arc listing of {d.master.target} on {page.title()}")
                 unexpanded += 1
+                if d and d.master.target and d.master.target in EXPANSION:
+                    continue
 
         if d and (o.is_card_or_mini() or o.template == FC):
             d.fix_fc_date(canon)
@@ -506,8 +508,10 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
             found.append(d)
         elif d and name == "Appearances" and d.master.master_page == "Appearances/Collections" and d.master.has_content:
             wrong.append(d)
+        elif d and d.master.unlicensed and name.startswith("Non-canon"):
+            (found if d.master.non_canon else non_canon).append(d)
         elif d and d.master.unlicensed:
-            found.append(d)
+            (non_canon if d.master.non_canon else found).append(d)
         elif d and d.from_other_data and "databank" not in (o.extra or '').lower() \
                 and d.current.template not in DO_NOT_MOVE and d.current.target not in DO_NOT_MOVE \
                 and not real and (d.master.is_reprint or not d.master.from_extra):
@@ -1004,6 +1008,8 @@ def build_card_block(o: ItemId, d: str, section: SectionItemIds, sl: str, final_
             ot = c.master.original
         if (o.master.mode == "Minis" or "mission=" in o.master.original) and o.master.card:
             ot = re.sub("\|link=.*?(\|.*?)?}}", "\\1}}", ot)
+        elif c.master.ref_magazine:
+            ot = re.sub("(\{\{(?!FactFile)[A-z0-9]+\|[0-9]+\|.*?)(\|.*?(\{\{'s?}})?.*?)?}}", "\\1}}", ot)
         if ot not in final_without_extra:
             items.append((c, ot))
             final_without_extra.append(ot)
@@ -1103,7 +1109,6 @@ def build_item_text(o: ItemId, d: str, sl: str, final_without_extra: list, final
         d = ""
     else:
         d += build_flags(o, sl, section_name, is_file)
-
     zn = f"{d}{zt}" if is_file else f"*{d}{zt}"
     if zn.startswith("**"):
         zn = zn[1:]

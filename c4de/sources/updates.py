@@ -115,10 +115,10 @@ def get_future_products_list(site: Site, infoboxes=None):
 
     now = datetime.now()
     start = MONTHS.get(now.month, str(now.month))
-    for c in cat.subcategories():
+    for c in cat.subcategories(recurse=True):
         if "trade paperbacks" in c.title():
             continue
-        for page in c.articles(startprefix=start if c.title(with_ns=False) == f"{now.year} releases" else None):
+        for page in c.articles(startprefix=start if c.title(with_ns=False).startswith(f"{now.year} ") else None):
             if page.title().startswith("List of") or page.title().startswith("Timeline of"):
                 continue
             elif page.title() in unique:
@@ -159,18 +159,18 @@ def parse_page(p: Page, types):
 
 def parse_line(line, i, p: Page, types, full, unique, target):
     if line and not line.startswith("==") and "/Header}}" not in line:
-        z = re.search("[*#](.*?): (D: )?(.*?)$", line)
+        z = re.search(r"[*#](.*?): (D: )?(.*?)$", line)
         if z:
             date = z.group(1)
             item = z.group(3)
             c = ''
             if "{{C|" in item:
-                cr = re.search("({{C\|([Nn]on-canon|[Rr]epublished|[Uu]nlicensed)}})", item)
+                cr = re.search(r"({{C\|([Nn]on-canon|[Rr]epublished|[Uu]nlicensed)}})", item)
                 if cr:
                     c = ' ' + cr.group(1)
                     item = item.replace(cr.group(1), '').strip()
             ab = ''
-            x2 = re.search("\{\{[Aa]b\|.*?}}", item)
+            x2 = re.search(r"\{\{[Aa]b\|.*?}}", item)
             if x2:
                 ab = x2.group(0)
                 item = item.replace(ab, '').strip()
@@ -178,7 +178,7 @@ def parse_line(line, i, p: Page, types, full, unique, target):
             parenthetical = ''
             original_item = f"{item}"
             if "|p=" in item:
-                pr = re.search("\|p=(.*?)(\|.*?)?}}", item)
+                pr = re.search(r"\|p=(.*?)(\|.*?)?}}", item)
                 if pr:
                     parenthetical = pr.group(1)
                     item = item.replace(f"|p={parenthetical}", "").strip()
@@ -506,7 +506,7 @@ def build_final_new_items(new_items: List[FutureProduct], audiobooks: List[str])
         if i.infobox in ["ShortStory", "MagazineArticle", "MagazineDepartment"]:
             t = f'"[[{i.page.title()}]]"'
             pt = i.page.get()
-            x = re.search("\|published in=.*?\[\[(.*?)(\|.*?)?]]", pt)
+            x = re.search(r"\|published in=.*?\[\[(.*?)(\|.*?)?]]", pt)
             if x and x.group(1) and "Star Wars Insider" in x.group(1):
                 mi = x.group(1).split("Insider")[-1].strip()
                 if mi.isnumeric():
@@ -519,12 +519,12 @@ def build_final_new_items(new_items: List[FutureProduct], audiobooks: List[str])
                 t = f"{{{{StoryCite|book={x.group(1)}|story={i.page.title()}}}}}"
         else:
             t = f"''[[{i.page.title()}]]''"
-            t = re.sub("''\[\[((.*?) \((trade paperback|(u?n?abridged )?audiobook)\))]]''", "[[\\1|''\\2'' \\3]]", t)
-            t = re.sub("''\[\[((.*?) (\([0-9]+\)) ([0-9]+))]]''", "[[\\1|''\\2'' \\3 \\4]]", t)
-            t = re.sub("''\[\[(([^|\](]*?) \(.*?\)( [0-9]+)?)]]''", "[[\\1|''\\2''\\3]]", t)
-            t = re.sub("''\[\[(.*?)\|(((?!'').)*?) ([0-9]+)]]''", "[[\\1|''\\2'' \\3]]", t)
-            t = re.sub("''\[\[([^|\]]+?) ([0-9]+)]]''", "[[\\1 \\2|''\\1'' \\2]]", t)
-            t = re.sub("\[\[(.*? Vol[.a-z]*?) ([0-9]+)\|''\\1'' \\2]]", "''[[\\1 \\2]]''", t)
+            t = re.sub(r"''\[\[((.*?) \((trade paperback|(u?n?abridged )?audiobook)\))]]''", "[[\\1|''\\2'' \\3]]", t)
+            t = re.sub(r"''\[\[((.*?) (\([0-9]+\)) ([0-9]+))]]''", "[[\\1|''\\2'' \\3 \\4]]", t)
+            t = re.sub(r"''\[\[(([^|\](]*?) \(.*?\)( [0-9]+)?)]]''", "[[\\1|''\\2''\\3]]", t)
+            t = re.sub(r"''\[\[(.*?)\|(((?!'').)*?) ([0-9]+)]]''", "[[\\1|''\\2'' \\3]]", t)
+            t = re.sub(r"''\[\[([^|\]]+?) ([0-9]+)]]''", "[[\\1 \\2|''\\1'' \\2]]", t)
+            t = re.sub(r"\[\[(.*? Vol[.a-z]*?) ([0-9]+)\|''\\1'' \\2]]", "''[[\\1 \\2]]''", t)
             if "[[Untitled" in t and t.startswith("''"):
                 t = t[2:-2]
 
@@ -533,6 +533,7 @@ def build_final_new_items(new_items: List[FutureProduct], audiobooks: List[str])
                 if a.startswith(f"{x} ("):
                     t = f"{t} {{{{Ab|{a}}}}}"
                     break
+            t = re.sub(r"(\{\{Reprint\|.*?}}) (\{\{Ab\|.*?}})$", "\\2 \\1", t)
 
         d = build_date(i.dates)
         final.append([t, prep_date(d), 100, fix_numbers(t), False])
@@ -569,6 +570,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
                 if a.startswith(f"{x} ("):
                     z = f"{z} {{{{Ab|{a}}}}}"
                     break
+            z = re.sub(r"(\{\{Reprint\|.*?}}) (\{\{Ab\|.*?}})$", "\\2 \\1", z)
         final.append([z, prep_date(d), i.index, fix_numbers(z), False])
 
     start_date = DATES.get(page.title())

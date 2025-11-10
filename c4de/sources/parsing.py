@@ -7,7 +7,7 @@ from pywikibot import Page
 from typing import List, Tuple, Union, Dict, Optional, Set
 
 from c4de.common import build_redirects, fix_redirects, fix_disambigs, prepare_title
-from c4de.sources.cleanup import initial_cleanup, PAGE_NUMBER_REGEX
+from c4de.sources.cleanup import initial_cleanup, PAGE_NUMBER_REGEX, EXTRA
 from c4de.sources.determine import determine_id_for_item
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, SectionComponents, SectionLeaf
 from c4de.sources.external import prepare_basic_url
@@ -613,9 +613,7 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
         z = z.replace(ab, "").replace("  ", " ").strip()
 
     if not extra:
-        x1 = re.search(
-            '( ?(<ref.*?>)?(<small>)? ?\{+ ?(1st[A-z]*|V?[A-z][od]|[Ff]act|[Bb]ts[Oo]nly|DLC|[Ll]n|[Cc]rp|[Uu]n|[Nn]cm?|[Cc]|[Aa]mbig|[Cc]osmetic|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Uu]nborn|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Nn]cs?|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene|[Cc]rawl) ?[|}].*?$)',
-            z)
+        x1 = re.search('( ?(<ref.*?>)?(<small>)? ?' + EXTRA + '.*?$)', z)
         extra = x1.group(1) if x1 else ''
         if extra:
             z = z.replace(extra, '').strip()
@@ -755,6 +753,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
     try:
         new_ref = re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", ref).replace("{{PageNumber}} ", "").replace("{{UnlinkedRef}} ", "")
         new_ref = re.sub("\|set=(.*?) \(.*?\)\|(sformatt?e?d?|stext)=.*?\|", "|set=\\1|", new_ref)
+        new_ref = new_ref.replace(" {{Un}}", "")
         page_num = ""
         # if not media:
         #     if new_ref.count('[') == 0 and new_ref.count("]") == 0 and new_ref.count("{") == 0:
@@ -850,7 +849,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
             if ni.master.is_card_or_mini():
                 z = build_card_text(ni, ni, replace_parent=page.title() != ni.master.target)
             elif ni.master.ref_magazine:
-                z = re.sub("(\{\{(?!FactFile)[A-z0-9]+\|[0-9]+\|.*?)(\|.*?(\{\{'s?}})?.*?)?}}", "\\1}}", ni.master.original)
+                z = re.sub("'*?(\{\{(?!FactFile)[A-z0-9]+\|[0-9]+\|.*?)(\|.*?(\{\{'s?}})?.*?)?}}'*?", "\\1}}", ni.master.original)
             else:
                 z = swap_parameters(ni.master.original)
             z = z.replace(f"|int={page.title()}|", "|").replace(f"|int={page.title()}" + "}", "}")

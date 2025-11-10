@@ -237,3 +237,5 @@
 **Various bug fixes/tweaks
 *'''4.6.3''': July 29, 2025
 **Various bug fixes/tweaks from the sweep
+*'''4.6.4''': November 9, 2025
+**Variety of minor fixes

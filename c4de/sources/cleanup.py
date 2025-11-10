@@ -13,6 +13,7 @@ REPLACEMENTS = [
     ("==Work==", "==Works=="), ("Apearance", "Appearance"), ("Appearence", "Appearance"), ("&#40;&#63;&#41;", "(?)"),
     ("{{mO}}", "{{Mo}}"), ("*{{Indexpage", "{{Indexpage"), ("<br>", "<br />"), ("{{InvalidCategory}}", ""),
     ("Youtube", "YouTube"), ("{{Scrollbox", "{{ScrollBox"), ("referneces", "references"), ("{{MO}}", "{{Mo}}"),
+    ("{{C|variant cover only}}", "{{Vco}}"), ("{{C|Variant cover only}}", "{{Vco}}"),
     ("{{scrollbox", "{{ScrollBox"), ("</reF>", "</ref>"), ("\n</ref>", "</ref>"), ("†", "&dagger:"),
     ("{{Visions|focus=1", "{{VisionsFocus"), ("{{Visions|focus=4", "{{VisionsFocus"), ("{{Visions|focus=8", "{{VisionsFocus"),
     ("[[:category:", "[[:Category:"), ("[[category:", "[[Category:"), ("[[Image:", "[[File:"),
@@ -36,6 +37,9 @@ REPLACEMENTS = [
     ("{{SideshowCite|set=Sixth Scale Figures|pack=The Mandalorian and the Child (Deluxe)|link=collectibles/star-wars-the-mandalorian-and-the-child-hot-toys-906135?var=905873}}",
      "{{HotToysCite|set=Television Masterpiece Series|packtype=Sixth Scale Figure|pack=#015: The Mandalorian and the Child (Deluxe)|link=collectibles/star-wars-the-mandalorian-and-the-child-hot-toys-906135}}"),
 ]
+
+
+EXTRA = "\{+ ?(1st[A-z]*|[Cc]|V?[A-z][od]|[Ff]act|[Bb]ts[Oo]nly|DLC|[Ll]n|[Cc]rp|[Uu]n|[Nn]c[ms]?|[Aa]mbig|[Mm]ap[Pp]oint|[Cc]osmetic|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Uu]nborn|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene|[Cc]rawl) ?[|}]"
 
 
 def clean_references(before):
@@ -71,9 +75,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
 
     # print(f"retrieval: {(datetime.now() - now).microseconds / 1000} microseconds")
     if "]]{{" in before or "}}{{" in before:
-        before = re.sub(
-            "(]]|}})(\{+ ?(1st[A-z]*|[A-z][od]|[Ll]n|[Uu]n\|[Nn]cm?|[Cc]|[Aa]mbig|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Nn]cs?|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene) ?[|}])",
-            "\\1 \\2", before)
+        before = re.sub("(]]|}})(" + EXTRA + ")","\\1 \\2", before)
 
     # Handle title parameters in Template:Top
     x, _, y = target.title().replace("/Legends", "").replace("/Canon", "").partition(" (")
@@ -110,6 +112,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     before = re.sub("(?<!\{)(\{[^\n{}]+}})(?!})", "{\\1", before)
     before = re.sub("(\{\{1st[A-z]*)\|\n}}", "\\1}}", before)
     before = re.sub("(\{\{1st[A-z]*\|[^|}\n]*?)\n}}", "\\1}}", before)
+    before = re.sub("(\{\{[A-z0-9-]+[^{}\n]+?) *\n *}}", "\\1}}", before)
 
     # fixing same-line infobox fields
     while re.search("(\n\*+\[\[[^\n\]}]+?]])(\|[a-z _]+=)", before):
