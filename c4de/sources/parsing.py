@@ -345,6 +345,12 @@ def build_page_sections(target: Page, text: str, results: PageComponents, redire
             nav_lines += remove_nav_templates(section, types)
         # the 6 master sections should be parsed by the Engine, except the Appearances section of a real-world article
         elif master_header in MASTER_STRUCTURE and not (results.real and master_header == "Appearances"):
+            if master_header == "Sources" and any("{{SourcesPage" in l for l in section.lines):
+                subpage = Page(target.site, f"{target.title()}/Sources")
+                if subpage.exists():
+                    results.has_sources_subpage = True
+                    section.lines += subpage.get().splitlines()
+
             nav_lines += remove_nav_templates(section, types)
             parse_data(results, section.lines, master_header, redirects, disambigs, types, remap, extra, unknown, log)
             continue
@@ -509,6 +515,8 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
     for s in section.splitlines():
         if succession_box:
             other2.append(s)
+            continue
+        elif "{{SourcesPage" in s:
             continue
         if "CardGameSet" in s:
             s = re.sub("^.*?{{CardGameSet\|(set=)?(\{\{.*?)}}( \{\{.*?}}.*?)\|cards=", "*\\2|parent=1}}\\3", s)

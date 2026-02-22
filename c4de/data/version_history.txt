@@ -239,3 +239,5 @@
 **Various bug fixes/tweaks from the sweep
 *'''4.6.4''': November 9, 2025
 **Variety of minor fixes
+*'''4.6.5''': February 21, 2026
+**Implemented handling of SourcesPage subpages

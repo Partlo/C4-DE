@@ -43,6 +43,24 @@ def flatten(x):
     return re.sub(r"\{\{1stID\|.*?}}", "{{1stID}}", re.sub(r"\|title=\"(.*?)\"", "|title=\\1", re.sub("<!--.*?-->", "", z)))
 
 
+def prep(text, old_text):
+    z1 = re.sub(r"(\|[A-z _0-9]+=.*?(\n.+?)?)}}(\n((The |A )?'''|\{\{Quote))", "\\1\n}}\\3",
+                re.sub(r"(\|.*?=)}}\n", "\\1\n}}\n", text.replace("{{!}}", "|")))
+    z1 = re.sub(r"\[\[([Cc])redit]](s)?", "[[Galactic Credit Standard|\\1redit\\2]]", z1)
+    z2 = re.sub(r"(\|[A-z _0-9]+=.*?(\n.+?)?)}}(\n((The |A )?'''|\{\{Quote))", "\\1\n}}\\3",
+                re.sub(r"(\|.*?=)}}\n", "\\1\n}}\n",
+                       re.sub(r"(\|book=[^\n}]*?)(\|story=[^\n}]*?)(\|.*?)?}}", "\\2\\1\\3}}",
+                              old_text.replace("text=SWCC 2022", "text=SWCA 2022").replace("{{!}}", "|"))))
+    z2 = re.sub(r"(\{\{1st.*?\|\[\[(.*?) \(.*?audiobook\)\|)''\\2'' (.*?audiobook)", "\\1\\3", z2)
+    z2 = re.sub(r"\[\[([Cc])redit]](s)?", "[[Galactic Credit Standard|\\1redit\\2]]", z2)
+
+    for ix in re.findall(r"((\{\{(BuildFalconCite|BuildR2Cite|BuildXWingCite|BustCollectionCite|DarthVaderCite|FalconCite|FigurineCite|HelmetCollectionCite|ShipsandVehiclesCite|StarshipsVehiclesCite)\|[0-9]+\|[^|\[{}]+?)(\|((?!reprint).)*?)}})", text):
+        text = text.replace(ix[0], ix[1] + "}}")
+        if ix[1] + "}}" in old_text:
+            z1 = z1.replace(ix[0], ix[1] + "}}")
+    return text, z1, z2
+
+
 def analyze(*args, to_save):
     gen_factory = pagegenerators.GeneratorFactory()
     log = False
@@ -177,22 +195,18 @@ def analyze(*args, to_save):
                         print(f"Reloaded revision {r['revid']} for {page.title()}")
                         break
 
+            subpage = None
             extra = []
-            text, u1, u2 = build_new_text(page, infoboxes, types, [], appearances, sources, cats, remap, include_date,
-                                          checked, log=log, collapse_audiobooks=True, manual=old_revision, extra=extra, keep_pages=False, redo=redo)
+            text, subtext, u1, u2 = build_new_text(page, infoboxes, types, [], appearances, sources, cats, remap, include_date,
+                                                   checked, log=log, collapse_audiobooks=True, manual=old_revision, extra=extra, keep_pages=False, redo=redo)
 
-            z1 = re.sub(r"(\|[A-z _0-9]+=.*?(\n.+?)?)}}(\n((The |A )?'''|\{\{Quote))", "\\1\n}}\\3",
-                        re.sub(r"(\|.*?=)}}\n", "\\1\n}}\n", text.replace("{{!}}", "|")))
-            z1 = re.sub(r"\[\[([Cc])redit]](s)?", "[[Galactic Credit Standard|\\1redit\\2]]", z1)
-            z2 = re.sub(r"(\|[A-z _0-9]+=.*?(\n.+?)?)}}(\n((The |A )?'''|\{\{Quote))", "\\1\n}}\\3",
-                        re.sub(r"(\|.*?=)}}\n", "\\1\n}}\n", re.sub(r"(\|book=[^\n}]*?)(\|story=[^\n}]*?)(\|.*?)?}}", "\\2\\1\\3}}", old_text.replace("text=SWCC 2022", "text=SWCA 2022").replace("{{!}}", "|"))))
-            z2 = re.sub(r"(\{\{1st.*?\|\[\[(.*?) \(.*?audiobook\)\|)''\\2'' (.*?audiobook)", "\\1\\3", z2)
-            z2 = re.sub(r"\[\[([Cc])redit]](s)?", "[[Galactic Credit Standard|\\1redit\\2]]", z2)
-
-            for ix in re.findall(r"((\{\{(BuildFalconCite|BuildR2Cite|BuildXWingCite|BustCollectionCite|DarthVaderCite|FalconCite|FigurineCite|HelmetCollectionCite|ShipsandVehiclesCite|StarshipsVehiclesCite)\|[0-9]+\|[^|\[{}]+?)(\|((?!reprint).)*?)}})", text):
-                text = text.replace(ix[0], ix[1] + "}}")
-                if ix[1] + "}}" in old_text:
-                    z1 = z1.replace(ix[0], ix[1] + "}}")
+            if subtext:
+                subpage = Page(page.site, f"{page.title()}/Sources")
+                compare_text1 = re.sub(r"\{\{SourcesPage.*?}}", subtext, text)
+                compare_text2 = re.sub(r"\{\{SourcesPage.*?}}", subpage.get(), old_text)
+                _, z1, z2 = prep(compare_text1, compare_text2)
+            else:
+                text, z1, z2 = prep(text, old_text)
             dx = to_duration(now)
 
             if text.replace("E -->", " -->") == old_text.replace("E -->", " -->"):
@@ -211,6 +225,8 @@ def analyze(*args, to_save):
                 continue
             if not override and match and always_comment:
                 page.put(text, media_msg if media else message, botflag=match or bf)
+                if subpage and subtext:
+                    subpage.put(subtext, media_msg if media else message, botflag=match or bf)
                 continue
             # if not override:
             #     override = "RelatedCategories" in text and "RelatedCategories" not in old_text
@@ -250,6 +266,8 @@ def analyze(*args, to_save):
             print(f"{page.title()} -> {dx} seconds")
             if not override and always:
                 page.put(text, media_msg if media else message, botflag=match or bf)
+                if subpage and subtext:
+                    subpage.put(subtext, media_msg if media else message, botflag=match or bf)
                 continue
 
             c = '(comment-only) ' if match else ''
@@ -261,11 +279,17 @@ def analyze(*args, to_save):
                 break
             if choice == 'y':
                 page.put(text, media_msg if media else message, botflag=bf, force=True)
+                if subpage and subtext:
+                    subpage.put(subtext, media_msg if media else message, botflag=match or bf, force=True)
             if choice == 'b' and match:
                 page.put(text, media_msg if media else message, botflag=bf)
+                if subpage and subtext:
+                    subpage.put(subtext, media_msg if media else message, botflag=match or bf)
                 always_comment = True
             if choice == 'a':
                 page.put(text, media_msg if media else message, botflag=bf)
+                if subpage and subtext:
+                    subpage.put(subtext, media_msg if media else message, botflag=match or bf)
                 always = True
             else:
                 continue

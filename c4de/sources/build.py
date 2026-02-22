@@ -58,6 +58,58 @@ def build_section_from_pieces(section: SectionComponents, items: FinishedSection
     return "\n".join(pieces).strip() + "\n\n", added_media_cat
 
 
+def build_subpage_and_section(section: SectionComponents, items: FinishedSection, log, media_cat, start=False):
+    if log and items.text:
+        print(f"Creating {items.name} section with {items.rows} / {len(items.text.splitlines())} items")
+    elif not items.text:
+        return
+
+    subpage_pieces = ["{{SourcesPageHeader}}", items.text]
+
+    pieces, important_items = ["==Sources=="], []
+    for ln in items.text.splitlines():
+        if "{{1st" in ln:
+            important_items.append(ln)
+    if important_items:
+        print(f"Including {len(important_items)} entries from subpage on target article")
+        pieces.append("{{SourcesPage|full=1}}")
+    else:
+        pieces.append("{{SourcesPage}}")
+
+    if len(important_items) >= 20 and not any("{{scroll" in i.lower() for i in section.preceding):
+        pieces.append("{{ScrollBox|content=")
+
+    pieces += section.preceding
+    added_media_cat = any("{{mediacat" in i.lower() for i in pieces)
+    if not added_media_cat and media_cat and important_items:
+        if start:
+            pieces.insert(0, media_cat)
+        else:
+            pieces.append(media_cat)
+        added_media_cat = True
+
+    remove_scroll = False
+    if len(important_items) <= 20 and any("{{scroll" in i.lower() for i in pieces):
+        pieces = [ln for ln in pieces if "{{scroll" not in ln.lower()]
+        remove_scroll = True
+
+    if len(important_items):
+        pieces += important_items
+    if section.trailing:
+        pieces.append("")
+        pieces += section.trailing
+    diff = 0
+    for i in range(len(pieces)):
+        diff += (pieces[i].count("{{") - pieces[i].count("}}"))
+        if diff == -2 and remove_scroll:
+            pieces[i] = re.sub("^(.*?)}}([^}]*?)$", "\\1\\2", pieces[i])
+    if diff > 0:
+        pieces.append("}}")
+    pieces.append("")
+    pieces.append(section.after)
+    return "\n".join(subpage_pieces).strip(), "\n".join(pieces).strip() + "\n\n", added_media_cat
+
+
 def check_for_media_cat(section: SectionComponents):
     return any("{{mediacat" in i.lower() for i in section.preceding) or "{{mediacat" in section.after.lower()
 
@@ -256,6 +308,7 @@ def build_final_text(pieces, otx, page: Page, results: PageComponents, disambigs
                      redirects: dict, sources: FullListData, components: NewComponents, keep_page_numbers: bool,
                      log: bool, redo=False):
 
+    subpage_text = None
     pieces.append("")
     if results.media_cat:
         media_cat = None if results.media_cat == "Ignore" else results.media_cat
@@ -293,7 +346,15 @@ def build_final_text(pieces, otx, page: Page, results: PageComponents, disambigs
         elif key == "Non-Canon Appearances":
             media_cat = add_parsed_section(pieces, results.nca, components.nca, log, mc_section_name, results.real, media_cat)
         elif key == "Sources":
-            media_cat = add_parsed_section(pieces, results.src, components.src, log, mc_section_name, results.real, media_cat)
+            if results.has_sources_subpage:
+                subpage_text, tx, added = build_subpage_and_section(results.src, components.src, log, None)
+                pieces.append(tx)
+                if subpage_text:
+                    replace = True
+                    subpage_text = do_final_replacements(subpage_text, replace, False)
+                media_cat = None if added else media_cat
+            else:
+                media_cat = add_parsed_section(pieces, results.src, components.src, log, mc_section_name, results.real, media_cat)
         elif key == "Non-Canon Sources":
             media_cat = add_parsed_section(pieces, results.ncs, components.ncs, log, mc_section_name, results.real, media_cat)
         elif key == "Links":
@@ -344,7 +405,7 @@ def build_final_text(pieces, otx, page: Page, results: PageComponents, disambigs
             pieces.append(text)
             pieces.append("")
 
-    return final_steps(page, results, components, pieces, disambigs, remap, redirects, media_cat, sources, keep_page_numbers, redo=redo)
+    return final_steps(page, results, components, pieces, disambigs, remap, redirects, media_cat, sources, keep_page_numbers, redo=redo), subpage_text
 
 
 def strip_page_number(t):
@@ -476,8 +537,8 @@ def build_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appe
     if time:
         now = report_duration("analysis", now, start)
 
-    new_txt = build_final_text(pieces, text, target, results, disambigs, remap, redirects, sources, components,
-                               keep_page_numbers=keep_pages, log=log, redo=redo)
+    new_txt, subpage_text = build_final_text(pieces, text, target, results, disambigs, remap, redirects,
+                                             sources, components, keep_page_numbers=keep_pages, log=log, redo=redo)
     if time:
         report_duration("final", now, start)
 
@@ -490,18 +551,18 @@ def build_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appe
                 new_txt = new_txt.replace("==Sources==", "==Sources==\n{{Indexpage}}")
         new_txt = remove_index_param(new_txt)
 
-    return new_txt, analysis, unknown, unknown_items
+    return new_txt, subpage_text, analysis, unknown, unknown_items
 
 
 def build_new_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appearances: FullListData,
                    sources: FullListData, bad_cats: list, remap: dict, include_date: bool, checked: list, *, log=True,
                    use_index=True, collapse_audiobooks=True, manual: str = None, extra=None, keep_pages=False, redo=False):
-    new_txt, analysis, unknown, unknown_items = build_text(
+    new_txt, subpage_text, analysis, unknown, unknown_items = build_text(
         target, infoboxes, types, disambigs, appearances, sources, bad_cats, remap, include_date, checked, log=log,
         use_index=use_index, collapse_audiobooks=collapse_audiobooks, manual=manual, extra=extra, keep_pages=keep_pages, redo=redo)
 
     record_local_unknown(unknown, unknown_items, target)
-    return new_txt, unknown, unknown_items
+    return new_txt, subpage_text, unknown, unknown_items
 
 
 def remove_index_param(t):
@@ -512,9 +573,11 @@ def analyze_target_page(target: Page, infoboxes: dict, types: dict, disambigs: l
                         sources: FullListData, bad_cats: list, remap: dict, save: bool, include_date: bool, *,
                         log=True, use_index=True, collapse_audiobooks=True, old_text=None, redirects: dict = None):
     old_text = old_text or target.get(force=True)
-    new_txt, analysis, unknown, unknown_items = build_text(
+    new_txt, subpage_text, analysis, unknown, unknown_items = build_text(
         target, infoboxes, types, disambigs, appearances, sources, bad_cats, remap, include_date, [], log=log,
         use_index=use_index, collapse_audiobooks=collapse_audiobooks, redirects=redirects, manual=old_text)
+    subpage = Page(target.site, f"{target.title()}/Sources") if subpage_text else None
+    old_subtext = subpage.get() if subpage else None
 
     with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/test_text.txt", mode="w", encoding="utf-8") as f:
         f.writelines(new_txt)
@@ -537,6 +600,11 @@ def analyze_target_page(target: Page, infoboxes: dict, types: dict, disambigs: l
         z2 = re.sub("<!--.*?-->", "", remove_index_param(old_text))
         match = z1 == z2
         target.put(new_txt, "Source Engine analysis of Appearances, Sources and references", botflag=match, force=True)
+    if save and subpage_text and subpage_text != old_subtext:
+        z1 = re.sub("<!--.*?-->", "", subpage_text)
+        z2 = re.sub("<!--.*?-->", "", remove_index_param(old_subtext))
+        match = z1 == z2
+        subpage.put(subpage_text, "Source Engine analysis of Appearances, Sources and references", botflag=match, force=True)
 
     results = []
     with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/unknown.txt", mode="a",

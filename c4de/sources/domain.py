@@ -298,6 +298,7 @@ class PageComponents:
         self.page_name = page_name
         self.media_cat = media_cat
         self.stub = stub
+        self.has_sources_subpage = False
 
         self.ncs = SectionComponents([], [], [], '')
         self.src = SectionComponents([], [], [], '')

@@ -39,7 +39,7 @@ REPLACEMENTS = [
 ]
 
 
-EXTRA = "\{+ ?(1st[A-z]*|[Cc]|V?[A-z][od]|[Ff]act|[Bb]ts[Oo]nly|DLC|[Ll]n|[Cc]rp|[Uu]n|[Nn]c[ms]?|[Aa]mbig|[Mm]ap[Pp]oint|[Cc]osmetic|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Uu]nborn|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene|[Cc]rawl) ?[|}]"
+EXTRA = "\{+ ?(1st[A-z]*|[Cc]|V?[A-z][od]|[Ff]act|[Bb]ts[Oo]nly|DLC|[Ll]n|[Cc]rp|[Uu]n|[Nn]c[ms]?|[Aa]mbig|[Aa]dvert|[Mm]ap[Pp]oint|[Cc]osmetic|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Uu]nborn|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene|[Cc]rawl) ?[|}]"
 
 
 def clean_references(before):
@@ -191,6 +191,8 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     before = re.sub("'?'?\[\[(Andor|Ahsoka|Obi-Wan Kenobi) \(television series\)\|'?'?\\1'?'?]]'?'?", "''[[Star Wars: \\1]]''", before)
     before = re.sub("\*(\{\{SeriesListing.*?}} )?\[\[Star Wars Rebels \(webcomic\)\|.*?{{C\|Appears through imagination}}\n", "", before)
     before = re.sub("(\{\{EncyclopediaCite\|.*?) \(reference book\)}}", "\\1}}", before)
+    before = re.sub("([*>])'*\[\[Star Wars Rebels: (Spark of Rebellion|Steps Into Shadow|The Siege of Lothal|Heroes of Mandalore)\]\]'*", "\\1{{Rebels|\\2}}", before)
+    before = re.sub(" '*\[\[(Steps Into Shadow|The Siege of Lothal|Heroes of Mandalore)\|'*Star Wars Rebels: \\1'*]]'*", " \"\\1\"", before)
 
     while re.search("\[\[Category:[^\n|\]_]+_", before):
         before = re.sub("(\[\[Category:[^\n|\]_]+)_", "\\1 ", before)
@@ -294,41 +296,41 @@ def clear_page_numbers(before, in_src=None):
 
 def regex_cleanup(before: str) -> str:
     if before.count("==Appearances==") > 1:
-        before = re.sub("(==Appearances==(\n.*?)+)\n==Appearances==", "\\1", before)
+        before = re.sub(r"(==Appearances==(\n.*?)+)\n==Appearances==", "\\1", before)
     if before.count("==Sources==") > 1:
-        before = re.sub("(==Sources==(\n.*?)+)\n==Sources==", "\\1", before)
+        before = re.sub(r"(==Sources==(\n.*?)+)\n==Sources==", "\\1", before)
 
     if "{{SWU" in before:
-        before = re.sub("(\{\{SWU\|.*?cardname=[^\n{}]+?)&mdash;([^\n{}]+?}})", "\\1|subtitle=\\2", before)
+        before = re.sub(r"(\{\{SWU\|.*?cardname=[^\n{}]+?)&mdash;([^\n{}]+?}})", "\\1|subtitle=\\2", before)
 
     if "<nowiki>|" in before:   # TODO: check if still necessary
-        while re.search("<nowiki>(\|.*?\|.*?)</nowiki>", before):
+        while re.search(r"<nowiki>(\|.*?\|.*?)</nowiki>", before):
             before = re.sub("<nowiki>\|(.*?)\|(.*?)?</nowiki>", "<nowiki>|\\1&#124;\\2</nowiki>", before)
-        before = re.sub("<nowiki>\|(.*?)</nowiki>", "&#124;\\1", before)
+        before = re.sub(r"<nowiki>\|(.*?)</nowiki>", "&#124;\\1", before)
     if "cardname=" in before:
-        before = re.sub("(\|cardname=[^\n}]+?)\{\{C\|(.*?)}}", "\\1(\\2)", before)
+        before = re.sub(r"(\|cardname=[^\n}]+?)\{\{C\|(.*?)}}", "\\1(\\2)", before)
         before = before.replace("cardname=\n", "cardname=")
     if "web.archive" in before:
-        before = re.sub("(?<!\[)\[https?://(.*?) (.*?)] (\(|\{\{C\|)\[http.*?web.archive.org/web/([0-9]+)/https?://.*?\\1.*?][)}]+","{{WebCite|url=https://\\1|text=\\2|archivedate=\\4}}", before)
+        before = re.sub(r"(?<!\[)\[https?://(.*?) (.*?)] (\(|\{\{C\|)\[http.*?web.archive.org/web/([0-9]+)/https?://.*?\\1.*?][)}]+","{{WebCite|url=https://\\1|text=\\2|archivedate=\\4}}", before)
     if "width=100%" in before:
-        before = re.sub("\{\{[Ss]croll[ _]?[Bb]ox(\n?\|.*?)?\n?\|width=100%", "{{ScrollBox\\1", before)
+        before = re.sub(r"\{\{[Ss]croll[ _]?[Bb]ox(\n?\|.*?)?\n?\|width=100%", "{{ScrollBox\\1", before)
     if "simultaneous with" in before:
-        before = re.sub("<small>\(First appeared(, simultaneous with (.*?))?\)</small>", "{{1st|\\2}}", before)
-        before = re.sub("<small>\(First mentioned(, simultaneous with (.*?))?\)</small>", "{{1st|\\2}}", before)
+        before = re.sub(r"<small>\(First appeared(, simultaneous with (.*?))?\)</small>", "{{1st|\\2}}", before)
+        before = re.sub(r"<small>\(First mentioned(, simultaneous with (.*?))?\)</small>", "{{1st|\\2}}", before)
     if "w:c:" in before.lower() or "wikia:c" in before.lower():
-        before = re.sub("\*'*\[\[:?([Ww]|Wikia):c:(www\.)?([^\n|\]]*?):([^\n|\]]*?)\|([^\n\]]*?)]?]? (on|at) (the )?[^\n]*?([Ww]|Wikia):c:[^\n|\]]*?\|(.*?)]](,.*?$)?","*{{Interwiki|\\3|\\9|\\4|\\5}}", before)
-        before = re.sub("\*'*\[\[:?([Ww]|Wikia):c:(www\.)?([^\n|\]]*?):([^\n|\]]*?)\|([^\n\]]*?) (on|at) (the )?(.*?)]](,.*?$)?","*{{Interwiki|\\3|\\8|\\4|\\5}}", before)
+        before = re.sub(r"\*'*\[\[:?([Ww]|Wikia):c:(www\.)?([^\n|\]]*?):([^\n|\]]*?)\|([^\n\]]*?)]?]? (on|at) (the )?[^\n]*?([Ww]|Wikia):c:[^\n|\]]*?\|(.*?)]](,.*?$)?","*{{Interwiki|\\3|\\9|\\4|\\5}}", before)
+        before = re.sub(r"\*'*\[\[:?([Ww]|Wikia):c:(www\.)?([^\n|\]]*?):([^\n|\]]*?)\|([^\n\]]*?) (on|at) (the )?(.*?)]](,.*?$)?","*{{Interwiki|\\3|\\8|\\4|\\5}}", before)
 
     if "oldversion=1" in before:
-        before = re.sub("(\|archive(date|url)=([^|\n}{]+))(\|[^\n}{]*?)?\|oldversion=1", "|oldversion=\\3\\4", before)
-        before = re.sub("\|oldversion=1(\|[^\n}{]*?)?(\|archive(date|url)=([^|\n}{]+))", "|oldversion=\\4\\1", before)
+        before = re.sub(r"(\|archive(date|url)=([^|\n}{]+))(\|[^\n}{]*?)?\|oldversion=1", "|oldversion=\\3\\4", before)
+        before = re.sub(r"\|oldversion=1(\|[^\n}{]*?)?(\|archive(date|url)=([^|\n}{]+))", "|oldversion=\\4\\1", before)
 
-    before = re.sub("(\{\{[A-z0-9 _]+\|.*?\|(.*?) \(.*?\))\|\\2}}", "\\1}}", before)
+    before = re.sub(r"(\{\{[A-z0-9 _]+\|.*?\|(.*?) \(.*?\))\|\\2}}", "\\1}}", before)
     if "{{Blog|" in before:
-        before = re.sub("(\{\{Blog\|(official=true\|)?[^|\n}\]]+?\|[^|\n}\]]+?\|[^|\n}\]]+?)(\|(?!(archive|date|nolive|nobackup))[^}\n]*?)(\|(?!(archive|date|nolive|nobackup))[^}\n]*?)(\|.*?)?}}","\\1\\6}}", before)
-        before = re.sub("(\{\{Blog\|listing=true\|[^|\n}\]]+?)(\|(?!(archive|date|nolive|nobackup))[^}\n]*?)(\|(?!(archive|date|nolive|nobackup))[^}\n]*?)(\|.*?)?}}","\\1\\6}}", before)
+        before = re.sub(r"(\{\{Blog\|(official=true\|)?[^|\n}\]]+?\|[^|\n}\]]+?\|[^|\n}\]]+?)(\|(?!(archive|date|nolive|nobackup))[^}\n]*?)(\|(?!(archive|date|nolive|nobackup))[^}\n]*?)(\|.*?)?}}","\\1\\6}}", before)
+        before = re.sub(r"(\{\{Blog\|listing=true\|[^|\n}\]]+?)(\|(?!(archive|date|nolive|nobackup))[^}\n]*?)(\|(?!(archive|date|nolive|nobackup))[^}\n]*?)(\|.*?)?}}","\\1\\6}}", before)
     if "SWGTCG" in before:
-        before = re.sub("(\{\{SWGTCG\|.*?)}} {{C\|(.*?scenario.*?)}}", "\\1|scenario=\\2}}", before)
+        before = re.sub(r"(\{\{SWGTCG\|.*?)}} {{C\|(.*?scenario.*?)}}", "\\1|scenario=\\2}}", before)
     if "Rebelscum.com" in before or "TheForce.net" in before:
         before = re.sub("\*'*?\[(http.*?) (.*?)]'*? (on|at|-).*?\[\[(Rebelscum\.com|TheForce\.net).*]].*?\n","{{WebCite|url=\\1|text=\\2|work=\\4}}", before)
     return before
