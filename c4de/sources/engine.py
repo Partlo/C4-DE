@@ -349,7 +349,7 @@ ISSUE_REPRINTS = ["A Certain Point of View", "Classic Moment", "Behind the Magic
 def remove_templates(s):
     if s.count("{{") > 0:
         s = re.sub(r" ?\{+[Cc]rp}}", "", s)
-        y = re.sub(r"( ?' + EXTRA + '.*?$)', "", s)
+        y = re.sub(r'( ?' + EXTRA + '.*?$)', "", s)
         if y != s:
             print(f"Unexpected template found: {s}")
             print(y)
@@ -447,7 +447,7 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
         a = z[0].replace(" (department)", "")
         departments.add(z[0])
         departments.add(a)
-        all_departments[f"{a}|{z[1]}"] = re.findall(r""(.*?)"', z[2])
+        all_departments[f"{a}|{z[1]}"] = re.findall(r'"(.*?)"', z[2])
 
     print(f"Loaded formatting text for {len(set_formatting)} sets")
 

@@ -342,7 +342,7 @@ def check_sw_news_page(feed_url, cache: Dict[str, List[str]], title_regex):
             r_text = requests.get(e["url"], timeout=5).text
             title = check_title_formatting(r_text, title_regex, e["title"])
             if not e.get("date"):
-                x = re.search(r"<div class="publish-date">(.*?)</div>', r_text)
+                x = re.search(r'<div class="publish-date">(.*?)</div>', r_text)
                 if x:
                     e["date"] = x.group(1)
 

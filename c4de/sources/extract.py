@@ -291,7 +291,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
             elif m:
                 return Item(zx, mode, a, parent=k.replace("<x>", m.group(1)), template=i, issue=m.group(1), text=m.group(2), collapsed=True, ref_magazine=True)
 
-    template = re_if(re.search(r"\{\{([^|\[}\n]+)[|}]', s), 1, '')
+    template = re_if(re.search(r'\{\{([^|\[}\n]+)[|}]', s), 1, '')
     if template and template[0].islower():
         template = template[0].upper() + template[1:]
     tx = template.replace("_", " ").lower()

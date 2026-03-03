@@ -237,7 +237,7 @@ def check_preload_for_missing_fields(site, template: Page, apply: bool):
     missing_from_check = []
     order = {}
     previous = "{{"
-    for field in re.findall(r"<data[ ]*source[ ]*?=[ ]*?"(.*?)"', text):
+    for field in re.findall(r'<data[ ]*source[ ]*?=[ ]*?"(.*?)"', text):
         if f"|{field.strip()}=" not in preload_text:
             if field in optional:
                 print(f"{field} is optional for {template.title()}; skipping")

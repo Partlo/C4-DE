@@ -81,10 +81,10 @@ def build_fields_for_infobox(page) -> InfoboxInfo:
         fields.append(theme.group(1))
     o = re.search(r"\|optional=(.*?)[|}]", text)
     if o:
-        optional += re.split(r",', o.group(1))
+        optional += re.split(r',', o.group(1))
     c = re.search(r"\|combo=(.*?)[|}]", text)
     if c:
-        combo_fields = re.split(r",', c.group(1))
+        combo_fields = re.split(r',', c.group(1))
         for x in combo_fields:
             pieces = x.split(":")
             groups[pieces[0]] = []

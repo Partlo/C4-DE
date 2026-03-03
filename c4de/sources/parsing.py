@@ -619,7 +619,7 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
         z = z.replace(ab, "").replace("  ", " ").strip()
 
     if not extra:
-        x1 = re.search(r"( ?(<ref.*?>)?(<small>)? ?' + EXTRA + '.*?$)', z)
+        x1 = re.search(r'( ?(<ref.*?>)?(<small>)? ?' + EXTRA + '.*?$)', z)
         extra = x1.group(1) if x1 else ''
         if extra:
             z = z.replace(extra, '').strip()
