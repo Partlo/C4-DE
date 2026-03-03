@@ -7,20 +7,17 @@ import sys
 import traceback
 import time
 import requests
-
-import discord.errors
 from urllib import parse
-from typing import List, Tuple, Optional
-
+from typing import List, Tuple
 from datetime import datetime, timedelta
+from aiohttp import ClientConnectionError
+import discord.errors
 from discord import Message, Game, Intents, HTTPException
 from discord.abc import GuildChannel
 from discord.channel import TextChannel, DMChannel
 from discord.ext import commands, tasks
 from asyncio.exceptions import TimeoutError
 import ssl
-
-from c4de.sources.parsing import fix_template_redirects
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -47,6 +44,7 @@ from c4de.sources.engine import load_full_sources, load_full_appearances, load_r
     load_auto_categories, load_template_types, reload_templates
 from c4de.sources.index import create_index, prepare_ordered_list
 from c4de.sources.infoboxer import reload_infoboxes, load_infoboxes
+from c4de.sources.parsing import fix_template_redirects
 from c4de.sources.updates import get_future_products_list, handle_results, search_for_missing
 
 import logging
@@ -173,6 +171,7 @@ class C4DE_Bot(commands.Bot):
         self.infoboxes = {}
         self.templates = {}
         self.disambigs = []
+        self.tracked_urls = []
         self.redirect_messages = {}
         self.appearances = None
         self.sources = None
@@ -285,14 +284,21 @@ class C4DE_Bot(commands.Bot):
 
     async def report_error(self, command, text, *args):
         try:
-            await self.report_dm.send(f"Command: {command}")
-            await self.report_dm.send(f"ERROR: {text}\t{args}")
+            if text and "ConnectionError" in (text if isinstance(text, str) else str(text)):
+                traceback.print_exc()
+            elif text == "Invalid":
+                await self.report_dm.send(f"Invalid Command: {command}")
+            else:
+                await self.report_dm.send(f"Command: {command}")
+                await self.report_dm.send(f"ERROR: {text}\t{args or ''}")
+                traceback.print_exc()
+        except ClientConnectionError:
+            error_log(text, *args, tb=False)
         except Exception:
             error_log(text, *args)
 
     rss_commands = {
         "is_check_target_command": "handle_target_url_check",
-        "is_check_archive_command": "handle_check_archive_command",
         "is_archive_url_command": "handle_archive_url_command",
         "is_record_url_command": "handle_record_source_command",
     }
@@ -305,6 +311,7 @@ class C4DE_Bot(commands.Bot):
     }
 
     source_commands = {
+        "is_check_archive_command": "handle_check_archive_command",
         "is_reload_command": "handle_reload_command",
         "is_single_preload_command": "handle_single_preload_command",
         "is_preload_command": "handle_preload_command",
@@ -561,7 +568,7 @@ class C4DE_Bot(commands.Bot):
         log("Loading web sources file")
         try:
             by_year = {"Unknown": [], "Current": [], "Special": []}
-            with codecs.open("C:/Users/cadec/Documents/projects/C4DE/web.txt", mode="r", encoding="utf-8") as f:
+            with codecs.open(f"{PROJECT_DIR}/web.txt", mode="r", encoding="utf-8") as f:
                 for i in f.readlines():
                     d, c = i.split("\t", 1)
                     if "®" not in i and "™" not in i and emoji.emoji_count(i) > 0:
@@ -751,7 +758,7 @@ class C4DE_Bot(commands.Bot):
             for message in channel.history(limit=250).flatten():
                 if message.id == message_id:
                     if any("bb8thumbsup" in str(r.emoji) for r in message.reactions):
-                        subprocess.run(f"""cd C:/Users/cadec/Documents/projects/C4DE/robo & C:/Users/cadec/Envs/C4DE/Scripts/python replace.py {cmd} -summary:"Redirect fixes" -always""", shell=True)
+                        subprocess.run(f"""cd {PROJECT_DIR}/robo & C:/Users/Michael/Envs/C4DE/Scripts/python replace.py {cmd} -summary:"Redirect fixes" -always""", shell=True)
                         await channel.send(f"Beginning replacement for {redirect} --> {target}")
                         self.redirect_messages.pop(message.id)
 
@@ -805,11 +812,11 @@ class C4DE_Bot(commands.Bot):
 
         for m in messages:
             await self.text_channel("admin-help").send(m)
-        subprocess.run(f"""cd C:/Users/cadec/Documents/projects/C4DE/robo & C:/Users/cadec/Envs/C4DE/Scripts/python switch_canon_legends.py""", shell=True)
+        subprocess.run(f"""cd {PROJECT_DIR}/robo & {ENVIRONMENT_DIR}/Scripts/python switch_canon_legends.py""", shell=True)
 
     @staticmethod
     def is_check_archive_command(message: Message):
-        return re.search("(check|manage|handle|store|retrieve) archive(date)s", message.content.lower())
+        return re.search("(check|manage|handle|store|retrieve) archive(date)?s", message.content.lower())
 
     async def handle_check_archive_command(self, message: Message, _):
         self._manage_archive()
@@ -825,7 +832,7 @@ class C4DE_Bot(commands.Bot):
 
     def _manage_archive(self):
         log("Beginning archival cleanup")
-        subprocess.run(f"""C:/Users/cadec/Envs/C4DE/Scripts/python test_archive.py""", shell=True)
+        subprocess.run(f"""{ENVIRONMENT_DIR}/Scripts/python test_archive.py""", shell=True)
 
     @staticmethod
     def is_single_preload_command(message: Message):
@@ -1334,8 +1341,8 @@ class C4DE_Bot(commands.Bot):
             if s not in tv_dates:
                 tv_dates[s] = {}
             tv_dates[s][n] = d
-        default_show = re.search("{{{show\|([a-z]+)}}}", Page(self.site, "Template:SpoilerTV").get()).group(1)
-        return tv_dates, default_show
+        default_show = re.search("{{{show\|([a-z]+)}}}", Page(self.site, "Template:SpoilerTV").get())
+        return tv_dates, default_show.group(1) if default_show else None
 
     @tasks.loop(hours=1)
     async def load_isbns(self):
@@ -1812,8 +1819,9 @@ class C4DE_Bot(commands.Bot):
         if site == "StarWars.com":
             messages = check_sw_news_page(site_data["url"], self.external_rss_cache["sites"], title)
             try:
-                other, db = compare_site_map(self.site, [], messages,
-                                             self.external_rss_cache["sites"]["StarWars.com"])
+                if not self.tracked_urls:
+                    self.tracked_urls = compile_tracked_urls(self.site)
+                other, db = compare_site_map(self.site, ["star-wars-maul-shadow-lord"], messages, self.tracked_urls)
                 messages += other
             except Exception as e:
                 error_log(f"Encountered {type(e).__name__} while checking site map")
@@ -1847,6 +1855,8 @@ class C4DE_Bot(commands.Bot):
                     templates.append((custom_date or d, template))
             except Exception as e:
                 error_log(type(e), e.args)
+        if messages:
+            self.tracked_urls = compile_tracked_urls(self.site)
         return db
 
     @tasks.loop(minutes=10)
@@ -1990,7 +2000,7 @@ class C4DE_Bot(commands.Bot):
             target = m["videoId"]
         else:
             m["url"] = m["url"].replace("http:", "https:")
-            target = m["url"].replace(base_url + "/", "")
+            target = m["url"].replace(base_url + "/", "").replace("www.", "").replace(base_url.replace("www.", "") + "/", "")
 
         if target.endswith("/"):
             target = target[:-1]
@@ -2097,6 +2107,8 @@ class C4DE_Bot(commands.Bot):
         if template == "Hunters" and "arena-news" in new_url:
             new_url = new_url.replace("arena-news/", "")
             template = "ArenaNews"
+        elif template == "WebCite":
+            return
         page = self.get_archive_for_site(template)
         text = page.get()
         if page.title().startswith("Template"):

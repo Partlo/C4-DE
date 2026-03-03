@@ -41,11 +41,13 @@ EXPANSION = {
         "Call to Action (comic story)", "Empire Day (comic story)", "Gathering Forces (comic story)",
         "Path of the Jedi (comic story)", "Vision of Hope (comic story)"
     ],
+    "Maul: A Star Wars Rebels Cinestory Comic": [
+        "Twilight of the Apprentice (comic story)", "The Holocrons of Fate (comic story)", "Visions & Voices (comic story)", "Twin Suns (comic story)"
+    ],
     "Young Jedi Adventures: My First Comic Reader Level 1": [
         "¡Que Empiece el Entrenamiento!", "Una Nueva Perspectiva", "Pord Recibe una Lección",
         "La Visita del Maestro Yoda", "Entrenando Con Remotos", "La Carrera Contra Taborr"
-    ],
-    "Andor Season 2": ["One Year Later", "Sagrona Teema", "Harvest", "Ever Been to Ghorman?", "I Have Friends Everywhere", "What a Festive Evening", "Messenger", "Who Are You?", "Welcome to the Rebellion", "Make It Stop", "Who Else Knows?", "Jedha, Kyber, Erso"]
+    ]
 }
 
 MANGA = {

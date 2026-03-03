@@ -241,5 +241,9 @@
 **Variety of minor fixes
 *'''4.6.5''': February 21, 2026
 **Implemented handling of SourcesPage subpages
-*'''4.6.6''': March 2, 2026
+*'''4.6.6''': February 26, 2026
+**Fixed handling of livestreams for Index generation
+**Switched off RSS-based site reporting
+**Variety of minor fixes
+*'''4.6.7''': March 2, 2026
 **Minor tweaks, and first pass at Audible scanner

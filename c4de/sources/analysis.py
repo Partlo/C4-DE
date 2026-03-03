@@ -591,7 +591,7 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
 
 
 def handle_groups(groups: Dict[str, List[ItemId]], data: FullListData, other: FullListData, found: List[ItemId],
-                  group_ids: dict, extra: dict, unknown, canon: bool, src: SectionItemIds=None):
+                  group_ids: dict, extra: dict, unknown, canon: bool, src: SectionItemIds = None):
     unknown_sets = {}
     already_found = {}
     for x in found:
@@ -698,7 +698,7 @@ def handle_card_item(d: ItemId, o: Item, cards: Dict[str, List[ItemId]], found: 
         found.append(d)
     elif o.subset:
         found.append(d)
-    elif "|parent=1" in o.original:
+    elif "|parent=" in o.original:
         found.append(d)
     else:
         print(f"No cards found for {parent_set}: {o.original}")
@@ -921,7 +921,7 @@ def build_new_section(title, name, section: SectionItemIds, results: PageCompone
             final_without_extra.append(f"{d}{zt}")
             zn = f"{d}{flag}{zt} {o.current.extra}".replace("  ", " ").strip()
             zn = zn.replace("{{C|unlicensed}}", "").strip()
-            zn = re.sub(" ?\((Jan|Feb|Mar|Apr|May|June|July|Aug|Sept|Oct|Nov|Dec)[a-z]* ([0-9]+, )?([0-9]{4})\)", "", zn)
+            zn = re.sub(r" ?\((Jan|Feb|Mar|Apr|May|June|July|Aug|Sept|Oct|Nov|Dec)[a-z]* ([0-9]+, )?([0-9]{4})\)", "", zn)
             final_items.append(o)
             new_text.append(f"*{zn}")
             rows += 1
@@ -1000,7 +1000,7 @@ def build_card_block(o: ItemId, d: str, section: SectionItemIds, sl: str, final_
         parent = f"{master} {o.current.extra}".strip()
     items = []
     for c in set_items:
-        if c.current.card == "parent=1":
+        if c.current.card and c.current.card.startswith("parent="):
             continue
         elif c.current.card:
             ot = build_card_text(o, c).replace("|parent=1", "")

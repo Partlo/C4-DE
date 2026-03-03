@@ -99,7 +99,7 @@ def match_header(header: str, infobox):
         "summary", "description", "from the publisher", "back cover summary", "site summary", "blurb"
     ]:
         return "Publisher Summary"
-    elif h in ["opening crawl", "opening crawls", "opening inscription"]:
+    elif h in ["opening crawl", "opening crawls", "opening narration", "opening inscription"]:
         return "Opening Crawl"
     elif h in ["gameplay"]:
         return "Gameplay"
@@ -340,6 +340,8 @@ def add_and_cleanup_sections(target: Page, results: PageComponents, sections: Di
     is_appearance = any(a.is_true_appearance and not a.date == "Canceled" for a in listing) and "|anthology=1" not in target.get()
     if results.infobox in ["TelevisionEpisode", "MagazineArticle", "Adventure", "ShortStory", "ComicStory", "ComicStrip", "Documentary"]:
         handle_published_in_and_collections(target, title, results, appearances, sources)
+        if "Category:Star Wars: The Clone Wars episodes" in target.get() and "Opening Crawl" in sections:
+            sections["Opening Crawl"].name = "Opening narration"
 
     if results.infobox == "TradingCardSet":
         add_sections_if_missing(sections, "Card List", lines=["{{IncompleteList|oou=1}}"])

@@ -191,8 +191,10 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     before = re.sub("'?'?\[\[(Andor|Ahsoka|Obi-Wan Kenobi) \(television series\)\|'?'?\\1'?'?]]'?'?", "''[[Star Wars: \\1]]''", before)
     before = re.sub("\*(\{\{SeriesListing.*?}} )?\[\[Star Wars Rebels \(webcomic\)\|.*?{{C\|Appears through imagination}}\n", "", before)
     before = re.sub("(\{\{EncyclopediaCite\|.*?) \(reference book\)}}", "\\1}}", before)
-    before = re.sub("([*>])'*\[\[Star Wars Rebels: (Spark of Rebellion|Steps Into Shadow|The Siege of Lothal|Heroes of Mandalore)\]\]'*", "\\1{{Rebels|\\2}}", before)
-    before = re.sub(" '*\[\[(Steps Into Shadow|The Siege of Lothal|Heroes of Mandalore)\|'*Star Wars Rebels: \\1'*]]'*", " \"\\1\"", before)
+    before = re.sub("'>*\[\[Star Wars Rebels: (Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\]\]'*", ">{{Rebels|\\1}}", before)
+    before = re.sub(">'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \\1'*\]\]'*", ">{{Rebels|\\1}}", before)
+    before = re.sub("'*\[\[Star Wars Rebels: (Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\]\]'*", "\"[[\\1]]\"", before)
+    before = re.sub("'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \\1'*\]\]'*", "\"[[\\1]]\"", before)
 
     while re.search("\[\[Category:[^\n|\]_]+_", before):
         before = re.sub("(\[\[Category:[^\n|\]_]+)_", "\\1 ", before)
@@ -303,7 +305,7 @@ def regex_cleanup(before: str) -> str:
     if "{{SWU" in before:
         before = re.sub(r"(\{\{SWU\|.*?cardname=[^\n{}]+?)&mdash;([^\n{}]+?}})", "\\1|subtitle=\\2", before)
 
-    if "<nowiki>|" in before:   # TODO: check if still necessary
+    if "<nowiki>|" in before:
         while re.search(r"<nowiki>(\|.*?\|.*?)</nowiki>", before):
             before = re.sub("<nowiki>\|(.*?)\|(.*?)?</nowiki>", "<nowiki>|\\1&#124;\\2</nowiki>", before)
         before = re.sub(r"<nowiki>\|(.*?)</nowiki>", "&#124;\\1", before)

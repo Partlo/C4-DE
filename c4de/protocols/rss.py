@@ -1,3 +1,5 @@
+from urllib import parse
+
 import time
 from typing import Dict, List
 import xml.etree.ElementTree as ET
@@ -12,12 +14,6 @@ from pywikibot import Site, Page, Category, User
 
 from c4de.common import error_log, log
 
-
-FEED_URLS = [
-    "https://starwars.fandom.com/wiki/Special:NewPages?feed=rss&offset=&limit=25&namespace=100",
-    "https://community.fandom.com/wiki/Special:NewPages?feed=rss&offset=&limit=25&namespace=500"
-]
-
 ANNOUNCEMENTS = "announcements"
 ADMIN_REQUESTS = "automated-reports"
 
@@ -28,10 +24,48 @@ def fix_title(title: str):
     return title
 
 
-def check_new_pages_rss_feed(url, cache: Dict[str, List[str]]):
+def check_new_pages(site: Site, cache: Dict[str, List[str]], namespace):
+    entries_to_report = []
+    for e, t, _, _, _, _ in site.newpages(namespaces=namespace, total=15):
+        url = parse.unquote(e.full_url())
+        try:
+            pt, ch, message, z = None, None, None, None
+            if e.title().startswith("Forum:SH:"):
+                pt, ch, message = "Senate Hall", ANNOUNCEMENTS, f"📣 **New Senate Hall thread**: [{fix_title(e.title())}](<{url}>)"
+            elif e.title().startswith("Forum:NB:"):
+                pt, ch, message = "Administrator's Noticeboard", ANNOUNCEMENTS, f"📢 **New Administrators' noticeboard thread**: [{fix_title(e.title())}](<{url}>)"
+            elif e.title().startswith("Forum:SMTNB:"):
+                pt, ch, message = "Social Media Team Noticeboard", ANNOUNCEMENTS, f"📢 **New Social Media Team noticeboard thread**: [{fix_title(e.title())}](<{url}>)"
+            elif e.title().startswith("Forum:CT:"):
+                pt, ch, message = "Consensus Track", ANNOUNCEMENTS, f"📢 **New Consensus track vote**: [{fix_title(e.title())}](<{url}>)"
+            elif e.title().startswith("Forum:TC:"):
+                pt, ch, message = "Trash Compactor", ANNOUNCEMENTS, f"🗑️ **New Trash Compactor thread**: [{fix_title(e.title())}](<{url}>)"
+            elif e.title().startswith("User blog:"):
+                if "technical update" in e.title().lower():
+                    pt, ch, message = "Fandom Blog", ANNOUNCEMENTS, f"<:fandom:872166055693393940>**New Fandom Staff blog post**\n<{url}>"
+            else:
+                continue
+
+            if pt:
+                if pt not in cache:
+                    cache[pt] = []
+                if url in cache[pt]:
+                    continue
+                entries_to_report.append((ch, message, z))
+                cache[pt].append(url)
+        except Exception as x:
+            error_log(f"Encountered {type(x)} while parsing RSS feed entry for {e.title()}", e)
+
+    return entries_to_report
+
+
+def check_new_pages_rss_feed(site, url, cache: Dict[str, List[str]]):
     d = feedparser.parse(url)
 
     entries_to_report = []
+    if not d.entries and "starwars" in url:
+        return check_new_pages(site, cache, namespace=100)
+
     for e in d.entries:
         try:
             pt, ch, message, z = None, None, None, None
@@ -45,9 +79,6 @@ def check_new_pages_rss_feed(url, cache: Dict[str, List[str]]):
                 pt, ch, message = "Consensus Track", ANNOUNCEMENTS, f"📢 **New Consensus track vote**: [{fix_title(e.title)}](<{e.link}>)"
             elif e.title.startswith("Forum:TC:"):
                 pt, ch, message = "Trash Compactor", ANNOUNCEMENTS, f"🗑️ **New Trash Compactor thread**: [{fix_title(e.title)}](<{e.link}>)"
-            elif e.title.startswith("User blog:"):
-                if "Category:Staff blogs" in e.description or "Category:Technical Updates" in e.description or "{{blog_footer}}" in e.description.lower() or "{{blog footer}}" in e.description.lower():
-                    pt, ch, message = "Fandom Blog", ANNOUNCEMENTS, f"<:fandom:872166055693393940>**New Fandom Staff blog post**\n<{e.link}>"
             else:
                 continue
 
@@ -118,13 +149,21 @@ def check_wookieepedia_feeds(site: Site, cache: Dict[str, List[str]]):
         protect.append(p.title())
     cache["Protect"] = protect
 
-    for url in FEED_URLS:
-        try:
-            entries = check_new_pages_rss_feed(url, cache)
-            for cm in entries:
-                messages.append(cm)
-        except Exception as e:
-            error_log(type(e), e.args)
+    try:
+        entries = check_new_pages(site, cache, namespace=100)
+        for cm in entries:
+            messages.append(cm)
+    except Exception as e:
+        error_log(type(e), e.args)
+
+    try:
+        print("Checking Community")
+        entries = check_new_pages(Site(fam='community'), cache, namespace=500)
+        print(entries)
+        for cm in entries:
+            messages.append(cm)
+    except Exception as e:
+        error_log(type(e), e.args)
 
     entries = parse_history_rss_feed("https://starwars.fandom.com/wiki/Wookieepedia:Bot_requests?action=history&feed=rss", cache, "Bot Requests")
     for e in entries:
@@ -160,6 +199,10 @@ def check_wookieepedia_feeds(site: Site, cache: Dict[str, List[str]]):
     return messages, to_delete
 
 
+def prepare_link(link):
+    return parse.quote_from_bytes(link.replace(' ', '_').encode('utf-8'), safe='').replace('%3A', ':')
+
+
 def check_autoblocks(cache):
     results = []
     new_cache = []
@@ -169,7 +212,15 @@ def check_autoblocks(cache):
             if not x.get("automatic"):
                 continue
             if str(x['id']) not in cache["Autoblock"]:
-                results.append(f"Autoblock #{x['id']}: {x['reason']}")
+                reason = x['reason']
+                z = re.search("\[\[(.*?)(\|(.*?))?\]\]", reason)
+                while z:
+                    tx = z.group(3) if z.group(3) else z.group(1)
+                    yx = "[" + tx + "](https://starwars.fandom.com/wiki/" + prepare_link(z.group(1)) + ")"
+                    reason = reason.replace(z.group(0), yx)
+                    z = re.search("\[\[(.*?)(\|(.*?))?\]\]", reason)
+
+                results.append(f"Autoblock #{x['id']}: {reason}")
             new_cache.append(str(x['id']))
     except Exception as e:
         error_log(f"Encountered {str(e)} while checking block log", e)
@@ -285,7 +336,7 @@ def check_sw_news_page(feed_url, cache: Dict[str, List[str]], title_regex):
     final_entries = []
     for e in initial_entries:
         try:
-            if site_cache and e["url"] in site_cache:
+            if site_cache and (e["url"] in site_cache or e["url"].split("starwars.com/")[-1] in site_cache):
                 continue
 
             r_text = requests.get(e["url"], timeout=5).text
@@ -583,6 +634,10 @@ def check_audible(cache: Dict[str, List[str]]):
     return results
 
 
+def check_sw(s):
+    return any(y in s.lower().replace("-", " ").replace("_", " ") for y in ["star wars", "mandalorian"])
+
+
 def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, check_star_wars):
     x = None
     try:
@@ -594,6 +649,8 @@ def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, che
 
     d = feedparser.parse(feed_url)
 
+    if site not in cache:
+        cache[site] = []
     site_cache = cache.get(site)
     today1 = datetime.now().strftime("%d %b %Y")
     if today1.startswith("0"):
@@ -607,11 +664,13 @@ def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, che
     for e in d.entries:
         if site_cache and e.link in site_cache:
             continue
-        elif not site_cache:
-            if e.get("published") and today1 not in e.published and today2 not in e.published:
-                continue
-            elif not any(t in e.link for t in [today2, today3, today4, today5]):
-                continue
+        # elif not site_cache:
+        #     print(e.link, e.title, e.get("published"), today1, today2, today3, today4, today5)
+        #     if e.get("published") and today1 not in e.published and today2 not in e.published:
+        #         print(e.link, e.title)
+        #         continue
+        #     elif not any(t in e.link for t in [today2, today3, today4, today5]):
+        #         continue
         if "youtube" in e.link and "/shorts/" in e.link:
             continue
         elif site == "*Star Wars*" and "youtube" in e.link:
@@ -622,9 +681,6 @@ def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, che
                     continue
             except Exception:
                 pass
-
-            # if e.link.replace("/shorts/", "/watch?v=") in site_cache:
-            #     continue
 
         if site == "*Star Wars: The Old Republic*":
             if any(x in e.title.lower() for x in ["mise à jour", "de l'histoire", "spieleupdate", "spiel-update", "teaser-clip"]):
@@ -646,8 +702,8 @@ def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, che
         elif e.get("summary"):
             content = e.summary
 
-        if check_star_wars and "star wars" not in title.lower().replace("-", " ") and \
-                (site == "LEGO" or "star wars" not in content.lower().replace("-", " ")):
+        if check_star_wars and not check_sw(title.lower().replace("-", " ")) and \
+                (site == "LEGO" or not check_sw(content.lower().replace("-", " "))):
             log(f"Skipping non-Star Wars post: {title} --> {e.link}")
             cache[site].append(e.link)
             continue
@@ -715,6 +771,7 @@ def check_title_formatting(text, title_regex, title):
     if m:
         title = m.group(1)
     return clean_title(title)
+
 
 def clean_title(title):
     title = re.sub(" ", " ", title).replace("<br>", "")
@@ -998,9 +1055,8 @@ star-wars-rebels-season-2-fan-art-contest
 the-high-republic-cavan-scott"""
 
 
-def compare_site_map(site, series, already_tracked, cache):
+def compare_site_map(site, series, already_tracked, urls):
     skip = [m['url'] for m in (already_tracked or [])]
-    urls = compile_tracked_urls(site)
     sitemap = build_site_map(False)
 
     guides, db, series_db = augment_site_map(site, series, urls)

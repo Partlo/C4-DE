@@ -1,13 +1,11 @@
 import re
 import traceback
-from datetime import datetime
 
-import pywikibot
 from pywikibot import Page
-from typing import List, Tuple, Union, Dict, Optional, Set
+from typing import List, Tuple, Dict, Set
 
 from c4de.common import build_redirects, fix_redirects, fix_disambigs, prepare_title
-from c4de.sources.cleanup import initial_cleanup, PAGE_NUMBER_REGEX, EXTRA
+from c4de.sources.cleanup import initial_cleanup, EXTRA
 from c4de.sources.determine import determine_id_for_item
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, SectionComponents, SectionLeaf
 from c4de.sources.external import prepare_basic_url
@@ -862,9 +860,12 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                 z = swap_parameters(ni.master.original)
             z = z.replace(f"|int={page.title()}|", "|").replace(f"|int={page.title()}" + "}", "}")
             if extra:
+                to_use = []
                 for i in extra:
                     z = z.replace(i, "")
-                z = z[:-2] + "".join(extra) + "}}"
+                    if (i.split("=")[0] + "=") not in z:
+                        to_use.append(i)
+                z = z[:-2] + "".join(to_use) + "}}"
             if "|d=y" in ni.current.original:
                 z = z[:-2] + "|d=y}}"
             new_ref = new_ref.replace(ot, z.replace("–", "&ndash;").replace("—", "&mdash;"))

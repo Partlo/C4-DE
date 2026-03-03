@@ -6,6 +6,7 @@ from pywikibot import Page, Category, showDiff
 
 from c4de.common import error_log, fix_redirects, do_final_replacements, sort_top_template, to_duration, \
     report_duration, MULTIPLE_ISSUE_CONVERSION
+from c4de.data.filenames import PROJECT_DIR
 from c4de.sources.archive import clean_archive_usages
 from c4de.sources.analysis import analyze_section_results
 from c4de.sources.determine import determine_id_for_item
@@ -585,11 +586,11 @@ def analyze_target_page(target: Page, infoboxes: dict, types: dict, disambigs: l
     subpage = Page(target.site, f"{target.title()}/Sources") if subpage_text else None
     old_subtext = subpage.get() if subpage else None
 
-    with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/test_text.txt", mode="w", encoding="utf-8") as f:
+    with codecs.open(f"{PROJECT_DIR}/c4de/protocols/test_text.txt", mode="w", encoding="utf-8") as f:
         f.writelines(new_txt)
 
     # if dates:
-    #     with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/new_dates.txt", mode="a", encoding="utf-8") as f:
+    #     with codecs.open(f"{PROJECT_DIR}/c4de/protocols/new_dates.txt", mode="a", encoding="utf-8") as f:
     #         date_txt = []
     #         for d in dates:
     #             if d[2] == d[3]:
@@ -613,7 +614,7 @@ def analyze_target_page(target: Page, infoboxes: dict, types: dict, disambigs: l
         subpage.put(subpage_text, "Source Engine analysis of Appearances, Sources and references", botflag=match, force=True)
 
     results = []
-    with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/unknown.txt", mode="a",
+    with codecs.open(f"{PROJECT_DIR}/c4de/protocols/unknown.txt", mode="a",
                      encoding="utf-8") as f:
         if len(analysis.abridged) == 1:
             results.append(f"1 abridged audiobook was missing from Appearances: {analysis.abridged[0]}")
@@ -657,7 +658,7 @@ def analyze_target_page(target: Page, infoboxes: dict, types: dict, disambigs: l
 
 def record_local_unknown(unknown, unknown_items: UnknownItems, target: Page):
     if unknown or unknown_items.found():
-        with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/sources/unknown.txt", mode="a",
+        with codecs.open(f"{PROJECT_DIR}/c4de/sources/unknown.txt", mode="a",
                          encoding="utf-8") as f:
             for x in unknown:
                 f.write(u'%s\t%s\n' % (x, target.title()))

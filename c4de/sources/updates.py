@@ -1,5 +1,6 @@
 import codecs
 
+from c4de.data.filenames import PROJECT_DIR
 from c4de.sources.domain import Item
 from pywikibot import Site, Page, Category, showDiff
 import re
@@ -623,7 +624,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
         lines += canceled
 
     new_txt = re.sub("(?<![\n=])\n==", "\n\n==", re.sub("\n\n+", "\n\n", "\n".join(l.strip() for l in lines))).strip()
-    with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/sources/test.txt", mode="w", encoding="utf-8") as f:
+    with codecs.open(f"{PROJECT_DIR}/c4de/sources/test.txt", mode="w", encoding="utf-8") as f:
         f.writelines(new_txt)
 
     if save:

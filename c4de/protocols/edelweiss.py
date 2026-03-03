@@ -19,13 +19,14 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 from c4de.common import log, error_log, archive_url
-from c4de.data.filenames import MISSING_IMAGES_FILE
+from c4de.data.filenames import MISSING_IMAGES_FILE, DRIVER_DIR
 
 
-def build_driver(headless=True, firefox=True):
+def build_driver(headless=True, firefox=False):
     if firefox:
         options = FirefoxOptions()
-        s = FirefoxService("C:/Users/cadec/Documents/Drivers/geckodriver.exe")
+        options.binary_location = "C:/Program Files/Mozilla Firefox/firefox.exe"
+        s = FirefoxService(f"{DRIVER_DIR}/geckodriver.exe")
         if headless:
             options.headless = True
             # options.add_argument("no-sandbox")
@@ -35,7 +36,7 @@ def build_driver(headless=True, firefox=True):
         return Firefox(options=options, service=s)
     else:
         options = ChromeOptions()
-        s = Chrome("C:/Users/cadec/Documents/Drivers/chromedriver.exe")
+        s = ChromeService(f"{DRIVER_DIR}/chromedriver.exe")
         if headless:
             options.add_argument("headless")
             options.add_argument("no-sandbox")
@@ -46,7 +47,7 @@ def build_driver(headless=True, firefox=True):
             return Chrome(options=options, service=s)
         except SessionNotCreatedException as e:
             gd = GetChromeDriver()
-            gd.auto_download(extract=True, output_path="C:/Users/cadec/Documents/Drivers")
+            gd.auto_download(extract=True, output_path=DRIVER_DIR)
             return Chrome(options=options, service=s)
 
 
@@ -125,7 +126,8 @@ def handle_entry(item: WebElement, sku_list, search_term):
         return None
 
     data = info.find_elements(By.CSS_SELECTOR, "div.dotDot")
-    status, date, _ = re.split(r" ?\| ?", data[0].text, 2)
+    pieces = re.split(r" ?\| ?", data[0].text, 2)
+    status, date = pieces[:2]
     isbn, sku = data[1].text.split(",", 1)
     fmt = data[2].text
     if sku in sku_list:
@@ -143,8 +145,6 @@ def handle_entry(item: WebElement, sku_list, search_term):
     if search_term.lower() not in body.get_attribute("innerHTML").lower():
         log(f"{search_term} not mentioned in {title}; skipping")
         return None
-
-    print(title, no_image)
 
     categories = ""
     for c in info.find_element(By.TAG_NAME, "div").find_elements(By.TAG_NAME, "div"):
@@ -224,7 +224,7 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
     time.sleep(3)
     log("Waiting for results")
     try:
-        WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.CSS_SELECTOR, "div[class^='listViewItemsCount']")))
+        WebDriverWait(driver, 120).until(EC.visibility_of_element_located((By.CSS_SELECTOR, "div[class^='listViewItemsCount']")))
     except Exception:
         driver.get(f"https://www.edelweiss.plus/#keywordSearch&q={search_term.replace(' ', '+')}")
         WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.CSS_SELECTOR, "div[class^='listViewItemsCount']")))
@@ -234,6 +234,12 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
         x = driver.find_elements(By.CSS_SELECTOR, "div[class^='listViewItemsCount']")
     total = re.sub("^.*?filtered to ([0-9]+).*?$", "\\1", x[0].text.replace("\n", ""))
     total = int(total) if total else 500
+    print(f"Evaluating {total} items")
+
+    try:
+        WebDriverWait(driver, 120).until(EC.visibility_of_element_located((By.CSS_SELECTOR, "div[class^='productRow_']")))
+    except Exception:
+        pass
 
     i, j = 0, 1
     results = []

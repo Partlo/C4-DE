@@ -1,3 +1,4 @@
+from c4de.data.filenames import PROJECT_DIR
 from pywikibot import Page, showDiff
 from typing import Tuple, List
 import codecs
@@ -10,8 +11,13 @@ from c4de.sources.domain import Item, ItemId, AnalysisResults
 
 
 def build_alternate(i: ItemId):
-    o = "{{SW|url=" + i.master.special + "|text=" + i.master.text + "}}"
-    x = Item(o, "Web", i.master.is_appearance, url=i.master.special, template="SW", text=i.master.text)
+    if "livestream=" in i.master.original:
+        o = "{{" + i.master.template + "|" + i.master.special + "|" + i.master.text + " (Livestream)}}"
+        template, mode = i.master.template, i.master.mode
+    else:
+        o = "{{SW|url=" + i.master.special + "|text=" + i.master.text + "}}"
+        template, mode = "SW", "Web"
+    x = Item(o, mode, i.master.is_appearance, url=i.master.special, template=template, text=i.master.text)
     x.date = i.master.date
     x.index = (i.master.index or 0) + 0.1
     x.canon_index = i.master.canon_index
@@ -199,7 +205,7 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
         if save:
             index.put(new_txt, "Source Engine: Generating Index page", botflag=False)
         else:
-            with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/test_text.txt", mode="w",
+            with codecs.open(f"{PROJECT_DIR}/c4de/protocols/test_text.txt", mode="w",
                              encoding="utf-8") as f:
                 f.writelines("\n".join(lines))
 

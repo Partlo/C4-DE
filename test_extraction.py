@@ -12,6 +12,7 @@ from c4de.sources.domain import Item, ItemId
 from pywikibot import Site, Page, handle_args, pagegenerators, showDiff, input_choice, Timestamp
 from pywikibot.exceptions import APIMWError
 
+from c4de.data.filenames import PROJECT_DIR
 from c4de.sources.build import build_new_text, STATUS
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, load_template_types, \
     load_auto_categories
@@ -310,5 +311,5 @@ if __name__ == "__main__":
     analyze(sys.argv, to_save=to_save)
     # except KeyboardInterrupt:
     #     if to_save:
-    #         with codecs.open("C:/Users/cadec/Documents/projects/C4DE/c4de/protocols/review.txt", mode="a", encoding="utf-8") as f:
+    #         with codecs.open(f"{PROJECT_DIR}/c4de/protocols/review.txt", mode="a", encoding="utf-8") as f:
     #             f.writelines("\n".join(to_save))
