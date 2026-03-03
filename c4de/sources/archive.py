@@ -46,11 +46,11 @@ def parse_archive(site, template):
     if not page.exists():
         return None
     archive = {}
-    for u, d in re.findall("\[['\"](.+?)/*?['\"]] ?= ?['\"]?(.*?)['\"]?[, ]*\n", page.get()):
+    for u, d, _ in re.findall(r"(?<!-- )\[['\"](.+?)/*?['\"]] ?= ?['\"]?(.*?)['\"]?[, ]*(--.*?)?\n", page.get()):
         if u.startswith("/") and u != "/":
             u = u[1:]
         if template == "Rebelscum":
-            u = re.sub("^(https?://)?w*\.?rebelscum\.com/", "", u)
+            u = re.sub(r"^(https?://)?w*\.?rebelscum\.com/", "", u)
         archive[u.replace("\\'", "'").replace("{{=}}", "=").lower()] = d
     return archive
 
@@ -91,19 +91,19 @@ def build_missing_and_new(page, types, archives, new_data, skip):
             skip.append(tx.title(with_ns=False))
             continue
         if youtube:
-            zx = [(i[0], i[4]) for i in re.findall("(\{\{" + template + "\|((subdomain|channel|username|name|text|wplink|link|series|parameter)=.*?\|)*?(video=)?([^|\n}=]+?)([&?].*?)?(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
-            for i in re.findall("(\{\{" + template + "\|(.*?\|)?channel=([^|\n}=]+?)(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text):
+            zx = [(i[0], i[4]) for i in re.findall(r"(\{\{" + template + r"\|((subdomain|channel|username|name|text|wplink|link|series|parameter)=.*?\|)*?(video=)?([^|\n}=]+?)([&?].*?)?(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
+            for i in re.findall(r"(\{\{" + template + r"\|(.*?\|)?channel=([^|\n}=]+?)(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text):
                 if "video=" not in i[0]:
                     zx.append((i[0], i[2]))
             if not zx:
-                for z in re.findall("\{\{YouTube\|.*?}}", text):
+                for z in re.findall(r"\{\{YouTube\|.*?}}", text):
                     print(z)
         elif template == "Databank":
-            zx = [(i[0], i[2]) for i in re.findall("(\{\{Databank\|(url=)?([^|\n}]+?)(\|.*?)(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
+            zx = [(i[0], i[2]) for i in re.findall(r"(\{\{Databank\|(url=)?([^|\n}]+?)(\|.*?)(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
         else:
-            zx = [(i[0], i[3]) for i in re.findall("(\{\{" + template + "(\|[^\n}]*?)?\|(url|link|altlink)=/?([^|\n}]+?(\{\{=}})?[^|\n}]*?)/*(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
+            zx = [(i[0], i[3]) for i in re.findall(r"(\{\{" + template + r"(\|[^\n}]*?)?\|(url|link|altlink)=/?([^|\n}]+?(\{\{=}})?[^|\n}]*?)/*(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
             if template == "Blogspot" or template == "DeviantArt" or template == "Tumblr" or template == "ArtStation":
-                for i in re.findall("(\{\{" + template + "(\|[^\n}]*?)?\|(subdomain|username)=/?([^|\n}]+?)/*(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text):
+                for i in re.findall(r"(\{\{" + template + r"(\|[^\n}]*?)?\|(subdomain|username)=/?([^|\n}]+?)/*(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text):
                     if "|url=" not in i[0]:
                         zx.append((i[0], i[3]))
         for a, x in zx:
@@ -123,7 +123,7 @@ def build_missing_and_new(page, types, archives, new_data, skip):
                     continue
 
                 if archives.get("Rebelscum") and template != "Topps":
-                    y = re.sub("^.*?rebelscum\.com/", "", x)
+                    y = re.sub(r"^.*?rebelscum\.com/", "", x)
                     if y.lower() in archives.get("Rebelscum", {}):
                         continue
                     elif y.lower() in new_data.get(template, {}) or y.lower() in new_data.get("Rebelscum", {}):
@@ -145,9 +145,9 @@ def check_url(x, archives, template, new_data, a):
         new_data[template] = {}
     elif any(k.lower() == x.lower() for k in new_data[template]):
         return
-    y = re.search("\|archiveurl=(.*?)(\|.*?)?}}", a)
+    y = re.search(r"\|archiveurl=(.*?)(\|.*?)?}}", a)
     if not (y and y.group(1)):
-        y = re.search("\|archivedate=(.*?)(\|.*?)?}}", a)
+        y = re.search(r"\|archivedate=(.*?)(\|.*?)?}}", a)
 
     if not y and template == "Hyperspace":
         return
@@ -157,11 +157,11 @@ def check_url(x, archives, template, new_data, a):
 
 def handle_parameters(ux, a, param):
     if "{{{" + param + "|" in ux and f"|{param}=" in a:
-        b = re.search("\|" + param + "=(.*?)(\|.*?)?}}", a)
+        b = re.search(r"\|" + param + r"=(.*?)(\|.*?)?}}", a)
         if b:
-            ux = re.sub("\{\{\{" + param + "\|(\{\{.*?}}})?.*?}}}", b.group(1), ux)
+            ux = re.sub(r"\{\{\{" + param + r"\|(\{\{.*?}}})?.*?}}}", b.group(1), ux)
     if "{{{" + param + "|" in ux:
-        ux = re.sub("\{\{\{" + param + "\|((\{\{.*?}}})?.*?)}}}", "\\1", ux)
+        ux = re.sub(r"\{\{\{" + param + r"\|((\{\{.*?}}})?.*?)}}}", "\\1", ux)
     return ux
 
 
@@ -170,13 +170,13 @@ def handle_if_statement(ux):
     result = f"{ux}"
     while (ux.count("#if:") + ux.count("#ifeq:")) > 0 and past != result:
         past = f"{result}"
-        z = re.search("^.*(\{\{#if:(.*?)\|([^|{}]*)\|([^|{}]*)}})", result)
+        z = re.search(r"^.*(\{\{#if:(.*?)\|([^|{}]*)\|([^|{}]*)}})", result)
         if z and "{{" not in z.group(2):
             if z.group(2).strip():
                 result = result.replace(z.group(1), z.group(3))
             else:
                 result = result.replace(z.group(1), z.group(4))
-        z = re.search("^.*(\{\{#ifeq:(.*?)\|([^|{}]*)\|([^|{}]*)\|([^|{}]*)}})", result)
+        z = re.search(r"^.*(\{\{#ifeq:(.*?)\|([^|{}]*)\|([^|{}]*)\|([^|{}]*)}})", result)
         if z and "{{" not in z.group(3):
             if z.group(2).strip() == z.group(3).strip():
                 result = result.replace(z.group(1), z.group(4))
@@ -184,7 +184,7 @@ def handle_if_statement(ux):
                 result = result.replace(z.group(1), z.group(5))
     while ux.count("#switch") > 0 and past != result:
         past = f"{result}"
-        z = re.search("\{\{#switch:([^{}]*?)\|([^{}]*)*?}}", result)
+        z = re.search(r"\{\{#switch:([^{}]*?)\|([^{}]*)*?}}", result)
         if z:
             y = {x.split("=", 1)[0].strip(): x.split("=", 1)[1].strip() for x in z.group(2).split("|")}
             if z.group(2) in y:
@@ -205,9 +205,9 @@ def build_to_check(site, data):
         else:
             tx = Page(site, f"Template:{t}").get()
             if "ToyCitation" in tx:
-                x = re.search("\|baseUrl=(.*?)\n", tx)
-                y = re.search("\|link=(.*?[^]])\n", tx)
-                z = re.search("\|url=(.*?)\n", tx)
+                x = re.search(r"\|baseUrl=(.*?)\n", tx)
+                y = re.search(r"\|link=(.*?[^]])\n", tx)
+                z = re.search(r"\|url=(.*?)\n", tx)
                 for k, v in urls.items():
                     if not (v and v.get('value')):
                         if "|link=" in v['full'] and x and y:
@@ -218,19 +218,19 @@ def build_to_check(site, data):
                             print(f"unknown: {t} -> {x}, {y}, {z}, {v['full']}")
                             continue
 
-                        for px in set(re.findall("\{\{\{(.*?)(?=[|}])", ux)):
+                        for px in set(re.findall(r"\{\{\{(.*?)(?=[|}])", ux)):
                             ux = handle_parameters(ux, v['full'], px)
                         new_url = handle_if_statement(ux)
                         to_check[t][k] = new_url
             else:
-                y = re.search("\|base_url=(.*?)\n", tx)
-                z = re.search("\|target_url=(.*?)\{\{\{(url|1)", tx)
-                w = re.search("\|full_url=(.*?)\n", tx)
+                y = re.search(r"\|base_url=(.*?)\n", tx)
+                z = re.search(r"\|target_url=(.*?)\{\{\{(url|1)", tx)
+                w = re.search(r"\|full_url=(.*?)\n", tx)
                 if y and z:
                     for k, v in urls.items():
                         ux = y.group(1)
                         if not (v and v.get('value')):
-                            for px in re.findall("\{\{\{(.*?)(?=[|}])", ux):
+                            for px in re.findall(r"\{\{\{(.*?)(?=[|}])", ux):
                                 ux = handle_parameters(ux, v['full'], px)
                             ux = handle_if_statement(ux)
                             new_url = f"{ux}/{k}" if not (ux.endswith("/") or k.startswith("/")) else f"{ux}{k}"
@@ -240,7 +240,7 @@ def build_to_check(site, data):
                     for k, v in urls.items():
                         ux = w.group(1)
                         if not (v and v.get('value')):
-                            for px in re.findall("\{\{\{(.*?)(?=[|}])", ux):
+                            for px in re.findall(r"\{\{\{(.*?)(?=[|}])", ux):
                                 ux = handle_parameters(ux, v['full'], px)
                             new_url = handle_if_statement(ux)
                             print(k, new_url)
@@ -338,10 +338,21 @@ def do_work(site, types=None):
                 data[t][k] = y
 
 
+def is_old_or_not_in_archive(original, x, archive):
+    if "oldversion=" in original:
+        return True
+    if x.lower() in archive:
+        return False
+    if "http" in x:
+        z = x.lower().replace("http://", "").replace("https://", "").replace("www.", "")
+        return not any(y.endswith(z) for y in archive)
+    return True
+
+
 def clean_archive_usages(page: Page, text, archive_data: dict, redo=False):
     templates_to_check = set()
     if redo:
-        for x in re.findall("\{\{([^\n|{}]+?)\|[^\n{}]+?\|archive(url|date)=.*?}}", text):
+        for x in re.findall(r"\{\{([^\n|{}]+?)\|[^\n{}]+?\|archive(url|date)=.*?}}", text):
             if x[0] != "WebCite":
                 templates_to_check.add(x[0])
     else:
@@ -361,6 +372,7 @@ def clean_archive_usages(page: Page, text, archive_data: dict, redo=False):
         templates_to_check.add("ThisWeek")
         templates_to_check.add("HighRepublicShow")
         templates_to_check.add("StarWarsShow")
+    text = re.sub(r"\|url=/([^|{}\[\]].*?)\|", "|url=\\1|", text)
     chunks = text.split("</ref>")
     for t in templates_to_check:
         tx = "SWYouTube" if t in ["ThisWeek", "HighRepublicShow", "StarWarsShow"] else t
@@ -373,70 +385,78 @@ def clean_archive_usages(page: Page, text, archive_data: dict, redo=False):
 
         for c in chunks:
             if archive and t == "Rebelscum":
-                for x in re.findall("(\{\{KennerCite\|(.*?\|)?link=(h?t?t?.*?rebelscum\.com/)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?\|archive(date|url)=([^\n{}|]+?) ?)(\|[^\n{}]*?)?}})", c):
-                    if "oldversion" in x[0] or x[3].lower() not in archive:
+                for x in re.findall(r"(\{\{KennerCite\|(.*?\|)?link=(h?t?t?.*?rebelscum\.com/)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?\|archive(date|url)=([^\n{}|]+?) ?)(\|[^\n{}]*?)?}})", c):
+                    if is_old_or_not_in_archive(x[0], x[3], archive):
                         continue
                     # elif "nolive=" in x[0] and x[7] != archive[x[3].lower()]:
                     #     continue
                     text = text.replace(x[5], "").replace(f"link={x[2]}{x[3]}", f"link={x[3]}")
-                for x in re.findall("(\{\{[A-z0-9 _]+\|(.*?\|)?(url|a?l?t?link)=([^\n{}|]*?rebelscum[^\n{}|]*?)/?(\|[^\n{}]*?)?( ?\|archive(date|url)=[^\n{}|]*? ?)(\|[^\n{}]*?)?}})", c):
+                for x in re.findall(r"(\{\{[A-z0-9 _]+\|(.*?\|)?(url|a?l?t?link)=([^\n{}|]*?rebelscum[^\n{}|]*?)/?(\|[^\n{}]*?)?( ?\|archive(date|url)=[^\n{}|]*? ?)(\|[^\n{}]*?)?}})", c):
                     if "nolive=" in x[0] or "oldversion" in x[0]:
                         continue
-                    if re.sub("(https?://)?w*\.?rebelscum\.com/", "", x[3].lower()) not in archive:
+                    if re.sub(r"(https?://)?w*\.?rebelscum\.com/", "", x[3].lower()) not in archive:
                         continue
                     text = text.replace(x[5], "")
-            elif archive and tx == "Blogspot":
-                for x in re.findall("(\{\{" + t + "\|(.*?\|)?(url|id|a?l?t?link)=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if "oldversion" in x[0] or (x[3].lower() not in archive and f"search/label/{x[3]}".lower() not in archive):
+            elif archive and (tx == "Blogspot" or tx == "Tumblr"):
+                blogs = []
+                for x in re.findall(r"(\{\{" + t + r"\|(.*?\|)?subdomain=([^\n{}|]*?)(\|[^\n{}]*?)?\|url=([^\n{}|]*?)(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    blogs.append((x[0], f"{x[2]}.{tx.lower()}.com/{x[4]}", x[6]))
+                for x in re.findall(r"(\{\{" + t + r"\|(.*?\|)?url=([^\n{}|]*?)(\|[^\n{}]*?)?|subdomain=([^\n{}|]*?)(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    blogs.append((x[0], f"{x[4]}.{tx.lower()}.com/{x[2]}", x[6]))
+                for x in re.findall(r"(\{\{" + t + r"\|(.*?\|)?url=([^\n{}|]*?)(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    blogs.append((x[0], f"{tx.lower()}.com/{x[2]}", x[4]))
+                for x in re.findall(r"(\{\{" + t + r"\|(.*?\|)?subdomain=([^\n{}|]*?)(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    blogs.append((x[0], f"{x[2]}.{tx.lower()}.com", x[4]))
+
+                for o1, o2, o3 in blogs:
+                    if is_old_or_not_in_archive(o1, o2, archive):
                         continue
-                    # elif "nolive=" in x[0] and x[8] != archive[x[3].lower()]:
-                    #     continue
-                    text = text.replace(x[5], "")
-                for x in re.findall("(\{\{" + t + "\|(.*?\|)?(blogspoturl)=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if "oldversion" in x[0] or x[3].lower() not in archive or "|url=" in x[0]:
-                        continue
-                    text = text.replace(x[5], "")
+                    text = text.replace(o3, "")
             elif archive and "YouTube" in t:
-                for x in re.findall("(\{\{.*?\|video=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if "oldversion" in x[0] or x[1].lower() not in archive:
+                for x in re.findall(r"(\{\{.*?\|video=([^\n{}|]*?)/?(&t=[0-9]+s)?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    if is_old_or_not_in_archive(x[0], x[1], archive):
                         continue
-                    text = text.replace(x[3], "")
-                for x in re.findall("(\{\{.*?YouTube\|(channel=)([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if "oldversion" in x[0] or "video=" in x[0] or x[2].lower() not in archive:
+                    if x[2] and x[1].lower() in archive and f"{x[1]}{x[2]}".lower() not in archive:
+                        text = text.replace(x[2], "")
+                    text = text.replace(x[4], "")
+                for x in re.findall(r"(\{\{.*?YouTube\|(channel=)([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    if is_old_or_not_in_archive(x[0], x[2], archive) or "video=" in x[0]:
                         continue
                     text = text.replace(x[4], "")
-                for x in re.findall("(\{\{.*?YouTube\|(video=)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if "oldversion" in x[0] or x[2].lower() not in archive:
+                for x in re.findall(r"(\{\{(.*?YouTube|ThisWeek|StarWarsShow|HighRepublicShow)\|(video=)?([^\n{}|]*?)/?(&t=[0-9]+s)?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    if is_old_or_not_in_archive(x[0], x[3], archive):
                         continue
-                    text = text.replace(x[4], "")
+                    if x[4] and x[3].lower() in archive and f"{x[3]}{x[4]}".lower() not in archive:
+                        text = text.replace(x[4], "")
+                    text = text.replace(x[6], "")
             elif archive and t == "SWE":
-                for x in re.findall("(\{\{" + t + "\|(url=)?([^\n{}|]*?)/?\|([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]*?) ?)(\|[^\n{}]*?)? ?}})", c):
+                for x in re.findall(r"(\{\{" + t + r"\|(url=)?([^\n{}|]*?)/?\|([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]*?) ?)(\|[^\n{}]*?)? ?}})", c):
                     z = f"{x[2]}/{x[3]}"
-                    if "oldversion" in x[0] or z.lower() not in archive:
+                    if is_old_or_not_in_archive(x[0], z, archive):
                         continue
                     # elif "nolive=" in x[0] and x[7] != archive[x[2].lower()]:
                     #     continue
                     text = text.replace(x[5], "")
             elif archive and t == "Databank":
-                for x in re.findall("(\{\{" + t + "\|(url=)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]*?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if "oldversion" in x[0] or x[2].lower() not in archive:
+                for x in re.findall(r"(\{\{" + t + r"\|(url=)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]*?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    if is_old_or_not_in_archive(x[0], x[2], archive):
                         continue
                     # elif "nolive=" in x[0] and x[7] != archive[x[2].lower()]:
                     #     continue
                     text = text.replace(x[4], "")
             elif archive:
-                for x in re.findall("(\{\{" + t + "\|(subdomain=|username=)([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if "oldversion" in x[0] or "|url=" in x[0] or x[2].lower() not in archive:
+                for x in re.findall(r"(\{\{" + t + r"\|(subdomain=|username=)([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    if is_old_or_not_in_archive(x[0], x[2], archive) or "|url=" in x[0]:
                         continue
                     text = text.replace(x[4], "")
-                for x in re.findall("(\{\{" + t + "\|(.*?\|)?(url|id|a?l?t?link)=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if "oldversion" in x[0] or x[3].lower() not in archive or x[3].lower() in YEARLY:
+                for x in re.findall(r"(\{\{" + t + r"\|(.*?\|)?(url|id|a?l?t?link)=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    if is_old_or_not_in_archive(x[0], x[3], archive) or x[3].lower() in YEARLY:
                         continue
                     # elif "nolive=" in x[0] and x[8] != archive[x[3].lower()]:
                     #     continue
                     text = text.replace(x[5], "")
-                for x in re.findall("(\{\{" + t + "\|((?!(url|id|a?l?t?link)=)[^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+?)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if "oldversion" in x[0] or x[1].lower() not in archive or x[1].lower() in YEARLY:
+                for x in re.findall(r"(\{\{" + t + r"\|((?!(url|id|a?l?t?link)=)[^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+?)? ?\|archive(url|date)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    if is_old_or_not_in_archive(x[0], x[1], archive) or x[1].lower() in YEARLY:
                         continue
                     # elif "nolive=" in x[0] and x[7] != archive[x[1].lower()]:
                     #     continue

@@ -202,8 +202,8 @@ def analyze(*args, to_save):
 
             if subtext:
                 subpage = Page(page.site, f"{page.title()}/Sources")
-                compare_text1 = re.sub(r"\{\{SourcesPage.*?}}", subtext, text)
-                compare_text2 = re.sub(r"\{\{SourcesPage.*?}}", subpage.get(), old_text)
+                compare_text1 = re.sub(r"(\{\{SourcesPage.*?}})", "\\1\n---\n" + subtext + "\n----", text)
+                compare_text2 = re.sub(r"(\{\{SourcesPage.*?}})", "\\1\n---\n" + subpage.get() + "\n----", old_text)
                 _, z1, z2 = prep(compare_text1, compare_text2)
             else:
                 text, z1, z2 = prep(text, old_text)

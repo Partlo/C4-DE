@@ -241,3 +241,5 @@
 **Variety of minor fixes
 *'''4.6.5''': February 21, 2026
 **Implemented handling of SourcesPage subpages
+*'''4.6.6''': March 2, 2026
+**Minor tweaks, and first pass at Audible scanner

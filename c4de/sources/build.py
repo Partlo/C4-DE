@@ -64,20 +64,18 @@ def build_subpage_and_section(section: SectionComponents, items: FinishedSection
     elif not items.text:
         return
 
-    subpage_pieces = ["{{SourcesPageHeader}}", items.text]
-
-    pieces, important_items = ["==Sources=="], []
+    subpage_pieces = [items.name, items.text]
+    important_items = []
     for ln in items.text.splitlines():
         if "{{1st" in ln:
             important_items.append(ln)
-    if important_items:
-        print(f"Including {len(important_items)} entries from subpage on target article")
-        pieces.append("{{SourcesPage|full=1}}")
-    else:
-        pieces.append("{{SourcesPage}}")
 
-    if len(important_items) >= 20 and not any("{{scroll" in i.lower() for i in section.preceding):
-        pieces.append("{{ScrollBox|content=")
+    if "===" in items.name and not important_items:
+        pieces = []
+    else:
+        pieces = [items.name, "{{SourcesPage}}"]
+        if len(important_items) >= 20 and not any("{{scroll" in i.lower() for i in section.preceding):
+            pieces.append("{{ScrollBox|content=")
 
     pieces += section.preceding
     added_media_cat = any("{{mediacat" in i.lower() for i in pieces)
@@ -209,8 +207,15 @@ def sort_categories(pieces, namespace_id, bad_categories):
     return x
 
 
-def add_parsed_section(pieces: list, component: SectionComponents, finished: FinishedSection, log, mcs_name, real, media_cat):
-    t, added = build_section_from_pieces(component, finished, log, media_cat if (mcs_name == finished.name or real) else None)
+def add_parsed_section(pieces: list, component: SectionComponents, finished: FinishedSection, log, mcs_name, real,
+                       has_sources_subpage: bool, subpage_pieces, media_cat):
+    if has_sources_subpage:
+        subpage_text, t, added = build_subpage_and_section(component, finished, log, None)
+        if subpage_text:
+            subpage_pieces.append("")
+            subpage_pieces.append(subpage_text.strip())
+    else:
+        t, added = build_section_from_pieces(component, finished, log, media_cat if (mcs_name == finished.name or real) else None)
     pieces.append(t)
     return None if added else media_cat
 
@@ -308,7 +313,7 @@ def build_final_text(pieces, otx, page: Page, results: PageComponents, disambigs
                      redirects: dict, sources: FullListData, components: NewComponents, keep_page_numbers: bool,
                      log: bool, redo=False):
 
-    subpage_text = None
+    subpage_pieces = []
     pieces.append("")
     if results.media_cat:
         media_cat = None if results.media_cat == "Ignore" else results.media_cat
@@ -342,23 +347,15 @@ def build_final_text(pieces, otx, page: Page, results: PageComponents, disambigs
                 else:
                     pieces.append("==Notes and references==\n{{Reflist}}\n\n")
         elif key == "Appearances" and not results.real:
-            media_cat = add_parsed_section(pieces, results.apps, components.apps, log, mc_section_name, results.real, media_cat)
+            media_cat = add_parsed_section(pieces, results.apps, components.apps, log, mc_section_name, results.real, False, None, media_cat)
         elif key == "Non-Canon Appearances":
-            media_cat = add_parsed_section(pieces, results.nca, components.nca, log, mc_section_name, results.real, media_cat)
+            media_cat = add_parsed_section(pieces, results.nca, components.nca, log, mc_section_name, results.real, False, None, media_cat)
         elif key == "Sources":
-            if results.has_sources_subpage:
-                subpage_text, tx, added = build_subpage_and_section(results.src, components.src, log, None)
-                pieces.append(tx)
-                if subpage_text:
-                    replace = True
-                    subpage_text = do_final_replacements(subpage_text, replace, False)
-                media_cat = None if added else media_cat
-            else:
-                media_cat = add_parsed_section(pieces, results.src, components.src, log, mc_section_name, results.real, media_cat)
+            media_cat = add_parsed_section(pieces, results.src, components.src, log, mc_section_name, results.real, results.has_sources_subpage, subpage_pieces, media_cat)
         elif key == "Non-Canon Sources":
-            media_cat = add_parsed_section(pieces, results.ncs, components.ncs, log, mc_section_name, results.real, media_cat)
+            media_cat = add_parsed_section(pieces, results.ncs, components.ncs, log, mc_section_name, results.real, results.has_sources_subpage, subpage_pieces, media_cat)
         elif key == "Links":
-            media_cat = add_parsed_section(pieces, results.links, components.links, log, mc_section_name, results.real, media_cat)
+            media_cat = add_parsed_section(pieces, results.links, components.links, log, mc_section_name, results.real, False, None, media_cat)
         elif key not in results.sections:
             continue
         else:
@@ -404,6 +401,12 @@ def build_final_text(pieces, otx, page: Page, results: PageComponents, disambigs
             # pieces.append(do_final_replacements(text, True))
             pieces.append(text)
             pieces.append("")
+
+    subpage_text = "\n".join(subpage_pieces).strip()
+    if subpage_pieces:
+        subpage_text = "{{SourcesPageHeader}}" + subpage_text.replace("==Sources==", "")
+        replace = True
+        subpage_text = do_final_replacements(subpage_text, replace, False)
 
     return final_steps(page, results, components, pieces, disambigs, remap, redirects, media_cat, sources, keep_page_numbers, redo=redo), subpage_text
 
@@ -539,6 +542,9 @@ def build_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appe
 
     new_txt, subpage_text = build_final_text(pieces, text, target, results, disambigs, remap, redirects,
                                              sources, components, keep_page_numbers=keep_pages, log=log, redo=redo)
+    if subpage_text and "{{1st" in subpage_text:
+        new_txt = new_txt.replace("{{SourcesPage}}", "{{SourcesPage|full=1}}")
+
     if time:
         report_duration("final", now, start)
 

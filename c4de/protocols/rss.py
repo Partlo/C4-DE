@@ -546,6 +546,43 @@ def check_ea_news(site, url, feed_url, cache: Dict[str, List[str]]):
     return results
 
 
+def check_audible(cache: Dict[str, List[str]]):
+    r = None
+    try:
+        r = requests.get("https://www.audible.com/search?keywords=star+wars&sort=pubdate-desc-rank&pageSize=50&feature_six_browse-bin=18685580011&feature_twelve_browse-bin=18685552011", timeout=15).text
+    except Exception as e:
+        error_log(type(e))
+    if not r:
+        return []
+
+    if "Audible" not in cache:
+        cache["Audible"] = []
+    data = {}
+    soup = BeautifulSoup(r, "html.parser")
+    for x in soup.findAll("li", class_="productListItem"):
+        h = x.find("h3")
+        if h:
+            link = h.find("a")
+            if "Star Wars" not in link.text:
+                continue
+            if link['href'] in cache["Audible"]:
+                continue
+
+            date = x.find(class_="releaseDateLabel")
+            date_text = date.text.split("Release date:")[-1].strip()
+            data[link['href']] = {"text": link.text, "date": date_text}
+
+    results = []
+    for link, v in data.items():
+        fixed = v['text'].replace("Star Wars: ", "").replace(": Star Wars Legends", "").replace(
+            "Star Wars Audio Adventures: ", "")
+        f1, _, f2 = fixed.replace(")", "").partition(" (")
+        results.append(f"**New Audible Listing**:    {fixed}\n-<https://www.audible.com{link}>\n-Release Date: {v['date']}")
+        cache["Audible"].append(link)
+
+    return results
+
+
 def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, check_star_wars):
     x = None
     try:

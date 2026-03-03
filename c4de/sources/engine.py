@@ -169,7 +169,7 @@ def load_auto_categories(site):
 def load_appearances(site, log, canon_only=False, legends_only=False):
     data = []
     pages = ["Legends", "Canon", "Audiobook", "Unlicensed", "Audiobook/German"]
-    other = ["Extra", "Series", "Collections", "Reprint"]
+    other = ["Extra", "Series", "Collections", "Reprint", "Crossover"]
     if canon_only:
         pages = ["Canon", "Audiobook"]
     elif legends_only:
@@ -646,6 +646,9 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                     if x.alternate_url not in urls:
                         urls[x.alternate_url] = []
                     urls[x.alternate_url].append(x)
+                if "Crossover" in i['page']:
+                    x.non_canon = True
+                    x.both_continuities = True
 
                 if x.target:
                     x.is_adaptation = (lx.get(x.target, {}) or cx.get(x.target, {})).get("adaptation", False)
@@ -842,7 +845,7 @@ def parse_new_timeline(page: Page, types):
         elif "Star Wars (LINE Webtoon)" not in unique and "Star Wars (LINE Webtoon)" in line:
             unique["Star Wars (LINE Webtoon)"] = index
             index += 1
-        elif re.match("^\|- ?class ?= ?\".*?\"[ \t]*$", line):
+        elif re.match(r"^\|- ?class ?= ?\".*?\"[ \t]*$", line):
             is_adaptation = "adaptation" in line
 
     return results, unique, unknown or {}

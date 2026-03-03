@@ -454,6 +454,8 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         m = re.search("\{\{([^A-z0-9 _]+)\|([0-9]+)}}", s)
         if m:
             return Item(z, mode, a, target=f"{types['Magazine'][template]} {m.group(1)}", template=template)
+    elif template == "Rebels" and "Spark of Rebellion" in s:
+        return Item(z, mode, a, target="Star Wars Rebels: Spark of Rebellion", template=template)
 
     # InsiderCite and similar templates - link= parameter
     m = re.search("{{[^|\[}\n]+\|link=(.*?)\|.*?\|(.*?)(\|(.*?))?}}", s)

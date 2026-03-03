@@ -313,6 +313,12 @@ def build_page_sections(target: Page, text: str, results: PageComponents, redire
         text = x[0]
         final = "".join(x[1:])
 
+    if "{{SourcesPage" in text:
+        subpage = Page(target.site, f"{target.title()}/Sources")
+        if subpage.exists():
+            results.has_sources_subpage = True
+            text = re.sub("\{\{SourcesPage.*?}}", subpage.get(), text)
+
     by_section, intro, duplicates = split_by_section(text, results)
 
     valid = _valid()
@@ -345,12 +351,6 @@ def build_page_sections(target: Page, text: str, results: PageComponents, redire
             nav_lines += remove_nav_templates(section, types)
         # the 6 master sections should be parsed by the Engine, except the Appearances section of a real-world article
         elif master_header in MASTER_STRUCTURE and not (results.real and master_header == "Appearances"):
-            if master_header == "Sources" and any("{{SourcesPage" in l for l in section.lines):
-                subpage = Page(target.site, f"{target.title()}/Sources")
-                if subpage.exists():
-                    results.has_sources_subpage = True
-                    section.lines += subpage.get().splitlines()
-
             nav_lines += remove_nav_templates(section, types)
             parse_data(results, section.lines, master_header, redirects, disambigs, types, remap, extra, unknown, log)
             continue

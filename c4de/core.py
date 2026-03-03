@@ -1886,7 +1886,7 @@ class C4DE_Bot(commands.Bot):
 
         for channel, message in messages_to_post:
             try:
-                if "Star Wars Kids" in message and "®" not in message and "™" not in message and emoji.emoji_count(message) > 1:
+                if "Star Wars Kids" in message.replace("*", "") and "®" not in message and "™" not in message and emoji.emoji_count(message) > 1:
                     pass
                 elif "(Repost)" not in message:
                     await self.text_channel(channel).send(message)
