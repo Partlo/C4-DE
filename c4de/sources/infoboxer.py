@@ -76,22 +76,22 @@ def build_fields_for_infobox(page) -> InfoboxInfo:
     fields = []
     optional = ["no_image"]
     combo, groups = {}, {}
-    theme = re.search("theme-source=\"(.*?)\"", text)
+    theme = re.search(r"theme-source=\"(.*?)\"", text)
     if theme:
         fields.append(theme.group(1))
-    o = re.search("\|optional=(.*?)[|}]", text)
+    o = re.search(r"\|optional=(.*?)[|}]", text)
     if o:
-        optional += re.split(',', o.group(1))
-    c = re.search("\|combo=(.*?)[|}]", text)
+        optional += re.split(r",', o.group(1))
+    c = re.search(r"\|combo=(.*?)[|}]", text)
     if c:
-        combo_fields = re.split(',', c.group(1))
+        combo_fields = re.split(r",', c.group(1))
         for x in combo_fields:
             pieces = x.split(":")
             groups[pieces[0]] = []
             for y in pieces[1:]:
                 combo[y] = pieces[0]
                 groups[pieces[0]].append(y)
-    for r in re.findall("<(data|image|title) source=\"(.*?)\" ?/?>", text):
+    for r in re.findall(r"<(data|image|title) source=\"(.*?)\" ?/?>", text):
         if r[0] == "image":
             fields.append("image")
             if r[1] == "imagefallback":
@@ -99,7 +99,7 @@ def build_fields_for_infobox(page) -> InfoboxInfo:
                 if "image3" in optional:
                     fields += ["image3", "option3"]
         else:
-            if r[1].startswith('b') and re.match("b[0-9]+", r[1]):
+            if r[1].startswith('b') and re.match(r"b[0-9]+", r[1]):
                 fields.append(r[1].replace("b", "battles"))
             fields.append(r[1])
     if page.title() == "Template:MagazineArticle" and "reprinted in" in optional:
@@ -167,7 +167,7 @@ def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List
     data = {}
     pre, post = [], []
     scroll_box = False
-    text = re.sub("}}(?! ?as)([A-Za-z _0-9\[\]/|']+''')", "}}\n\\1", text).replace("|text=\n", "|text=").replace("|url=\n", "|url=")
+    text = re.sub(r"}}(?! ?as)([A-Za-z _0-9\[\]/|']+''')", "}}\n\\1", text).replace("|text=\n", "|text=").replace("|url=\n", "|url=")
 
     contents = []
     for line in text.replace("}}{{", "}}\n{{").splitlines():
@@ -176,7 +176,7 @@ def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List
         elif found:
             contents.append(line)
         else:
-            m = re.search("^[ ]*(\{\{[^{}]+?}})?(\{\{[^{}]+?}})?(\{\{[^{}]+?}})?(\{\{([A-Za-z _]+).*?)(\|[a-z]+=.*?)?$", line)
+            m = re.search(r"^[ ]*(\{\{[^{}]+?}})?(\{\{[^{}]+?}})?(\{\{[^{}]+?}})?(\{\{([A-Za-z _]+).*?)(\|[a-z]+=.*?)?$", line)
             if m:
                 if m.group(1):
                     pre.append(m.group(1))
@@ -190,8 +190,8 @@ def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List
                 if t and t.lower().replace("_", " ") in NEW_NAMES:
                     t = NEW_NAMES[t.lower().replace("_", " ")]
                 elif t and (" " in t or "_" in t):
-                    t = re.sub("(\{\{[^{}|\[\]]*?)[ _]([a-z])", lambda j: f"{j.group(1)}{j.group(2).upper()}", t)
-                    t = re.sub("(\{\{[^{}|\[\]]*?)[ _]([a-z])", lambda j: f"{j.group(1)}{j.group(2).upper()}", t)
+                    t = re.sub(r"(\{\{[^{}|\[\]]*?)[ _]([a-z])", lambda j: f"{j.group(1)}{j.group(2).upper()}", t)
+                    t = re.sub(r"(\{\{[^{}|\[\]]*?)[ _]([a-z])", lambda j: f"{j.group(1)}{j.group(2).upper()}", t)
 
                 z = t.lower().replace("_", "").replace(" ", "").replace("infobox", "").strip()
                 for i in all_infoboxes:
@@ -238,7 +238,7 @@ def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List
             data[field] += f" {line}"
             continue
 
-        m = re.search("^\|([A-Za-z_ 0-9]+?)=(.*)$", line)
+        m = re.search(r"^\|([A-Za-z_ 0-9]+?)=(.*)$", line)
         if m:
             field = m.group(1).strip()
             data[field] = data.get(field) or m.group(2).strip()
@@ -255,7 +255,7 @@ def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List
 
         if field not in data:
             continue
-        n = re.search("^(.*?)\|([A-Za-z_ 0-9]+?) ?= ?(.*)$", data[field].replace("\n", "<NL>"))
+        n = re.search(r"^(.*?)\|([A-Za-z_ 0-9]+?) ?= ?(.*)$", data[field].replace("\n", "<NL>"))
         if n:
             data[field] = ""
             cx = 0
@@ -270,7 +270,7 @@ def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List
                     field = n.group(2)
                     data[field] = ""
                 nx = n.group(3) or ''
-                n = re.search("^(.*?)\|([A-Za-z_ 0-9]+?) ?= ?(.*)$", nx)
+                n = re.search(r"^(.*?)\|([A-Za-z_ 0-9]+?) ?= ?(.*)$", nx)
                 if not n and nx:
                     data[field] += nx.replace("<NL>", "\n")
 
@@ -279,13 +279,13 @@ def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List
 
 def extract_date(text):
     date_str = None
-    m = re.search("\|(publish date|publication date|airdate|release date|released|published)=(\n\*)?(.*?)[<\n{]", text)
+    m = re.search(r"\|(publish date|publication date|airdate|release date|released|published)=(\n\*)?(.*?)[<\n{]", text)
     if m and "Story reel" in m.group(3):
-        m = re.search("\*Finished episode.*\n.*?([A-z]+ [0-9]+).*?([0-9]{4})", m.group(3))
+        m = re.search(r"\*Finished episode.*\n.*?([A-z]+ [0-9]+).*?([0-9]{4})", m.group(3))
     if m:
         date_str = m.group(3).replace("[", "").replace("]", "").replace("*", "").strip()
-        date_str = re.sub("\[\[([A-Z][a-z][a-z]+)([A-z]+) ([0-9]+)\|\\1 \\3, ([0-9]+)]]", "\\1\\2 \\3, \\4", date_str)
-        date_str = re.sub("^.*?([A-Za-z]+ [0-9]*?) ?( ?&[mn]dash; ?[A-Za-z]+( [0-9]+))?,? ([0-9]{4}).*", "\\1, \\4",
+        date_str = re.sub(r"\[\[([A-Z][a-z][a-z]+)([A-z]+) ([0-9]+)\|\\1 \\3, ([0-9]+)]]", "\\1\\2 \\3, \\4", date_str)
+        date_str = re.sub(r"^.*?([A-Za-z]+ [0-9]*?) ?( ?&[mn]dash; ?[A-Za-z]+( [0-9]+))?,? ([0-9]{4}).*", "\\1, \\4",
                           date_str)
     return date_str
 
@@ -342,7 +342,7 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
         print(f"ERROR: no infobox found for {found} on {page.title()}")
         return text, None, None
     if "pronouns" not in data:
-        r = re.search("Category:Individuals with (.*?) pronouns", text)
+        r = re.search(r"Category:Individuals with (.*?) pronouns", text)
         data["pronouns"] = r.group(1) if r else ""
 
     extra = [k for k in infobox.optional if k not in infobox.params]
@@ -364,22 +364,22 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
                 x = [k for k, v in REMAP.items() if v == f and data.get(k)]
                 v = data.get(x[0] if x else '') or v
             if f == "release date" and not iu_media:
-                x = re.search("([Pp]ublished|[Rr]eleased|[Ii]ncluded|from) (in|on)? ?((\[*(January|February|March|April|May|June|July|August|September|October|November|December|fall|spring|winter|autumn)/?]* ?)*?([0-9\[\], ]*)?(of )?\[*?[0-9]{4}]*)",
+                x = re.search(r"([Pp]ublished|[Rr]eleased|[Ii]ncluded|from) (in|on)? ?((\[*(January|February|March|April|May|June|July|August|September|October|November|December|fall|spring|winter|autumn)/?]* ?)*?([0-9\[\], ]*)?(of )?\[*?[0-9]{4}]*)",
                               intro_only)
                 if x:
                     v = x.group(3)
             if f == "author" and not v:
-                x = re.search("([Ww]ritten|article|interview) by (?P<t>\[\[.*?]])", intro_only)
+                x = re.search(r"([Ww]ritten|article|interview) by (?P<t>\[\[.*?]])", intro_only)
                 if not x:
-                    x = re.search("(?P<t>\[\[.*?]]) interviews", intro_only)
+                    x = re.search(r"(?P<t>\[\[.*?]]) interviews", intro_only)
                 if not x:
-                    x = re.search("article (in \[\[.*?]] )?by (?P<t>\[\[.*?]])", intro_only)
+                    x = re.search(r"article (in \[\[.*?]] )?by (?P<t>\[\[.*?]])", intro_only)
                 if x:
                     v = x.group('t')
             if f == "published in" and not v and not iu_media:
                 v = data.get("issue") or ''
-                if re.search("\[\[(.*?) ([0-9]+)\|\\2( of .*?)?]]", v):
-                    v = re.sub("\[\[(.*?) ([0-9]+)\|\\2( of .*?)?]]", "[[\\1 \\2|''\\1'' \\2]]", v)
+                if re.search(r"\[\[(.*?) ([0-9]+)\|\\2( of .*?)?]]", v):
+                    v = re.sub(r"\[\[(.*?) ([0-9]+)\|\\2( of .*?)?]]", "[[\\1 \\2|''\\1'' \\2]]", v)
                 elif extract:
                     x = re.search(
                         "(published|adventure|released|article|supplement|appearing|appeare?[sd]|included|feature|department) (w?i?t?h?in|of|from) (\[\[(Fantasy Flight Games|De ?Agostini)]]'?s? )?(the )?(magazine )?(?P<t>'*\[\[.*?]]'*)",
@@ -399,7 +399,7 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
             data[f] = v
 
     if data.get("published in") and "release date" in data and not data["release date"] and not iu_media:
-        p = re.search("\[\[(.*?)(\|.*?)?]]", data["published in"])
+        p = re.search(r"\[\[(.*?)(\|.*?)?]]", data["published in"])
         if p:
             parent = Page(page.site, p.group(1))
             if parent.exists() and parent.isRedirectPage():

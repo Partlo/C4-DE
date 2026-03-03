@@ -54,8 +54,8 @@ def archive_senate_hall_thread(site, page: Page, offset):
 def remove_spoiler_tags_from_page(site, page, tv_dates, tv_default, limit=30, offset=5):
     text = page.get()
 
-    text = re.sub("(\{\{(Movie|Show|TV)?[Ss]poiler(Film|TV)?\|([^\n]+?)}})\{\{", "\\1{{", text)
-    line = re.search("\n\{\{(Movie|Show|TV)?[Ss]poiler(Film|TV)?\|(.*?)}}.*?\n", text)
+    text = re.sub(r"(\{\{(Movie|Show|TV)?[Ss]poiler(Film|TV)?\|([^\n]+?)}})\{\{", "\\1{{", text)
+    line = re.search(r"\n\{\{(Movie|Show|TV)?[Ss]poiler(Film|TV)?\|(.*?)}}.*?\n", text)
     if not line:
         print(f"Cannot find spoiler tag on {page.title()}")
         return "no-tag"
@@ -95,7 +95,7 @@ def remove_spoiler_tags_from_page(site, page, tv_dates, tv_default, limit=30, of
         if time > (datetime.now() + timedelta(hours=offset)):
             print(f"{page.title()}: Spoilers for {t} do not expire until {time}")
             return time
-        new_text = re.sub("\{\{(Movie|TV|Show)?[Ss]poiler(Film|TV)?.*?}}.*?\n", "", text)
+        new_text = re.sub(r"\{\{(Movie|TV|Show)?[Ss]poiler(Film|TV)?.*?}}.*?\n", "", text)
     else:
         time, new_text = remove_expired_fields(site, text, fields, named, limit=limit)
 
@@ -128,7 +128,7 @@ def remove_expired_fields(site, text, fields: list, named: dict, limit=30):
         i += 2
 
     if not fields_to_keep:
-        return "no-fields", re.sub("\{\{Spoiler.*?\}\}.*?\n", "", text)
+        return "no-fields", re.sub(r"\{\{Spoiler.*?\}\}.*?\n", "", text)
 
     new_text = "|".join(fields_to_keep)
     for q in quotes_to_keep:
@@ -140,7 +140,7 @@ def remove_expired_fields(site, text, fields: list, named: dict, limit=30):
         new_text += f"|time={new_time}"
 
     new_text = "{{Spoiler|" + new_text + "}}\n"
-    return new_time, re.sub("\{\{Spoiler\|.*?}}.*?\n", new_text, text)
+    return new_time, re.sub(r"\{\{Spoiler\|.*?}}.*?\n", new_text, text)
 
 
 def remove_expired_tv_spoiler(text, fields: list, named: dict, tv_dates: dict, tv_default, limit=30):
@@ -169,7 +169,7 @@ def remove_expired_tv_spoiler(text, fields: list, named: dict, tv_dates: dict, t
         i += 2
 
     if not fields_to_keep:
-        return "no-fields", re.sub("\{\{TVspoiler.*?}}.*?\n", "", text)
+        return "no-fields", re.sub(r"\{\{TVspoiler.*?}}.*?\n", "", text)
 
     new_text = "|".join(fields_to_keep)
     for q in quotes_to_keep:
@@ -180,7 +180,7 @@ def remove_expired_tv_spoiler(text, fields: list, named: dict, tv_dates: dict, t
         new_time = (min(release_dates) + timedelta(days=limit)).strftime("%Y-%m-%d")
 
     new_text = "{{TVspoiler|" + new_text + "}}\n"
-    return new_time, re.sub("\{\{TVspoiler\|.*?}}.*?\n", new_text, text)
+    return new_time, re.sub(r"\{\{TVspoiler\|.*?}}.*?\n", new_text, text)
 
 
 def extract_release_date(site, name, limit):
@@ -216,7 +216,7 @@ def check_preload_for_missing_fields(site, template: Page, apply: bool):
     if "Category:Infoboxes without preloads" in text:
         return [], []
 
-    o = re.search("InfoboxParamCheck\|main\|(.*?)(\|optional=(.*?))?}}", text)
+    o = re.search(r"InfoboxParamCheck\|main\|(.*?)(\|optional=(.*?))?}}", text)
     required = []
     optional = []
     if o:
@@ -237,7 +237,7 @@ def check_preload_for_missing_fields(site, template: Page, apply: bool):
     missing_from_check = []
     order = {}
     previous = "{{"
-    for field in re.findall('<data[ ]*source[ ]*?=[ ]*?"(.*?)"', text):
+    for field in re.findall(r"<data[ ]*source[ ]*?=[ ]*?"(.*?)"', text):
         if f"|{field.strip()}=" not in preload_text:
             if field in optional:
                 print(f"{field} is optional for {template.title()}; skipping")

@@ -51,7 +51,7 @@ def build_section_from_pieces(section: SectionComponents, items: FinishedSection
     for i in range(len(pieces)):
         diff += (pieces[i].count("{{") - pieces[i].count("}}"))
         if diff == -2 and remove_scroll:
-            pieces[i] = re.sub("^(.*?)}}([^}]*?)$", "\\1\\2", pieces[i])
+            pieces[i] = re.sub(r"^(.*?)}}([^}]*?)$", "\\1\\2", pieces[i])
     if diff > 0:
         pieces.append("}}")
     pieces.append("")
@@ -101,7 +101,7 @@ def build_subpage_and_section(section: SectionComponents, items: FinishedSection
     for i in range(len(pieces)):
         diff += (pieces[i].count("{{") - pieces[i].count("}}"))
         if diff == -2 and remove_scroll:
-            pieces[i] = re.sub("^(.*?)}}([^}]*?)$", "\\1\\2", pieces[i])
+            pieces[i] = re.sub(r"^(.*?)}}([^}]*?)$", "\\1\\2", pieces[i])
     if diff > 0:
         pieces.append("}}")
     pieces.append("")
@@ -154,7 +154,7 @@ def sort_categories(pieces, namespace_id, bad_categories):
     final, categories, related_cats, old_rc = [], [], [], []
     rcb_count, regular = 0, 0
     has_bad = False
-    pieces = re.sub("\|\n+\[\[Category:", "|[[Category:", pieces)
+    pieces = re.sub(r"\|\n+\[\[Category:", "|[[Category:", pieces)
 
     for line in pieces.splitlines():
         if "{{relatedcategories" in line.lower() or rcb_count > 0 or line.strip().lower().startswith("|[[category"):
@@ -166,7 +166,7 @@ def sort_categories(pieces, namespace_id, bad_categories):
                 categories.append(f"{line}{{{{InvalidCategory}}}}")
                 has_bad = True
             else:
-                x = re.search("^(\[\[[Cc]ategory:.*?)\| ]]", line)
+                x = re.search(r"^(\[\[[Cc]ategory:.*?)\| ]]", line)
                 if x:
                     related_cats.append("|" + x.group(1) + "]]")
                     old_rc.append(line)
@@ -203,8 +203,8 @@ def sort_categories(pieces, namespace_id, bad_categories):
         final.append("")
         final += related_cats
     x = "\n".join(final).replace("|\n[[Category:", "|[[Category:")
-    x = re.sub("(\[\[Category:.*?)(\|.*?]])\n\\1]]", "\\1\\2", x)
-    x = re.sub("(\[\[Category:.*?)]]\n\\1(\|.*?]])", "\\1\\2", x)
+    x = re.sub(r"(\[\[Category:.*?)(\|.*?]])\n\\1]]", "\\1\\2", x)
+    x = re.sub(r"(\[\[Category:.*?)]]\n\\1(\|.*?]])", "\\1\\2", x)
     return x
 
 
@@ -228,7 +228,7 @@ MAINTENANCE = ["catneeded", "citation", "cleanup", "cleanup-context", "confirm",
 def format_update_contents(ln, page: Page, results: PageComponents, appearances: FullListData, sources: FullListData, types):
     ln = ln.replace("|hide=1", "")
     new_items = []
-    for i in re.findall(",? ?('*(\[\[|\{\{)+[^\n\[\]}{]+(}}|]])'*)}?}?", ln):
+    for i in re.findall(r",? ?('*(\[\[|\{\{)+[^\n\[\]}{]+(}}|]])'*)}?}?", ln):
         if "{{" in i[0]:
             x = extract_item(i[0], False, page.title(), types)
             if x:
@@ -255,7 +255,7 @@ def build_iu_intro(page: Page, results: PageComponents, appearances: FullListDat
             update_content = format_update_contents(ln, page, results, appearances, sources, types)
             maintenance_tags[ln] = "updatecontent"
         elif "{{expand|" in ln.lower():
-            x = re.search("expand\|(.*?)}}", ln)
+            x = re.search(r"expand\|(.*?)}}", ln)
             if x:
                 expand_content = x.group(1)
                 maintenance_tags[ln] = "expand"
@@ -287,7 +287,7 @@ def build_iu_intro(page: Page, results: PageComponents, appearances: FullListDat
         if "{{top" in ln.lower():
             pieces.append(sort_top_template(page.title(), ln))
         elif "|updatecontent=" in ln.lower():
-            x = re.search("updatecontent=(.*?)(\|[a-z0-9=|]*)?}}$", ln)
+            x = re.search(r"updatecontent=(.*?)(\|[a-z0-9=|]*)?}}$", ln)
             if x:
                 lx = format_update_contents(x.group(1), page, results, appearances, sources, types)
                 pieces.append(ln.replace(x.group(1), lx))
@@ -390,12 +390,12 @@ def build_final_text(pieces, otx, page: Page, results: PageComponents, disambigs
 
             text = "\n".join(lines)
             if key == "Appearances" and "{{incomplete" in text:
-                text = re.sub("\{\{[Ii]ncomplete[ _]?List.*?}}", "{{IncompleteApp}}", text)
+                text = re.sub(r"\{\{[Ii]ncomplete[ _]?List.*?}}", "{{IncompleteApp}}", text)
             elif key == "Credits" and "{{incomplete" in text:
-                text = re.sub("\{\{[Ii]ncomplete[ _]?List.*?}}", "{{IncompleteCredits}}", text)
+                text = re.sub(r"\{\{[Ii]ncomplete[ _]?List.*?}}", "{{IncompleteCredits}}", text)
 
             if "onlyinclude" in text:
-                text = re.sub("}}\n\n+</onlyinclude>\n+", "}}\n</onlyinclude>\n\n", text)
+                text = re.sub(r"}}\n\n+</onlyinclude>\n+", "}}\n</onlyinclude>\n\n", text)
             if key not in results.redirects_fixed:
                 text = fix_redirects(redirects, text, f"Final-{key}", disambigs, remap, canon=results.canon)
 
@@ -413,7 +413,7 @@ def build_final_text(pieces, otx, page: Page, results: PageComponents, disambigs
 
 
 def strip_page_number(t):
-    return re.sub("\{\{PageNumber}} ('*\[+.*?]+'*),? \(?[pagechtr.]+ ?[0-9- ]+[.,)]?(.*?</ref>.*?(\n.*?)*?\r?\n\*.*?\\1)", "\\1\\2", t)
+    return re.sub(r"\{\{PageNumber}} ('*\[+.*?]+'*),? \(?[pagechtr.]+ ?[0-9- ]+[.,)]?(.*?</ref>.*?(\n.*?)*?\r?\n\*.*?\\1)", "\\1\\2", t)
 
 
 def final_steps(page: Page, results: PageComponents, components: NewComponents, pieces: list, disambigs: list,
@@ -428,7 +428,7 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
 
     if media_cat and not any("{{mediacat" in p.lower() for p in pieces):
         for i in range(len(pieces)):
-            z = re.search("==.*?==+", pieces[-(i + 1)])
+            z = re.search(r"==.*?==+", pieces[-(i + 1)])
             if z:
                 pieces[-(i + 1)] = pieces[-(i + 1)].replace(z.group(0), z.group(0) + "\n" + media_cat)
                 media_cat = None
@@ -454,16 +454,16 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
     #     #     new_txt = clear_page_numbers(strip_page_number(new_txt), cx)
     #     #     replace = new_txt != strip_page_number(new_txt)
 
-    new_txt = re.sub("(\{\{DEFAULTSORT:.*?}})\n\n+\[\[[Cc]ategory", "\\1\n[[Category", new_txt)
-    new_txt = re.sub("(?<![\n=}])\n==", "\n\n==", re.sub("\n\n+", "\n\n", new_txt)).strip()
-    new_txt = re.sub("(stub|Endgame)}}\n==", "\\1}}\n\n==", new_txt)
-    new_txt = re.sub("(\{\{Quote\|[^\n]+}})\n\n", "\\1\n", new_txt)
+    new_txt = re.sub(r"(\{\{DEFAULTSORT:.*?}})\n\n+\[\[[Cc]ategory", "\\1\n[[Category", new_txt)
+    new_txt = re.sub(r"(?<![\n=}])\n==", "\n\n==", re.sub(r"\n\n+", "\n\n", new_txt)).strip()
+    new_txt = re.sub(r"(stub|Endgame)}}\n==", "\\1}}\n\n==", new_txt)
+    new_txt = re.sub(r"(\{\{Quote\|[^\n]+}})\n\n", "\\1\n", new_txt)
     new_txt = new_txt.replace("\n\n}}", "\n}}").replace("\n\n{{More", "\n{{More")
     if "{{Multiple" in new_txt:
-        if ("{{Plot}}" in new_txt or "{{Plot|" in new_txt or "{{Plot-link" in new_txt) and re.search("==Plot summary==\n\{\{Plot(-link)?(\|.*?)?}}", new_txt):
-            new_txt = re.sub("(\{\{Multiple.?[Ii]ssues.*?)\|plot(\|.*?)?}}", "\\1\\2}}", new_txt)
+        if ("{{Plot}}" in new_txt or "{{Plot|" in new_txt or "{{Plot-link" in new_txt) and re.search(r"==Plot summary==\n\{\{Plot(-link)?(\|.*?)?}}", new_txt):
+            new_txt = re.sub(r"(\{\{Multiple.?[Ii]ssues.*?)\|plot(\|.*?)?}}", "\\1\\2}}", new_txt)
 
-        x = re.search("\{\{Multiple.?[Ii]ssues\|([^|{}\n]+)}}", new_txt)
+        x = re.search(r"\{\{Multiple.?[Ii]ssues\|([^|{}\n]+)}}", new_txt)
         if x:
             new_txt = new_txt.replace(x.group(0), "{{" + MULTIPLE_ISSUE_CONVERSION.get(x.group(1), x.group(1).capitalize()) + "}}")
 
@@ -474,7 +474,7 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
     if "{{WP}}" in new_txt:
         new_txt = new_txt.replace("{{WP}}", f"{{{{WP|{page.title()}}}}}")
     elif "{{WP|{{PAGENAME}}" in new_txt:
-        new_txt = re.sub("(\{\{WP\|[^\n]+?)\{\{PAGENAME}}([^\n}]*?}})", "\\1{{subst:PAGENAME}}\\2",
+        new_txt = re.sub(r"(\{\{WP\|[^\n]+?)\{\{PAGENAME}}([^\n}]*?}})", "\\1{{subst:PAGENAME}}\\2",
                          new_txt.replace("{{WP|{{PAGENAME}}", "{{WP|{{subst:PAGENAME}}"))
 
     # now = datetime.now()
@@ -491,7 +491,7 @@ def handle_legends_links(text, title):
         for line in body.splitlines():
             if "/Legends" in line:
                 if not ("{{otheruses" in line.lower() or "{{top" in line.lower() or "{{youmay" in line.lower()):
-                    x = re.findall("\[\[(.*?)/Legends\|", line)
+                    x = re.findall(r"\[\[(.*?)/Legends\|", line)
                     for i in x:
                         if i != title:
                             line = line.replace(f"[[{i}/Legends", f"[[{i}")
@@ -549,7 +549,7 @@ def build_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appe
     if time:
         report_duration("final", now, start)
 
-    if re.search("\{\{[FCG]Anom.*?\|index=.*?}}", target.get()):
+    if re.search(r"\{\{[FCG]Anom.*?\|index=.*?}}", target.get()):
         index, old_id = create_index(target.site, target, analysis, appearances.target, sources.target, True)
         if index and "{{Indexpage" not in new_txt:
             if "==Appearances==" in text:
@@ -573,7 +573,7 @@ def build_new_text(target: Page, infoboxes: dict, types: dict, disambigs: list, 
 
 
 def remove_index_param(t):
-    return re.sub("(\{\{[FCG]Anom.*?)\|index=.*?(\|.*?)?}}", "\\1\\2}}", t)
+    return re.sub(r"(\{\{[FCG]Anom.*?)\|index=.*?(\|.*?)?}}", "\\1\\2}}", t)
 
 
 def analyze_target_page(target: Page, infoboxes: dict, types: dict, disambigs: list, appearances: FullListData,
@@ -603,13 +603,13 @@ def analyze_target_page(target: Page, infoboxes: dict, types: dict, disambigs: l
         if "�" in new_txt:
             error_log(f"Unexpected characters found in changes")
             error_log(showDiff(old_text, new_txt))
-        z1 = re.sub("<!--.*?-->", "", new_txt)
-        z2 = re.sub("<!--.*?-->", "", remove_index_param(old_text))
+        z1 = re.sub(r"<!--.*?-->", "", new_txt)
+        z2 = re.sub(r"<!--.*?-->", "", remove_index_param(old_text))
         match = z1 == z2
         target.put(new_txt, "Source Engine analysis of Appearances, Sources and references", botflag=match, force=True)
     if save and subpage_text and subpage_text != old_subtext:
-        z1 = re.sub("<!--.*?-->", "", subpage_text)
-        z2 = re.sub("<!--.*?-->", "", remove_index_param(old_subtext))
+        z1 = re.sub(r"<!--.*?-->", "", subpage_text)
+        z2 = re.sub(r"<!--.*?-->", "", remove_index_param(old_subtext))
         match = z1 == z2
         subpage.put(subpage_text, "Source Engine analysis of Appearances, Sources and references", botflag=match, force=True)
 

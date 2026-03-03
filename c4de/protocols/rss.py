@@ -97,9 +97,9 @@ def check_new_pages_rss_feed(site, url, cache: Dict[str, List[str]]):
 
 def parse_diff_description(text):
     table_content = []
-    for row in re.findall("<tr.*?>((.*?\n)*?.*?)</tr>", text):
+    for row in re.findall(r"<tr.*?>((.*?\n)*?.*?)</tr>", text):
         row_content = []
-        for line in re.findall("<td(.*?)>(.*?)</td>", row[0]):
+        for line in re.findall(r"<td(.*?)>(.*?)</td>", row[0]):
             if "colspan=2" in line[0]:
                 row_content.append(line[1])
             row_content.append(line[1])
@@ -213,12 +213,12 @@ def check_autoblocks(cache):
                 continue
             if str(x['id']) not in cache["Autoblock"]:
                 reason = x['reason']
-                z = re.search("\[\[(.*?)(\|(.*?))?\]\]", reason)
+                z = re.search(r"\[\[(.*?)(\|(.*?))?\]\]", reason)
                 while z:
                     tx = z.group(3) if z.group(3) else z.group(1)
                     yx = "[" + tx + "](https://starwars.fandom.com/wiki/" + prepare_link(z.group(1)) + ")"
                     reason = reason.replace(z.group(0), yx)
-                    z = re.search("\[\[(.*?)(\|(.*?))?\]\]", reason)
+                    z = re.search(r"\[\[(.*?)(\|(.*?))?\]\]", reason)
 
                 results.append(f"Autoblock #{x['id']}: {reason}")
             new_cache.append(str(x['id']))
@@ -275,7 +275,7 @@ def parse_bot_request_diff(description):
                 if "==" in cells[1].text:
                     section = cells[1].text
                 elif section:
-                    results.append(re.sub("(\[\[User:|\{\{U\|).* [0-9]+:[0-9]+, [0-9]+ [A-z]+ 202[0-9] \(UTC\)", "", cells[1].text))
+                    results.append(re.sub(r"(\[\[User:|\{\{U\|).* [0-9]+:[0-9]+, [0-9]+ [A-z]+ 202[0-9] \(UTC\)", "", cells[1].text))
                 else:
                     print(f"No new section detected for the following text: {cells[1].text}")
 
@@ -342,7 +342,7 @@ def check_sw_news_page(feed_url, cache: Dict[str, List[str]], title_regex):
             r_text = requests.get(e["url"], timeout=5).text
             title = check_title_formatting(r_text, title_regex, e["title"])
             if not e.get("date"):
-                x = re.search('<div class="publish-date">(.*?)</div>', r_text)
+                x = re.search(r"<div class="publish-date">(.*?)</div>', r_text)
                 if x:
                     e["date"] = x.group(1)
 
@@ -514,7 +514,7 @@ def check_unlimited(site, url, feed_url, cache: Dict[str, List[str]]):
         d = None
         if a["attributes"]["publishedAt"]:
             d = a["attributes"]["publishedAt"].split("T")[0]
-        t = re.sub("'*Star Wars'*", "''Star Wars''", a["attributes"]["title"])
+        t = re.sub(r"'*Star Wars'*", "''Star Wars''", a["attributes"]["title"])
 
         results.append({"site": site, "title": t, "url": u, "content": "", "date": d})
         cache[site].append(u)
@@ -742,7 +742,7 @@ def check_latest_url(url, cache: dict, site, title_regex):
         return []
 
     cache[site] = response.url
-    title = re.search("<meta name=\"title\" content=\"(.*?)( \| Marvel)?\"", response.text)
+    title = re.search(r"<meta name=\"title\" content=\"(.*?)( \| Marvel)?\"", response.text)
     if title:
         title = title.group(1)
     else:
@@ -774,7 +774,7 @@ def check_title_formatting(text, title_regex, title):
 
 
 def clean_title(title):
-    title = re.sub(" ", " ", title).replace("<br>", "")
+    title = re.sub(r" ", " ", title).replace("<br>", "")
     title = re.sub(r"<[ie]m?>( )?[ \n]*</[ie]m?>", r"\1", title)
     title = re.sub(r"<[ie]m?><[ie]m?>( )?(.*?)( )?</[ie]m?>( )?</[ie]m?>", r"\1''\2''\3\4", title)
     title = re.sub(r"<em.*?>( )?(.*?)( )?</em>", r"\1''\2''\3", title)
@@ -785,8 +785,8 @@ def clean_title(title):
     title = title.replace("|", "&#124;").replace("–", "&ndash;").replace("—", "&mdash;")
     title = title.replace("[", "&#91;").replace("]", "&#93;")
     title = title.replace("", "—").replace("", '"').replace("", '"')
-    # title = re.sub(" &#124; ?D[Ii][Ss][Nn][Ee][Yy] ?(\+|Plus)[ ]*(& Disney Junior)?[ ]*$", "", title)
-    # title = re.sub(" (&#124; )?@?StarWarsKids *?x *?@?disneyjunior", "", title)
+    # title = re.sub(r" &#124; ?D[Ii][Ss][Nn][Ee][Yy] ?(\+|Plus)[ ]*(& Disney Junior)?[ ]*$", "", title)
+    # title = re.sub(r" (&#124; )?@?StarWarsKids *?x *?@?disneyjunior", "", title)
     title = title.replace("\n", " ").replace("  ", " ")
     if title.strip().endswith("&#124;"):
         title = title.strip()[:-6]
@@ -803,7 +803,7 @@ def check_review_board_nominations(site: Site):
         if board not in noms:
             continue
 
-        for u in re.findall("====\{\{U\|(.*?)}}.*?====", section):
+        for u in re.findall(r"====\{\{U\|(.*?)}}.*?====", section):
             if u != "USERNAME":
                 noms[board].append(u)
 
@@ -815,7 +815,7 @@ def check_review_board_nominations(site: Site):
         if board not in interested:
             continue
 
-        for u in re.findall("(\[\[User:|{{U\|)(?P<user>.*?)(\|.*?)?(]]|}})", section):
+        for u in re.findall(r"(\[\[User:|{{U\|)(?P<user>.*?)(\|.*?)?(]]|}})", section):
             if u[1] != "USERNAME":
                 interested[board][u[1]] = datetime.now().strftime("%Y-%m-%d")
 
@@ -827,7 +827,7 @@ def check_user_rights_nominations(site: Site):
     text = page.get()
 
     noms = {"Rollback": [], "Admin": [], "Bureaucrat": [], "SMT": [], "Discussions Moderator": []}
-    for u in re.findall("\n{{/(.*?)/(.*?)}}", text):
+    for u in re.findall(r"\n{{/(.*?)/(.*?)}}", text):
         if u[0] not in noms:
             error_log(f"Unexpected nom type {u[0]}")
             noms[u[0]] = []
@@ -837,7 +837,7 @@ def check_user_rights_nominations(site: Site):
     page2 = Page(site, "Wookieepedia:Requests for removal of user rights")
     text2 = page2.get()
     noms["Removal"] = []
-    for u in re.findall("\n{{/(.*?)}}", text2):
+    for u in re.findall(r"\n{{/(.*?)}}", text2):
         if u != "USERNAME":
             noms["Removal"].append(u)
 
@@ -863,7 +863,7 @@ def check_policy(site: Site):
         else:
             if current not in updates:
                 updates[current] = []
-            match = re.search("'''CT:?''':?[ ]+\[\[(?P<link>.*?)]][ ]+.*?'''(?P<result>.*?)'''", line)
+            match = re.search(r"'''CT:?''':?[ ]+\[\[(?P<link>.*?)]][ ]+.*?'''(?P<result>.*?)'''", line)
             if match:
                 x = {k: v.replace("‎", "") for k, v in match.groupdict().items()}
                 updates[current].append(x)
@@ -932,11 +932,11 @@ def build_site_map(full: bool):
                             continue
                         elif any(s in loc.text for s in GALLERIES):
                             continue
-                        elif "/series/" in loc.text and re.match(".*?/series/[a-z0-9-]+$", loc.text):
+                        elif "/series/" in loc.text and re.match(r".*?/series/[a-z0-9-]+$", loc.text):
                             continue
                         elif "/archived-201" in loc.text or "/archived-202" in loc.text:
                             continue
-                        elif "/databank/" in loc.text and re.search("/databank/[a-z0-9-]+-all", loc.text):
+                        elif "/databank/" in loc.text and re.search(r"/databank/[a-z0-9-]+-all", loc.text):
                             continue
                         elif loc.text.endswith("-gallery") or loc.text.endswith("news/contributor"):
                             continue
@@ -1086,7 +1086,7 @@ def handle_site_map(sitemap: set, urls, skip, updated_db_entries, guides):
             elif '<section class="module image_gallery' in r.text and x not in guides:
                 print(u, "gallery")
                 continue
-            title = re.search("<title>(.*?)</title>", r.text)
+            title = re.search(r"<title>(.*?)</title>", r.text)
             if title:
                 title = title.group(1).replace(" | StarWars.com", "").strip()
             else:
@@ -1094,7 +1094,7 @@ def handle_site_map(sitemap: set, urls, skip, updated_db_entries, guides):
             title = title.replace("’", "'").replace('&#39;', "'").replace('&quot;', '"')
             s = "Databank" if x.startswith("databank/") else "StarWars.com"
             if s == "Databank" and ("- " in title or "|" in title):
-                title = re.sub(" ?[-|] (The Acolyte|Star Wars Databank|Databank)", "", title)
+                title = re.sub(r" ?[-|] (The Acolyte|Star Wars Databank|Databank)", "", title)
             if u in updated_db_entries:
                 updated_db_entries.pop(u)
             diff.append({"site": s, "url": u, "title": title, "date": datetime.now().strftime('%Y-%m-%d')})
@@ -1122,11 +1122,11 @@ def augment_site_map(site, series, urls):
             continue
         data = d.json()
         for a in data['data']:
-            series_db_entries[a['href'].split('.com/')[-1]] = re.sub(" ?- ?Skeleton Crew", "", a['title'])
+            series_db_entries[a['href'].split('.com/')[-1]] = re.sub(r" ?- ?Skeleton Crew", "", a['title'])
         while data.get('next'):
             data = requests.get(f"https://www.starwars.com/_grill/filter/series/{st}{data['next']}").json()
             for a in data['data']:
-                series_db_entries[a['href'].split('.com/')[-1]] = re.sub(" ?- ?Skeleton Crew", "", a['title'])
+                series_db_entries[a['href'].split('.com/')[-1]] = re.sub(r" ?- ?Skeleton Crew", "", a['title'])
 
         cat = Category(site, f"Category:{s} episodes")
         if not cat.exists():
@@ -1179,6 +1179,6 @@ def check_series_page(url):
                     urls_to_check.add(a['href'].split('.com/')[-1])
             elif 'data-title' in l.attrs and "Databank" in l['data-title']:
                 for a in l.find_all("a", class_="title-link"):
-                    db_entries[a['href'].split('.com/')[-1]] = re.sub(" ?- ?The Acolyte", "", a['data-title'])
+                    db_entries[a['href'].split('.com/')[-1]] = re.sub(r" ?- ?The Acolyte", "", a['data-title'])
 
     return r.status_code == 200, urls_to_check, db_entries

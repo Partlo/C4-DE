@@ -42,3 +42,4 @@ docs/_build/
 /c4de/sources/save_web_sources.py
 /test_extraction.py
 /local_token.py
+/robo/robo-password.py

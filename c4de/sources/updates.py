@@ -53,7 +53,7 @@ def identify_infobox(t, infoboxes):
     for i in infoboxes:
         if f"{{{{{i.lower()}\n" in t.lower() or f"{{{{{i.lower()}|" in t.lower():
             return i
-    tx = re.sub("\{\{([A-z]+)[ _]([A-z]+)[ _]?([A-z]+?)(?=[|\n])", "{{\\1\\2\\3", t).lower()
+    tx = re.sub(r"\{\{([A-z]+)[ _]([A-z]+)[ _]?([A-z]+?)(?=[|\n])", "{{\\1\\2\\3", t).lower()
     for i in infoboxes:
         if f"{{{{{i.lower()}\n" in tx or f"{{{{{i.lower()}|" in tx:
             return i
@@ -70,7 +70,7 @@ def analyze_page(page, text, category, infobox):
         if all(now > d[1] for d in dates):
             print(f"Skipping past ({dates[0][1].strftime('%Y-%m-%d')}) media: {page.title()}")
             return None
-    c = re.search("{{Top.*?\|(can|leg|ncc|ncl|new|pre|btr|old|imp|reb|njo|lgc|inf)[|}]", text)
+    c = re.search(r"{{Top.*?\|(can|leg|ncc|ncl|new|pre|btr|old|imp|reb|njo|lgc|inf)[|}]", text)
     ct = c.group(1) if c else None
     if ct in ["pre", "btr", "old", "imp", "reb", "new", "njo", "lgc", "inf"]:
         ct = "leg"
@@ -244,8 +244,8 @@ def compare_dates(title, text, target, items, mismatch, no_dates, infobox):
         pass
     else:
         if strs:
-            if re.sub("^(Fall|Summer|Spring|Winter|Autumn) ([0-9]+)$", "\\2", strs[0][0]) == \
-                    re.sub("([0-9]+)-[0-9X]+-XX[A-Z]?$", "\\1", items[0].date):
+            if re.sub(r"^(Fall|Summer|Spring|Winter|Autumn) ([0-9]+)$", "\\2", strs[0][0]) == \
+                    re.sub(r"([0-9]+)-[0-9X]+-XX[A-Z]?$", "\\1", items[0].date):
                 return
 
         no_dates[target] = (f"{items[0].master_page}-{infobox}", strs[0] if strs else None, items[0].date)
@@ -564,7 +564,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
         if i.target in changed:
             print(changed[i.target].dates)
             d = build_date(changed[i.target].dates)
-        z = re.sub(" [ ]+", " ", i.department + i.original + " " + i.ab + " " + i.extra)
+        z = re.sub(r" [ ]+", " ", i.department + i.original + " " + i.ab + " " + i.extra)
         if i.target and key.startswith("Appearances"):
             x, _, _ = i.target.partition(" (")
             for a in audiobooks:
@@ -578,7 +578,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
     section = None
     canceled = []
     lines = ["<noinclude>{{Wookieepedia:Sources/Header}}</noinclude>"]
-    post = re.search("==Post-([0-9]+)==", page.get())
+    post = re.search(r"==Post-([0-9]+)==", page.get())
     post = post.group(1) if post else None
     post_found = False
     for f in sorted(final, key=lambda a: (a[4], "StoryCite" in a[0] if key == "Audiobooks" else False, " abridged" not in a[0], a[1], (a[2] or 200), a[3], a[0])):
@@ -623,7 +623,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
     if canceled:
         lines += canceled
 
-    new_txt = re.sub("(?<![\n=])\n==", "\n\n==", re.sub("\n\n+", "\n\n", "\n".join(l.strip() for l in lines))).strip()
+    new_txt = re.sub(r"(?<![\n=])\n==", "\n\n==", re.sub(r"\n\n+", "\n\n", "\n".join(l.strip() for l in lines))).strip()
     with codecs.open(f"{PROJECT_DIR}/c4de/sources/test.txt", mode="w", encoding="utf-8") as f:
         f.writelines(new_txt)
 

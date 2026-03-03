@@ -128,7 +128,7 @@ class Item:
 
     def card_sort_text(self):
         if self.card and "#" in self.card:
-            return re.sub("#([0-9])([):])", "#0\\1\\2", self.card.replace("''", "").replace('"', ''))
+            return re.sub(r"#([0-9])([):])", "#0\\1\\2", self.card.replace("''", "").replace('"', ''))
         elif self.card:
             return self.card.replace("''", "").replace('"', '')
         else:
@@ -209,7 +209,7 @@ class ItemId:
         self.master = master
         self.use_original_text = use_original_text or current.old_version
         if " edition" in self.current.original:
-            if re.search("''Star Wars: (Complete Locations|The Complete Visual Dictionary|Complete Vehicles)'', [0-9]+ edition", self.current.original):
+            if re.search(r"''Star Wars: (Complete Locations|The Complete Visual Dictionary|Complete Vehicles)'', [0-9]+ edition", self.current.original):
                 self.use_original_text = True
         elif "Starlog" in self.current.original:
             self.use_original_text = True
@@ -401,7 +401,7 @@ class SectionLeaf:
             header_line = f"{'='*self.level}{header_line}{'='*self.level}"
         if self.invalid:
             f = "{{SectionFlag|bts}}" if 'Behind the scenes' in header_line else "{{SectionFlag}}"
-            header_line = re.sub("(===?.*?)(===?)", f"\\1 {f}\\2", header_line)
+            header_line = re.sub(r"(===?.*?)(===?)", f"\\1 {f}\\2", header_line)
         if any("{{mediacat" in ln.lower() for ln in self.lines):
             lines = [header_line]
             added_media_cat = True
@@ -456,7 +456,7 @@ class SectionLeaf:
         before, images, filenames, after = [], [], [], []
         gallery_start, ended = False, False
         for ln in lines:
-            x = re.search("^(([Ff]ile:)?.*?\.(png|jpe?g))(\|.*?)?$", ln)
+            x = re.search(r"^(([Ff]ile:)?.*?\.(png|jpe?g))(\|.*?)?$", ln)
             if "<gallery" in ln:
                 before.append(ln.replace(" widths=\"150\"", ""))
                 gallery_start = True

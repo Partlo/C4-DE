@@ -40,7 +40,7 @@ def convert_date_str(date: str, links: set, add_links=True) -> Tuple[str, Option
         return date, None
     else:
         try:
-            d = datetime.strptime(re.sub("[A-Z]", "", date), "%Y-%m-%d")
+            d = datetime.strptime(re.sub(r"[A-Z]", "", date), "%Y-%m-%d")
             m = add_link(d.strftime("%B %d").replace(" 0", " "), links, add_links)
             y = add_link(d.strftime("%Y"), links, add_links)
             return f"{m}, {y}", d
@@ -57,7 +57,7 @@ def add_link(d, links: set, add_links):
 
 
 def prep_date(d):
-    return re.sub("-([0-9])$", "-0\\1", re.sub("-([0-9])([:-])", "-0\\1\\2", d))
+    return re.sub(r"-([0-9])$", "-0\\1", re.sub(r"-([0-9])([:-])", "-0\\1\\2", d))
 
 
 def build_date(dates):
@@ -71,7 +71,7 @@ def build_date(dates):
 
 
 def build_date_and_ref(i: Item, site, links: set, refs: dict, contents: dict, ref_name=None, existing: dict=None):
-    date_str, parsed_date = convert_date_str(re.sub("XX[A-Z]", "XX", i.date), links)
+    date_str, parsed_date = convert_date_str(re.sub(r"XX[A-Z]", "XX", i.date), links)
     date_ref = ''
     if date_str and not i.mode == "Toys":
         if i.target:
@@ -125,26 +125,26 @@ def get_reference_for_release_date(site, target, formatted, date, refs: dict, co
 
 def extract_release_date(title, text) -> Tuple[List[Tuple[str, datetime, str]], List[Tuple[str, str]], List[str]]:
     date_strs = []
-    m = re.search("\|(publish date|premiere date|publication date|first aired|airdate|start date|first date|release date|released|published)=(?P<d1>.*?)(?P<r1><ref.*?)?\n(\*(?P<d2>.*?)(?P<r2><ref.*?)?\n)?(\*(?P<d3>.*?)(?P<r3><ref.*?)?\n)?", text)
+    m = re.search(r"\|(publish date|premiere date|publication date|first aired|airdate|start date|first date|release date|released|published)=(?P<d1>.*?)(?P<r1><ref.*?)?\n(\*(?P<d2>.*?)(?P<r2><ref.*?)?\n)?(\*(?P<d3>.*?)(?P<r3><ref.*?)?\n)?", text)
     if m:
         for i in range(1, 4):
             if m.groupdict()[f"d{i}"]:
                 d = m.groupdict()[f"d{i}"]
-                d = re.sub("\[\[([A-z]+)([ 0-9]+)?]]&ndash;\[\[([A-z]+)( [0-9]+)?\|.*?]]", "\\1\\2", d)
-                d = re.sub("\[\[([A-z]+)( [0-9]+)?\|[A-z]+\.?( [0-9]+)?]]", "\\1\\2", d).replace("c. ", "")
+                d = re.sub(r"\[\[([A-z]+)([ 0-9]+)?]]&ndash;\[\[([A-z]+)( [0-9]+)?\|.*?]]", "\\1\\2", d)
+                d = re.sub(r"\[\[([A-z]+)( [0-9]+)?\|[A-z]+\.?( [0-9]+)?]]", "\\1\\2", d).replace("c. ", "")
                 d = d.replace("[", "").replace("]", "").replace("*", "").strip().replace(',', '')
                 if "{{c|reprint" in d.lower() or "(reprint" in d.lower() or d.lower().startswith("cancel") or d.lower().startswith("future"):
                     continue
-                d = re.sub("\{\{C\|.*?}}", "", d)
-                d = re.sub("([A-z]+ ?[0-9]*) ?(-|&[mn]dash;) ?([A-z]+ ?[0-9]*) ", "\\1 ", d)
-                d = re.sub(" ?&[mn]dash; ?[A-z]+ [0-9|]+", "", d)
-                d = re.sub("\([A-Z]+\)", "", d)
-                d = re.sub(" of ([0-9]+)", " \\1", d)
-                d = re.sub("([A-z]+ ?[0-9]*) ([0-9]{4})( .*?)$", "\\1 \\2", d)
-                d = re.sub("^([A-z]+)/([A-z]+) ([0-9]{4})", "\\1 \\3", d)
+                d = re.sub(r"\{\{C\|.*?}}", "", d)
+                d = re.sub(r"([A-z]+ ?[0-9]*) ?(-|&[mn]dash;) ?([A-z]+ ?[0-9]*) ", "\\1 ", d)
+                d = re.sub(r" ?&[mn]dash; ?[A-z]+ [0-9|]+", "", d)
+                d = re.sub(r"\([A-Z]+\)", "", d)
+                d = re.sub(r" of ([0-9]+)", " \\1", d)
+                d = re.sub(r"([A-z]+ ?[0-9]*) ([0-9]{4})( .*?)$", "\\1 \\2", d)
+                d = re.sub(r"^([A-z]+)/([A-z]+) ([0-9]{4})", "\\1 \\3", d)
                 d = d.replace("Late ", "").replace("Early ", "")
-                # d = re.sub("^(Late|Early|Autumn|Spring|Fall|Winter|Summer) ", "", d)
-                d = re.sub("  +", " ", d)
+                # d = re.sub(r"^(Late|Early|Autumn|Spring|Fall|Winter|Summer) ", "", d)
+                d = re.sub(r"  +", " ", d)
                 d = d.split("<br")[0].replace(".", "").replace("  ", " ")
                 date_strs.append((d.split("-")[0], m.groupdict().get(f"r{i}")))
 
@@ -192,12 +192,12 @@ def extract_release_date_reference(site, target, date: datetime) -> Tuple[Option
 
 def extract_reference(line, text):
     if line:
-        m = re.search("<ref name=\".*?\" *?>(.*?)</ref>", line)
+        m = re.search(r"<ref name=\".*?\" *?>(.*?)</ref>", line)
         if m:
             return m.group(1)
-        m = re.search("<ref name=\"(.*?)\" ?/>", line)
+        m = re.search(r"<ref name=\"(.*?)\" ?/>", line)
         if m:
-            x = re.search("<ref name=\"" + m.group(1) + "\" ?>(.*?)</ref>", text)
+            x = re.search(r"<ref name=\"" + m.group(1) + "\" ?>(.*?)</ref>", text)
             if x:
                 return x.group(1)
     return None

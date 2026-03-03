@@ -27,7 +27,7 @@ def read_version_info(target_version) -> Tuple[str, str]:
         # raise Exception("Version info not found!")
 
     z = "\n".join(changes)
-    return re.sub("(\r?\n)+", "\n", z), "\n".join(text)
+    return re.sub(r"(\r?\n)+", "\n", z), "\n".join(text)
 
 
 def report_version_info(site, version) -> Optional[str]:

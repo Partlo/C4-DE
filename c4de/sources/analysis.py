@@ -32,12 +32,12 @@ def remove_audiobook_from_1st(param, match, name):
         return "" if match else None
     elif "audiobook" not in param:
         return None
-    elif re.search("^'*\[\[[^\n}|\]\[]+ \((unabridged )?audiobook\)(\|[^\n}|\]\[]+)?]]'*$", param):
+    elif re.search(r"^'*\[\[[^\n}|\]\[]+ \((unabridged )?audiobook\)(\|[^\n}|\]\[]+)?]]'*$", param):
         return ""
 
-    y = re.search("^(.*?)(,|and)? ?'*\[\[[A-z0-9: -]+ \((unabridged )?audiobook\).*?]]'*(,| and)? ?(.*?)$", param)
+    y = re.search(r"^(.*?)(,|and)? ?'*\[\[[A-z0-9: -]+ \((unabridged )?audiobook\).*?]]'*(,| and)? ?(.*?)$", param)
     if not y:
-        if param.count("[[") == 0 and re.search("(?<! abridged) audiobook$", param):
+        if param.count("[[") == 0 and re.search(r"(?<! abridged) audiobook$", param):
             return "" if match else "in book"
         elif not match and "in book" not in param:
             return f"in book, {param}" if " and " in param else f"in book and {param}"
@@ -67,30 +67,30 @@ def remove_audiobook_from_1st(param, match, name):
     else:
         t = "in book"
 
-    z = re.sub(" and *$", "", re.sub("(in book )+", "in book ", re.sub("( and)+", "\\1", t)))
+    z = re.sub(r" and *$", "", re.sub(r"(in book )+", "in book ", re.sub(r"( and)+", "\\1", t)))
     return "" if (z == "and" or (z == "in book" and match)) else z
 
 
 def handle_ab_first(a: ItemId, audiobook_date):
-    if re.search("\{\{1stID\|[^\[{|]+\|.*?}}", a.current.extra):
-        z = re.search("\{\{1stID\|[^\[{|]+(\|(simult=)?(.*?))}}", a.current.extra)
+    if re.search(r"\{\{1stID\|[^\[{|]+\|.*?}}", a.current.extra):
+        z = re.search(r"\{\{1stID\|[^\[{|]+(\|(simult=)?(.*?))}}", a.current.extra)
         t = remove_audiobook_from_1st(z.group(3), audiobook_date == a.master.date, a.master.target)
         if t:
             a.current.extra = a.current.extra.replace(z.group(3), t).replace("simult=", "")
         elif t is not None:
             a.current.extra = a.current.extra.replace(z.group(1), "").replace("simult=", "")
-    elif re.search("\{\{1stID\|[^\[{|]+}}", a.current.extra) and audiobook_date != a.master.date:
-        a.current.extra = re.sub("(\{\{1stID\|[^\[{|]+)}}", "\\1|in book}}", a.current.extra)
+    elif re.search(r"\{\{1stID\|[^\[{|]+}}", a.current.extra) and audiobook_date != a.master.date:
+        a.current.extra = re.sub(r"(\{\{1stID\|[^\[{|]+)}}", "\\1|in book}}", a.current.extra)
 
     if any(f"{{{{1st{x}|" in a.current.extra for x in ("", "m", "p", "c", "cm")):
-        z = re.search("\{\{1stc?[mp]*\|(.*?)}}", a.current.extra)
+        z = re.search(r"\{\{1stc?[mp]*\|(.*?)}}", a.current.extra)
         t = remove_audiobook_from_1st(z.group(1), audiobook_date == a.master.date, a.master.target)
         if t:
             a.current.extra = a.current.extra.replace(z.group(1), t)
         elif t is not None:
             a.current.extra = a.current.extra.replace("|" + z.group(1), "")
     elif "{{1st" in a.current.extra and audiobook_date != a.master.date:
-        a.current.extra = re.sub("(\{\{1stc?[mp]*?)}}", "\\1|in book}}", a.current.extra)
+        a.current.extra = re.sub(r"(\{\{1stc?[mp]*?)}}", "\\1|in book}}", a.current.extra)
 
     if a.current.extra and a.current.target and a.current.target.split(' (')[0] in a.current.extra:
         z = a.current.target.split(' (')[0]
@@ -172,7 +172,7 @@ def augment_appearances(new_apps: SectionItemIds, appearances: FullListData, col
     new_indexes = []
     for i, a in enumerate(new_apps.found):
         if "abridged" in a.current.extra:
-            a.current.extra = re.sub("(\{\{Ab\|.*?(abridged audiobook)\|)audiobook}}", "\\1abridged audiobook}}",
+            a.current.extra = re.sub(r"(\{\{Ab\|.*?(abridged audiobook)\|)audiobook}}", "\\1abridged audiobook}}",
                                      a.current.extra)
         if "{{po}}" in (a.current.extra or '').lower():
             handle_ab_first(a, a.master.date)
@@ -193,8 +193,8 @@ def augment_appearances(new_apps: SectionItemIds, appearances: FullListData, col
                 z = ItemId(b, b, False, False, False)
                 extra = a.current.extra or ''
                 if "1stm" in extra:
-                    extra = re.sub("\{\{1stm.*?}}", "{{Mo}}", extra)
-                z.current.extra = re.sub(" ?\{\{1st[A-z]*\|.*?}}", "", extra)
+                    extra = re.sub(r"\{\{1stm.*?}}", "{{Mo}}", extra)
+                z.current.extra = re.sub(r" ?\{\{1st[A-z]*\|.*?}}", "", extra)
                 if a.master.index is not None:
                     z.master.index = a.master.index + 0.1
                     z.current.index = a.master.index + 0.1
@@ -257,14 +257,14 @@ def handle_non_canon_items(results: PageComponents, new_apps: SectionItemIds, ne
         if log:
             print(f"Moving {len(new_apps.wrong) + len(new_nca.wrong)} sources from Appearances to Sources")
         for x in new_apps.wrong:
-            x.current.extra = re.sub("\{\{1st([|}])", "{{1stm\\1", x.current.extra)
+            x.current.extra = re.sub(r"\{\{1st([|}])", "{{1stm\\1", x.current.extra)
             (new_ncs if x.master.non_canon else new_src).found.append(x)
         if not new_apps.found:
             results.src.preceding += results.apps.preceding
             results.src.trailing += results.apps.trailing
             results.src.after += results.apps.after
         for x in new_nca.wrong:
-            x.current.extra = re.sub("\{\{1st([|}])", "{{1stm\\1", x.current.extra)
+            x.current.extra = re.sub(r"\{\{1st([|}])", "{{1stm\\1", x.current.extra)
             (new_ncs if x.master.non_canon else new_src).found.append(x)
     if new_src.wrong or new_ncs.wrong:
         if log:
@@ -403,8 +403,8 @@ def expand_listing(target: str, o: Item, data: FullListData, expanded: int):
     x.index = o.index
     x.extra = o.extra
     if expanded:
-        x.extra = re.sub("\{\{1stm.*?}}", "{{Mo}}", x.extra).strip()
-        x.extra = re.sub("\{\{1st.*?}}", "", x.extra).strip()
+        x.extra = re.sub(r"\{\{1stm.*?}}", "{{Mo}}", x.extra).strip()
+        x.extra = re.sub(r"\{\{1st.*?}}", "", x.extra).strip()
     x.extra_date = o.extra_date
     return ItemId(x, data.target[target][0], False)
 
@@ -668,7 +668,7 @@ def handle_card_item(d: ItemId, o: Item, cards: Dict[str, List[ItemId]], found: 
         if o.special and o.special.isnumeric():
             n = int(o.special)
         elif o.card and o.card.strip().startswith('#'):
-            num = re.sub("^#([0-9]+):? .*?$", "\\1", o.card.strip())
+            num = re.sub(r"^#([0-9]+):? .*?$", "\\1", o.card.strip())
             if num.isnumeric():
                 n = int(num)
         if n:
@@ -681,12 +681,12 @@ def handle_card_item(d: ItemId, o: Item, cards: Dict[str, List[ItemId]], found: 
         cards[parent_set] = []
 
     if parent_set and "|stext=" in d.master.original and "|stext=" not in d.current.original:
-        x = re.search("(\|stext=.*?)[|}]", d.master.original)
+        x = re.search(r"(\|stext=.*?)[|}]", d.master.original)
         if x:
             d.current.original = d.current.original.replace(f"|set={parent_set}", f"|set={parent_set}{x.group(1)}")
-            d.current.original = re.sub("\|stext=('*(.*?)'*)\|(stext|sformatt?e?d?)?'*\\3'*\|", "|stext=\\2|", d.current.original)
+            d.current.original = re.sub(r"\|stext=('*(.*?)'*)\|(stext|sformatt?e?d?)?'*\\3'*\|", "|stext=\\2|", d.current.original)
     elif parent_set and "|stext=" not in d.master.original:
-        d.current.original = re.sub("\|s(formatt?e?d?|text)=('*(.*?)'*)\|", "|", d.current.original)
+        d.current.original = re.sub(r"\|s(formatt?e?d?|text)=('*(.*?)'*)\|", "|", d.current.original)
 
     if o.card:
         cards[parent_set].append(d)
@@ -797,7 +797,7 @@ def build_new_external_links(page: Page, results: PageComponents, original: List
         o.index = d.master.index if d else o.index
 
         if not d and "|date=" in o.original:
-            x = re.search("\|date=([0-9]+-[0-9]+-[0-9]+)", o.original)
+            x = re.search(r"\|date=([0-9]+-[0-9]+-[0-9]+)", o.original)
             if x:
                 o.date = x.group(1)
                 o.original_date = x.group(1)
@@ -806,7 +806,7 @@ def build_new_external_links(page: Page, results: PageComponents, original: List
         elif not d and o.original_date:
             o.date = o.original_date
         elif not d and o.template not in ["Amazon"]:
-            x = re.search("(20[0-9][0-9])[/-]?([0-9][0-9]?)([/-]?([0-9][0-9]?))?", re.sub("\|archivedate=[0-9]+(?=(\||}}))", "", o.original))
+            x = re.search(r"(20[0-9][0-9])[/-]?([0-9][0-9]?)([/-]?([0-9][0-9]?))?", re.sub(r"\|archivedate=[0-9]+(?=(\||}}))", "", o.original))
             if x:
                 o.date = x.group(1) + "-" + str.zfill(x.group(2), 2) + "-" + str.zfill(x.group(4) or "XX", 2)
 
@@ -823,7 +823,7 @@ def build_new_external_links(page: Page, results: PageComponents, original: List
             # if o.template not in ["WP"] and o.mode not in ["Interwiki", "Social", "Profile"]:
             #     unknown.append(f"Tracked-{o.mode}: {o.original}")
             zn = d.current.original if d.use_original_text else d.master.original
-            zn = re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", f"*{zn}")
+            zn = re.sub(r"<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", f"*{zn}")
             if d.current.bold:
                 zn = f"'''{zn}'''"
             if d.master.date and d.master.date.startswith("Cancel") and "{{c|cancel" not in zn.lower():
@@ -833,9 +833,9 @@ def build_new_external_links(page: Page, results: PageComponents, original: List
             zn = swap_parameters(zn).replace("–", "&ndash;").replace("—", "&mdash;")
             z = f"{zn} {d.current.extra}"
             if d.master.mode == "Minis" and d.master.card:
-                z = re.sub("\|link=.*?(\|.*?)?}}", "\\1}}", re.sub(" ?\{\{[Cc]\|[Rr]eissued.*?}}", "", z))
+                z = re.sub(r"\|link=.*?(\|.*?)?}}", "\\1}}", re.sub(r" ?\{\{[Cc]\|[Rr]eissued.*?}}", "", z))
             if "|int=" in z and d.master.target == page.title():
-                z = re.sub("\|int=.*?(\|.*?)?}}", "\\1}}", z)
+                z = re.sub(r"\|int=.*?(\|.*?)?}}", "\\1}}", z)
             z = z if z.startswith("*") else f"*{z}"
             if z not in done:
                 found.append((o.mode, d.master, z))
@@ -844,7 +844,7 @@ def build_new_external_links(page: Page, results: PageComponents, original: List
             print("External Link:", o.mode, o.template, o.original)
             if o.template not in ["WP"] and o.mode not in ["Interwiki", "Social", "Profile"]:
                 unknown.append(f"{o.mode}: {o.original}")
-            zn = re.sub("\{\{[Ss]eriesListing.*?}} ?", "", o.original)
+            zn = re.sub(r"\{\{[Ss]eriesListing.*?}} ?", "", o.original)
             u = "{{UnknownListing|ex=1}} " if "{{PAGENAME}}" in zn else ""
             z = f"*{u}{zn} {o.extra}".strip()
             if z not in done:
@@ -960,7 +960,7 @@ def build_new_section(title, name, section: SectionItemIds, results: PageCompone
                                     collapse_audiobooks, section.mark_as_non_canon, results.unlicensed, log)
         if itext:
             if results.media and o.master.collection_type == "individual" and "{{SeriesListing" in itext:
-                itext = re.sub("\{\{SeriesListing.*?}} ?", "", itext)
+                itext = re.sub(r"\{\{SeriesListing.*?}} ?", "", itext)
             new_text.append(itext)
             rows += 1
 
@@ -1007,9 +1007,9 @@ def build_card_block(o: ItemId, d: str, section: SectionItemIds, sl: str, final_
         else:
             ot = c.master.original
         if (o.master.mode == "Minis" or "mission=" in o.master.original) and o.master.card:
-            ot = re.sub("\|link=.*?(\|.*?)?}}", "\\1}}", ot)
+            ot = re.sub(r"\|link=.*?(\|.*?)?}}", "\\1}}", ot)
         elif c.master.ref_magazine:
-            ot = re.sub("(\{\{(?!FactFile)[A-z0-9]+\|[0-9]+\|.*?)(\|.*?(\{\{'s?}})?.*?)?}}", "\\1}}", ot)
+            ot = re.sub(r"(\{\{(?!FactFile)[A-z0-9]+\|[0-9]+\|.*?)(\|.*?(\{\{'s?}})?.*?)?}}", "\\1}}", ot)
         if ot not in final_without_extra:
             items.append((c, ot))
             final_without_extra.append(ot)
@@ -1021,15 +1021,15 @@ def build_card_block(o: ItemId, d: str, section: SectionItemIds, sl: str, final_
     for c, ot in items:
         ex = c.current.extra.strip()
         if len(items) > 1 and "{{1st" in ex:    # move 1stX templates up to the parent
-            xid = re.search("(\{\{1stc?(ID\|.*?|m|p|r)?)(\|.*?)?}}}?}?", ex)
+            xid = re.search(r"(\{\{1stc?(ID\|.*?|m|p|r)?)(\|.*?)?}}}?}?", ex)
             if xid:
                 if xid.group(1) not in parent:
                     to_add.append(xid.group(0))
                 ex = ex.replace(xid.group(0), "").replace("  ", " ")
-        zt = "*" + d + re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", f"{ot} {ex}").strip()
+        zt = "*" + d + re.sub(r"<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", f"{ot} {ex}").strip()
         ct += (zt.count("{") - zt.count("}"))
         if c.master.mode == "Minis" and c.master.card:
-            zt = re.sub(" ?\{\{[Cc]\|[Rr]eissued.*?}}", "", zt)
+            zt = re.sub(r" ?\{\{[Cc]\|[Rr]eissued.*?}}", "", zt)
         final_items.append(c)
         final_without_extra.append(ot)
         block.append(zt)
@@ -1038,15 +1038,15 @@ def build_card_block(o: ItemId, d: str, section: SectionItemIds, sl: str, final_
         up = f"{{{{UnknownListing{sl}}}}} " if (o.current.unknown and not o.current.override) else ""
         for x in to_add:
             if o.master.template and f"{{{{{o.master.template}" in x:
-                x = re.sub("\{\{" + o.master.template + "\|.*?}}", "", x)
+                x = re.sub(r"\{\{" + o.master.template + "\|.*?}}", "", x)
             x = x.replace("|}}", "}}")
             parent = f"{parent} {x}"
 
         if "{{1stID" in parent:
             while parent.count("{{1stID") > 2:
-                parent = re.sub("^(.*?)\{\{1stID\|(.*)}}(.*?) \{\{1stID\|(.*?)}}", "\\1{{1stID|\\2, \\4}}\\3", parent)
+                parent = re.sub(r"^(.*?)\{\{1stID\|(.*)}}(.*?) \{\{1stID\|(.*?)}}", "\\1{{1stID|\\2, \\4}}\\3", parent)
             if parent.count("{{1stID") > 1:
-                parent = re.sub("\{\{1stID\|(.*)}}(.*) \{\{1stID\|(.*?)}}", "{{1stID|\\1 and \\3}}\\2", parent)
+                parent = re.sub(r"\{\{1stID\|(.*)}}(.*) \{\{1stID\|(.*?)}}", "{{1stID|\\1 and \\3}}\\2", parent)
 
         if o.master.is_card_or_mini() or o.master.template == FC or o.master.target == "Star Wars: Force Collection":
             block.insert(0, f"{d}{{{{CardGameSet|set={up}{parent}|cards=")
@@ -1092,13 +1092,13 @@ def build_item_text(o: ItemId, d: str, sl: str, final_without_extra: list, final
     if not zt.strip():
         return None
     if o.master.ref_magazine:
-        zt = re.sub("(\{\{(?!FactFile)[A-z0-9]+\|[0-9]+\|.*?)(\|.*?(\{\{'s?}})?.*?)?}}", "\\1}}", zt)
+        zt = re.sub(r"(\{\{(?!FactFile)[A-z0-9]+\|[0-9]+\|.*?)(\|.*?(\{\{'s?}})?.*?)?}}", "\\1}}", zt)
 
     if o.current.subset:
-        zt = re.sub("({{[^|}]*?\|(set=)?[^|}]*?\|)(stext=.*?\|)?", f"\\1subset={o.current.subset}|", zt)
+        zt = re.sub(r"({{[^|}]*?\|(set=)?[^|}]*?\|)(stext=.*?\|)?", f"\\1subset={o.current.subset}|", zt)
     while zt.count("|subset=") > 1:
-        zt = re.sub("(\|subset=.*?)\\1", "\\1", zt)
-    zt = re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", zt)
+        zt = re.sub(r"(\|subset=.*?)\\1", "\\1", zt)
+    zt = re.sub(r"<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", zt)
     while zt.strip().startswith("*"):
         zt = zt[1:].strip()
     if o.current.bold:
@@ -1114,7 +1114,7 @@ def build_item_text(o: ItemId, d: str, sl: str, final_without_extra: list, final
         zn = zn[1:]
     zn = swap_parameters(zn).replace("–", "&ndash;").replace("—", "&mdash;")
     if o.current.template == "TCW" and "|d=y" in o.current.original and "|d=y" not in zn:
-        zn = re.sub("(\{\{TCW\|.*?)}}", "\\1|d=y}}", zn)
+        zn = re.sub(r"(\{\{TCW\|.*?)}}", "\\1|d=y}}", zn)
 
     if nc == "{{Nc}}" and ("{{mo}}" in o.current.extra.lower() or "{{1stm" in o.current.extra.lower()):
         nc = "{{Ncm}}"
@@ -1124,7 +1124,7 @@ def build_item_text(o: ItemId, d: str, sl: str, final_without_extra: list, final
             print(f"Skipping duplicate {zn}")
         return None
     else:
-        e = re.sub("<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", o.current.extra).strip()
+        e = re.sub(r"<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", o.current.extra).strip()
         if not collapse_audiobooks:
             e = e.replace("|audiobook=1", "")
         elif o.master.ab:
@@ -1134,7 +1134,7 @@ def build_item_text(o: ItemId, d: str, sl: str, final_without_extra: list, final
         if o.master.crp and "{{crp}}" not in e.lower() and "{{crp}}" not in zn.lower():
             e = "{{Crp}} " + e
         if section_name.startswith("Non-canon"):
-            e = re.sub("\{\{[Nn]cm}}", "{{Mo}}", re.sub("\{\{[Nn]cs?(\|.*?)?}}", "", e))
+            e = re.sub(r"\{\{[Nn]cm}}", "{{Mo}}", re.sub(r"\{\{[Nn]cs?(\|.*?)?}}", "", e))
         elif nc and nc.lower() not in e.lower():
             if nc == "{{Nc}}" and ("{{mo}}" in o.current.extra.lower() or "{{1stm" in o.current.extra.lower()):
                 nc = "{{Ncm}}"
@@ -1147,11 +1147,11 @@ def build_item_text(o: ItemId, d: str, sl: str, final_without_extra: list, final
         if not is_file and o.master.date and o.master.date.startswith("Cancel") and "{{c|cancel" not in z.lower():
             z += " {{C|canceled}}"
         if (o.master.mode == "Minis" or o.master.template == "SWIA") and o.master.card:
-            z = re.sub("\|link=.*?(\|.*?)?}}", "\\1}}", re.sub(" ?\{\{[Cc]\|[Rr]eissued.*?}}", "", z))
+            z = re.sub(r"\|link=.*?(\|.*?)?}}", "\\1}}", re.sub(r" ?\{\{[Cc]\|[Rr]eissued.*?}}", "", z))
         z = z.replace("–", "&ndash;").replace("—", "&mdash;").replace("  ", " ")
         if not skip_parent:
             z = z.replace("|parent=1", "")
-        # z = re.sub("\|stext=(.*?)\|\\1\|", "|stext=\\1|", z)
+        # z = re.sub(r"\|stext=(.*?)\|\\1\|", "|stext=\\1|", z)
         final_items.append(o)
         final_without_extra.append(zn)
         return z
@@ -1198,9 +1198,9 @@ def compile_found(section: SectionItemIds, mode, canon):
         if o.current.url:
             u = f"{o.current.template}|{o.current.url}"
             if "|oldversion=" in o.current.original:
-                u += re.search("(\|oldversion=.*?)(\||}|$)", o.current.original).group(1)
+                u += re.search(r"(\|oldversion=.*?)(\||}|$)", o.current.original).group(1)
             elif "|oldversion=" in o.master.original:
-                u += re.search("(\|oldversion=.*?)(\||}|$)", o.master.original).group(1)
+                u += re.search(r"(\|oldversion=.*?)(\||}|$)", o.master.original).group(1)
 
             if u == "TORweb|holonet/galactic history":
                 pass

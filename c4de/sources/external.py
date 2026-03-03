@@ -22,17 +22,17 @@ def prepare_official_link(o: Item):
     if o.full_url:
         ad = f"|archivedate={o.archivedate}" if o.archivedate else ""
         if "web.archive" in o.extra:
-            x = re.search("web/([0-9]+)/", o.extra)
+            x = re.search(r"web/([0-9]+)/", o.extra)
             if x:
                 ad = f"|archivedate={x.group(1)}"
-                o.extra = re.sub("\{\{C\|\[http.*?web\.archive\.org/.*?}}", "", o.extra)
+                o.extra = re.sub(r"\{\{C\|\[http.*?web\.archive\.org/.*?}}", "", o.extra)
         return "Official", f"{{{{OfficialSite|url={o.full_url}{ad}}}}}"
     else:
         return "Official", o.original.replace("WebCite", "OfficialSite")
 
 
 def prepare_basic_url(o: Item):
-    if o.original and re.search("official .*?(site|homepage|page)", o.original.lower()):
+    if o.original and re.search(r"official .*?(site|homepage|page)", o.original.lower()):
         return prepare_official_link(o)
     elif o.full_url:
         ad = f"|archivedate={o.archivedate}" if o.archivedate else ""
@@ -166,7 +166,7 @@ def is_external_link(d: ItemId, o: Item, unknown):
     elif (o.mode == "Commercial" or o.mode == "Publisher" or o.mode == "Web") and any(x in o.original.lower() for x in ["authors/", "author/", "comics/creators", "book-author"]):
         o.mode = "Profile" if o.template in ["SW", "SWArchive"] else ("Commercial" if o.mode == "Web" else o.mode)
         return True
-    elif o.template == "YouTube" and re.search("YouTube\|channel(name)?=[^|}\n]+\|channel(name)?=[^|}\n]+}}", o.original) and "video=" not in o.original:
+    elif o.template == "YouTube" and re.search(r"YouTube\|channel(name)?=[^|}\n]+\|channel(name)?=[^|}\n]+}}", o.original) and "video=" not in o.original:
         o.mode = "Profile"
         return True
     elif d and d.master.external:

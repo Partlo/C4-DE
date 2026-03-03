@@ -169,8 +169,8 @@ def match_header(header: str, infobox):
 def check_for_cover_image(lines, images: list):
     to_remove = []
     for i, ln in enumerate(lines):
-        if ln.startswith("[[File:") and re.search("\[\[File:.*?\|(.*? )?[Cc]over.*?]]", ln):
-            a, z = re.sub("^.*?\[\[([Ff]ile:.*?)(\|(thumb|[0-9]+px|left|right))*(\|.*?)?\.?]].*?$", "\\1\\4", ln).split("|", 1)
+        if ln.startswith("[[File:") and re.search(r"\[\[File:.*?\|(.*? )?[Cc]over.*?]]", ln):
+            a, z = re.sub(r"^.*?\[\[([Ff]ile:.*?)(\|(thumb|[0-9]+px|left|right))*(\|.*?)?\.?]].*?$", "\\1\\4", ln).split("|", 1)
             a = a.replace(" ", "_")
             images.append(f"{a}|{z}" if z else a)
             to_remove.append(i)
@@ -185,8 +185,8 @@ def get_listings(title, appearances: FullListData, sources: FullListData) -> Lis
 
 def remove_links(ln):
     if "[[" in ln:
-        while re.search("\[\[([^\n\[\]|{}]*?\|)?([^\n\[\]|{}]*?)]]", ln):
-            ln = re.sub("\[\[([^\n\[\]|{}]*?\|)?([^\n\[\]|{}]*?)]]", "\\2", ln)
+        while re.search(r"\[\[([^\n\[\]|{}]*?\|)?([^\n\[\]|{}]*?)]]", ln):
+            ln = re.sub(r"\[\[([^\n\[\]|{}]*?\|)?([^\n\[\]|{}]*?)]]", "\\2", ln)
     return ln
 
 
@@ -281,14 +281,14 @@ def remap_sections(key, items: List[SectionLeaf], valid: Dict[str, List[SectionL
         if key == "Contents" and infobox not in ["MagazineArticle"]:
             lines = []
             for ln in it.lines:
-                z = re.search("\*'*\[\[(.*?)(\|.*?)?]]'*", ln)
+                z = re.search(r"\*'*\[\[(.*?)(\|.*?)?]]'*", ln)
                 if z and (z.group(1) in appearances.target or z.group(1) in sources.target):
                     x = [i for i in appearances.target.get(z.group(1), sources.target.get(z.group(1), [])) if not i.is_reprint]
                     if x and '"[[' in x[0].original:
                         lines.append(ln.replace(z.group(0), f"*{x[0].original.split(' {{')[0]}"))
                         continue
                     elif x and x[0].template == "StoryCite" and "smanual" not in x[0].original:
-                        y = re.search("\|(stext|sformat[a-z]+?)=(.*?)(\|.*?)?}}", x[0].original)
+                        y = re.search(r"\|(stext|sformat[a-z]+?)=(.*?)(\|.*?)?}}", x[0].original)
                         if y:
                             lines.append(ln.replace(z.group(0), f'*"[[{x[0].target}|{y.group(2)}]]"'))
                         else:
@@ -358,7 +358,7 @@ def add_and_cleanup_sections(target: Page, results: PageComponents, sections: Di
         if "Plot Summary" not in sections:
             tx = detect_adaptation(sections, title, target.get(), appearances, sources)
             if tx:
-                tx = re.sub("(Plot-link\|)(.*?)( \(.*?\))}}", "\\1\\2\\3|''\\2''}}", tx)
+                tx = re.sub(r"(Plot-link\|)(.*?)( \(.*?\))}}", "\\1\\2\\3|''\\2''}}", tx)
             add_plot_summary(sections, results, link=tx)
 
         if "Appearances" not in valid and "(" in title and "(abridged" not in title and "radio" not in title and novel:
@@ -394,7 +394,7 @@ def add_and_cleanup_sections(target: Page, results: PageComponents, sections: Di
 
     if sections.get("Plot Summary") and any("{{Plot" in ln for ln in sections["Plot Summary"].lines):
         if "{{plot}}" in results.before.lower() or "{{plot|" in results.before.lower():
-            results.before = re.sub("\{\{[Pp]lot(\|.*?)?}}\n?", "", results.before)
+            results.before = re.sub(r"\{\{[Pp]lot(\|.*?)?}}\n?", "", results.before)
 
     return sections
 
@@ -487,11 +487,11 @@ def handle_published_in_and_collections(target: Page, title: str, results: PageC
             print(f"Unknown state: {item} not found in Sources")
 
     for field in ["published", "reprinted"]:
-        rx = re.search("\|" + field + " in=\n?((\*?'*\[\[(.*?)(\|.*?)]]'*.*?\n)+)", results.before)
+        rx = re.search(r"\|" + field + " in=\n?((\*?'*\[\[(.*?)(\|.*?)]]'*.*?\n)+)", results.before)
         if rx:
             zx = rx.group(1).splitlines()
             for z in zx:
-                y = re.search("^\*?'*\[\[(.*?)(\|.*?)?]]", z)
+                y = re.search(r"^\*?'*\[\[(.*?)(\|.*?)?]]", z)
                 if y and y.group(1) not in current and y.group(1) != "Living Force (roleplaying campaign)":
                     x = get_listings(y.group(1), appearances, sources)
                     if x:
@@ -596,7 +596,7 @@ def clean(s):
 
 def simplify(s):
     z = s.replace("&#34;", '"').replace("&#39;", "'").replace("–", "-").replace("—", "-").replace("&mdash;", "-").replace("&ndash;", "-").replace("&hellip;", "...").replace("…", "...").split(" (")[0]
-    z = re.sub("<br ?/?>", " ", z)
+    z = re.sub(r"<br ?/?>", " ", z)
     return z.replace(" : ", ": ").replace("  ", " ").replace("#", "").strip()
 
 
@@ -638,7 +638,7 @@ def prepare_title_format(infobox: str, title: str, text: str, appearances: FullL
                 if len([s for s in sources.target[title] if not s.is_reprint and not s.ref_magazine and s.template == template]) == 1:
                     pass
                 elif " Part " in fmt:
-                    fmt = re.sub("[:,]? Part (One|Two|Three|Four|I+|[0-9]+).*?$", "", fmt)
+                    fmt = re.sub(r"[:,]? Part (One|Two|Three|Four|I+|[0-9]+).*?$", "", fmt)
                 else:
                     fmt = None
                     skip = True
@@ -647,18 +647,18 @@ def prepare_title_format(infobox: str, title: str, text: str, appearances: FullL
         elif sources.target[title][0].text and sources.target[title][0].url and len(sources.target[title]) == 1:
             fmt = sources.target[title][0].text
             if " Part " in fmt:
-                fmt = re.sub("[:,]? Part (One|Two|Three|Four|I+|[0-9]+).*?$", "", fmt)
-    zx = re.search("\[\[(.*?) \((.*?)\)\|(\"\\1\") \\2]]", fmt or '')   # story/episode audio
+                fmt = re.sub(r"[:,]? Part (One|Two|Three|Four|I+|[0-9]+).*?$", "", fmt)
+    zx = re.search(r"\[\[(.*?) \((.*?)\)\|(\"\\1\") \\2]]", fmt or '')   # story/episode audio
     if zx:
         return zx.group(1), zx.group(3), f"'''{zx.group(3)}'''"
 
     if fmt:
         if "|" in fmt:
-            fmt = re.sub("^.*\[\[.*?\|(.*?)]].*?$", "\\1", fmt)
+            fmt = re.sub(r"^.*\[\[.*?\|(.*?)]].*?$", "\\1", fmt)
             if '"' in fmt and '"' not in title:
                 fmt = fmt.replace('"', '')
         elif "[[" in fmt:
-            fmt = re.sub("^\"?('')?\[\[(.*?)]]('')?\"?$", "\\1\\2\\3", fmt)
+            fmt = re.sub(r"^\"?('')?\[\[(.*?)]]('')?\"?$", "\\1\\2\\3", fmt)
         if not title.startswith(f"{clean(fmt)} ("):
             if abs(len(clean(fmt).replace("(", "").replace(")", "")) - len(title.replace("(", "").replace(")", ""))) > 5:
                 print("Skip:", clean(fmt), clean(title))
@@ -666,22 +666,22 @@ def prepare_title_format(infobox: str, title: str, text: str, appearances: FullL
 
     if not fmt and infobox:
         if infobox in ISSUE:
-            fmt = re.sub("^(.*?)( \([0-9]+\))? ([0-9]+)( \(.*?\))?$", "''\\1''\\2 \\3", title)
+            fmt = re.sub(r"^(.*?)( \([0-9]+\))? ([0-9]+)( \(.*?\))?$", "''\\1''\\2 \\3", title)
         elif infobox in ITALICIZE or (fmt and "''" in fmt):
-            fmt = "''" + re.sub(" \(.*?\)$", "", title) + "''"
+            fmt = "''" + re.sub(r" \(.*?\)$", "", title) + "''"
 
     fmt = fmt or title
     if " (" in title and title.endswith(")") and (" (" not in fmt or title.split(" (")[-1] not in fmt):
         fmt = truncate(fmt, title.split(" (")[0])
 
-    fmt = "<b>" + re.sub(" \(.*?\)$", "", fmt).replace("#", "<n>") + "<b>"
+    fmt = "<b>" + re.sub(r" \(.*?\)$", "", fmt).replace("#", "<n>") + "<b>"
     if fmt.startswith('<b>"') and fmt.endswith('"<b>'):
         fmt = fmt.replace('<b>"', '<q><b>').replace('"<b>', '<b><q>')
     elif infobox in QUOTES and not skip and not (title.startswith('"') and title.endswith('"')) \
             and not (fmt.startswith('"') and fmt.endswith('"')):
         fmt = "<q>" + fmt + "<q>"
     top_fmt = fmt.replace("<q>", "").replace("<b>", "").replace("<n>", "")
-    fmt = re.sub("^(.*?) \([0-9]+\) ([0-9]+)", "\\1 \\2", fmt).replace("<n>", "#")
+    fmt = re.sub(r"^(.*?) \([0-9]+\) ([0-9]+)", "\\1 \\2", fmt).replace("<n>", "#")
 
     if template == "EncyclopediaCite" and (title.endswith("(1)") or title.endswith("(2)")):
         fmt = f"<q><b>{title}</b></q>"
@@ -712,7 +712,7 @@ def determine_field_format(x: str, title: str, current: Item, types: dict, appea
     ns = _determine_field_format(x, types, appearances, sources)
     if ns:
         if " (" in ns:
-            ns = re.sub("'*\[\[([^\n\]\[]*?)( \([0-9]+\))? ([0-9]+)(\|[^\n\]\[]*?)?]]'*", "[[\\1\\2 \\3|''\\1'' \\3]]",
+            ns = re.sub(r"'*\[\[([^\n\]\[]*?)( \([0-9]+\))? ([0-9]+)(\|[^\n\]\[]*?)?]]'*", "[[\\1\\2 \\3|''\\1'' \\3]]",
                         ns)
         if remove_prefix and title:
             z, d, e = None, title.rsplit(": ", 1)[0], x.rsplit(": ", 1)[0]
@@ -728,7 +728,7 @@ def determine_field_format(x: str, title: str, current: Item, types: dict, appea
                 a, _, b = ns.partition("|")
                 ns = f"{a}|{b.replace(z, '')}"
             elif z:
-                ns = re.sub("('')?\[\[(.*?)]]('')?", "[[\\2|\\1" + x.replace(z, "") + "\\3]]", ns)
+                ns = re.sub(r"('')?\[\[(.*?)]]('')?", "[[\\2|\\1" + x.replace(z, "") + "\\3]]", ns)
             elif "|" in ns and current:
                 y = ns.rsplit("'' ", 1)[-1].replace("]]", "")
                 w = current.original.rsplit("'' ", 1)[-1].replace("]]", "")
@@ -798,9 +798,9 @@ def prepare_media_infobox_and_intro(page: Page, results: PageComponents, redirec
             elif ln.startswith("|"):
                 media_field = is_infobox_field(ln, prev, MEDIA_FIELDS)
                 if ln.startswith("|season="):
-                    ln = re.sub("season=\[\[(.*? Season )(One|Two|Three|Four|Five|Six|Seven|[0-9]+)\|(?!\\2).*?]]", "season=[[\\1\\2|\\2]]", ln)
+                    ln = re.sub(r"season=\[\[(.*? Season )(One|Two|Three|Four|Five|Six|Seven|[0-9]+)\|(?!\\2).*?]]", "season=[[\\1\\2|\\2]]", ln)
                 elif media_field:
-                    x = re.search("^((\|[a-z ]+=)?\*?)'*\[\[(.*?)(\|'*(.*?)'*)?]]'*", ln)
+                    x = re.search(r"^((\|[a-z ]+=)?\*?)'*\[\[(.*?)(\|'*(.*?)'*)?]]'*", ln)
                     if x:
                         ns = determine_field_format(x.group(3), page.title(), current, types, appearances, sources, media_field in PREV_OR_NEXT)
                         if ns:
@@ -809,13 +809,13 @@ def prepare_media_infobox_and_intro(page: Page, results: PageComponents, redirec
                     if ("''" in field_fmt and "''" not in ln) or ("''" in ln and "''" not in field_fmt) or f"|title={simplify(field_fmt)}" != simplify(ln) or (ln == f"|title=\"{field_fmt}\"" and '"' not in field_fmt):
                         ln = f"|title={field_fmt}"
                 elif ln.startswith("|image="):
-                    x = re.search("\|image=\[*([Ff]ile:.*?)[|\n\]]", ln)
+                    x = re.search(r"\|image=\[*([Ff]ile:.*?)[|\n\]]", ln)
                     if x:
                         image = x.group(1).replace("file:", "File").replace(" ", "_")
                 prev = ln
 
             if ln.startswith("|publisher=") or prev.startswith("|publisher="):
-                x = re.search("(\|publisher=\*|\*)\[\[(.*?)(\|.*?)?]]", ln)
+                x = re.search(r"(\|publisher=\*|\*)\[\[(.*?)(\|.*?)?]]", ln)
                 if x and "Disney" in x.group(1):
                     book_publishers.add("Disney")
                 elif x and "Random House" in x.group(1):
@@ -827,7 +827,7 @@ def prepare_media_infobox_and_intro(page: Page, results: PageComponents, redirec
 
             if results.infobox in PUBLISHERS:
                 if "{{Marvel|url=comics/" in ln or "{{DarkHorse|url=Comics/" in ln or "{{IDW|url=product/" in ln:
-                    x = re.search("\{\{(DarkHorse|Marvel|IDW)\|url=((product/|[Cc]omics/(?!Preview)).*)\|.*?}}", ln)
+                    x = re.search(r"\{\{(DarkHorse|Marvel|IDW)\|url=((product/|[Cc]omics/(?!Preview)).*)\|.*?}}", ln)
                     if x:
                         publisher_listing.add((x[0], x[1], x[2]))
 
@@ -837,17 +837,17 @@ def prepare_media_infobox_and_intro(page: Page, results: PageComponents, redirec
         elif not title_found and text_fmt and ("'''" in ln or simplify(page.title()) in ln):
             ft = False
             if ln.count("'''") >= 2:
-                for x, y in re.findall("(\"?'''+\"?(.*?)\"?'''+,?\"?)", ln):
+                for x, y in re.findall(r"(\"?'''+\"?(.*?)\"?'''+,?\"?)", ln):
                     if equals_or_starts_with(simplify(y.replace('"', '').replace("''", "")).lower(), simplify(page.title().replace('"', '').replace("''", "")).lower()) and "[[" not in y:
                         if x.replace(',"', '"') != text_fmt:
                             ln = ln.replace(x, text_fmt)
                         ft = True
                         break
-                if not ft and re.search("'''''.*?'''.*?'' ", ln):
-                    ln = re.sub("'''.*?'''.*?'' ", f"{text_fmt} ", ln)
+                if not ft and re.search(r"'''''.*?'''.*?'' ", ln):
+                    ln = re.sub(r"'''.*?'''.*?'' ", f"{text_fmt} ", ln)
                     ft = True
-                if not ft and re.search("^ ?\"?''''*\"?.*?\"?''''*\" ", ln):
-                    ln = re.sub("^ ?\"?''''*\"?.*?\"?''''*\" ", f"{text_fmt} ", ln)
+                if not ft and re.search(r"^ ?\"?''''*\"?.*?\"?''''*\" ", ln):
+                    ln = re.sub(r"^ ?\"?''''*\"?.*?\"?''''*\" ", f"{text_fmt} ", ln)
                     ft = True
                 if not ft:
                     print(f"Multiple bolded titles in intro, but no close match; cannot replace title with {text_fmt}")
@@ -857,10 +857,10 @@ def prepare_media_infobox_and_intro(page: Page, results: PageComponents, redirec
                         flagged = True
             if ft or flagged:
                 pass
-            elif re.search("\"?'''+\"?(.*?)\"?'''+\"?", ln):
-                ln = re.sub("\"?'''+\"?(.*?)\"?'''+\"?", text_fmt, ln)
+            elif re.search(r"\"?'''+\"?(.*?)\"?'''+\"?", ln):
+                ln = re.sub(r"\"?'''+\"?(.*?)\"?'''+\"?", text_fmt, ln)
             else:
-                z = re.search("\"(.*?)\"", re.sub("<ref name=\".*?\"(>.*?</ref>| ?/>)", "", ln))
+                z = re.search(r"\"(.*?)\"", re.sub(r"<ref name=\".*?\"(>.*?</ref>| ?/>)", "", ln))
                 if z and simplify(page.title()) in z.group(1):
                     ln = ln.replace(z.group(0), text_fmt)
             title_found = True
@@ -871,9 +871,9 @@ def prepare_media_infobox_and_intro(page: Page, results: PageComponents, redirec
             if count <= 5:
                 print(f"{page.title()} has {count} redlinks; removing Redlink template")
                 if multiple_and_redlink:
-                    ln = re.sub("\|redlink(?=(\||}}))", "", ln)
+                    ln = re.sub(r"\|redlink(?=(\||}}))", "", ln)
                 else:
-                    ln = re.sub("\{\{[Rr]edlink.*?}}", "", ln)
+                    ln = re.sub(r"\{\{[Rr]edlink.*?}}", "", ln)
                 if not ln.strip():
                     continue
 
@@ -883,7 +883,7 @@ def prepare_media_infobox_and_intro(page: Page, results: PageComponents, redirec
         if any(url == o.url for o in results.links.items):
             continue
         print(f"Found publisher listing: {p} ({url})")
-        tz = re.search("\|text=(.*?)(\|.*?)?}}", p)
+        tz = re.search(r"\|text=(.*?)(\|.*?)?}}", p)
         results.links.items.append(Item(p, "Publisher", False, template=template, url=url, text=tz.group(1) if tz else None))
     if book_publishers:
         for x in results.links.items:

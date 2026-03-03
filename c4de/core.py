@@ -331,12 +331,12 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def is_new_nomination_message(message: Message):
-        m = re.search("New .*? article nomination.*? by \**(.*?)\**:", message.content)
+        m = re.search(r"New .*? article nomination.*? by \**(.*?)\**:", message.content)
         if m:
-            u = re.search("/wiki/Wookieepedia:.*?_article_nominations/(.*?)(_\(.*?nomination\))?>", message.content)
+            u = re.search(r"/wiki/Wookieepedia:.*?_article_nominations/(.*?)(_\(.*?nomination\))?>", message.content)
             if u:
                 return {"user": m.group(1), "article": u.group(1)}
-        m = re.search("New review.*? requested for .*?(Featured|Good|Comprehensive) article: \[(.*?)([_ ]\(.*?review\))?\].*?$", message.content)
+        m = re.search(r"New review.*? requested for .*?(Featured|Good|Comprehensive) article: \[(.*?)([_ ]\(.*?review\))?\].*?$", message.content)
         if m:
             return {"user": None, "article": m.group(2)}
         return None
@@ -397,7 +397,7 @@ class C4DE_Bot(commands.Bot):
         if message.author.id not in [CADE, *BUREAUCRATS]:
             return
 
-        match = re.search("message #(?P<channel>.*?): (?P<text>.*?)$", message.content)
+        match = re.search(r"message #(?P<channel>.*?): (?P<text>.*?)$", message.content)
         if match:
             channel = match.groupdict()['channel']
             text = match.groupdict()['text'].replace(":star:", "🌠")
@@ -413,7 +413,7 @@ class C4DE_Bot(commands.Bot):
         if message.content == "end" or message.content == "kill":
             sys.exit()
 
-        match = re.search("analyze message: ([0-9]+)", message.content)
+        match = re.search(r"analyze message: ([0-9]+)", message.content)
         if match:
             message_id = int(match.group(1))
             for m in await self.text_channel(NOM_CHANNEL).history(limit=200).flatten():
@@ -432,7 +432,7 @@ class C4DE_Bot(commands.Bot):
 
         await self.handle_commands(message, True)
 
-        match = re.search("delete messages? in #(?P<channel>.*?): (?P<ids>[0-9, ]+)", message.content)
+        match = re.search(r"delete messages? in #(?P<channel>.*?): (?P<ids>[0-9, ]+)", message.content)
         if match:
             await self.delete_message(match.groupdict()['ids'], match.groupdict()['channel'])
             return
@@ -596,7 +596,7 @@ class C4DE_Bot(commands.Bot):
             error_log(type(e), e)
 
     async def create_archive_categories(self, message: Message, _=None):
-        match = re.search("create archive categor[yies]* for (Template:.*?)$", message.content)
+        match = re.search(r"create archive categor[yies]* for (Template:.*?)$", message.content)
         if match:
             await message.add_reaction(TIMER)
             p = Page(self.site, match.group(1).strip())
@@ -611,7 +611,7 @@ class C4DE_Bot(commands.Bot):
             await message.add_reaction(EXCLAMATION)
 
     async def ghost_touch(self, message: Message):
-        match = re.search("[Gg]host touch (-ref:|-cat:|Category:)?(.*?)$", message.content)
+        match = re.search(r"[Gg]host touch (-ref:|-cat:|Category:)?(.*?)$", message.content)
         if match:
             await message.add_reaction(TIMER)
             if match.group(1) == "Category:":
@@ -764,7 +764,7 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def is_user_eligibility_command(message: Message):
-        match = re.search("check (user )?(vote ?count|eligi?bi?li?ty) (for )?User:(?P<user>.*?)$", message.content)
+        match = re.search(r"check (user )?(vote ?count|eligi?bi?li?ty) (for )?User:(?P<user>.*?)$", message.content)
         if match:
             return match.groupdict()
         return None
@@ -816,7 +816,7 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def is_check_archive_command(message: Message):
-        return re.search("(check|manage|handle|store|retrieve) archive(date)?s", message.content.lower())
+        return re.search(r"(check|manage|handle|store|retrieve) archive(date)?s", message.content.lower())
 
     async def handle_check_archive_command(self, message: Message, _):
         self._manage_archive()
@@ -840,7 +840,7 @@ class C4DE_Bot(commands.Bot):
 
     async def handle_single_preload_command(self, message: Message, _):
         apply = "update" in message.content
-        r = re.search("(Template:[A-z ]+)$", message.content)
+        r = re.search(r"(Template:[A-z ]+)$", message.content)
         if r:
             template = r.group(1)
             preload, check = check_preload_for_missing_fields(self.site, Page(self.site, template), apply)
@@ -942,7 +942,7 @@ class C4DE_Bot(commands.Bot):
             nt.append("==RPG==\n" + "\n".join(rpg))
         if pages2:
             nt.append("==Other==\n" + "\n".join(f"#{x.date}: {x.original}" for x in pages2))
-        new_text = re.sub("\|reprint=[A-z0-9]+", "", "\n\n".join(nt))
+        new_text = re.sub(r"\|reprint=[A-z0-9]+", "", "\n\n".join(nt))
         if new_text != text:
             page.put(new_text, "Recording items missing from the Legends media timeline", botflag=False)
 
@@ -963,42 +963,42 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def is_create_list_command(message: Message):
-        match = re.search("(create|generate|build) [Ll]ist (for )?(?P<article>.*?)$", message.content)
+        match = re.search(r"(create|generate|build) [Ll]ist (for )?(?P<article>.*?)$", message.content)
         if match:
             return match.groupdict()
         return None
 
     @staticmethod
     def is_create_index_command(message: Message):
-        match = re.search("(create|generate|build) [iI]ndex (for )?(?P<article>.*?)$", message.content)
+        match = re.search(r"(create|generate|build) [iI]ndex (for )?(?P<article>.*?)$", message.content)
         if match:
             return match.groupdict()
         return None
 
     @staticmethod
     def is_check_target_command(message: Message):
-        match = re.search("check target URLs?( and archive)?: <?(?P<url>.*?starwars\.com.*?)>?$", message.content)
+        match = re.search(r"check target URLs?( and archive)?: <?(?P<url>.*?starwars\.com.*?)>?$", message.content)
         if match:
             return match.groupdict()
         return None
 
     @staticmethod
     def is_archive_url_command(message: Message):
-        match = re.search("archive( URL)?( (with )?[Tt]emplate:(?P<template>.*?))?:? <?(?P<url>(https?.*?//)?[^ \n]+?)>?( \((?P<date>[0-9X-]+)\))?$", message.content)
+        match = re.search(r"archive( URL)?( (with )?[Tt]emplate:(?P<template>.*?))?:? <?(?P<url>(https?.*?//)?[^ \n]+?)>?( \((?P<date>[0-9X-]+)\))?$", message.content)
         if match:
             return match.groupdict()
         return None
 
     @staticmethod
     def is_record_url_command(message: Message):
-        match = re.search("record( URL)?( (with )?[Tt]emplate:(?P<template>.*?))?:? <?(?P<url>(https?.*?//)?[^ \n]+?)>?( \((?P<date>[0-9X-]+)\))?$", message.content)
+        match = re.search(r"record( URL)?( (with )?[Tt]emplate:(?P<template>.*?))?:? <?(?P<url>(https?.*?//)?[^ \n]+?)>?( \((?P<date>[0-9X-]+)\))?$", message.content)
         if match:
             return match.groupdict()
         return None
 
     @staticmethod
     def is_analyze_source_command(message: Message):
-        match = re.search("([Aa]naly[zs]e|[Bb]uild|[Cc]heck) sources? (for |on )?(?P<article>.*?)(?P<date> with dates?)?(?P<text> (by|and|with) text)?$", message.content)
+        match = re.search(r"([Aa]naly[zs]e|[Bb]uild|[Cc]heck) sources? (for |on )?(?P<article>.*?)(?P<date> with dates?)?(?P<text> (by|and|with) text)?$", message.content)
         if match:
             return match.groupdict()
         return None
@@ -1095,10 +1095,10 @@ class C4DE_Bot(commands.Bot):
 
     @staticmethod
     def flatten_text(t):
-        z = re.sub("<!--.*?-->", "", t.replace("&ndash;", "-").replace("&mdash;", "-").replace("—", "-").replace("—", "-")).replace("|coord=", "|coordinates=")
-        while re.search("([\n[]File:[^ \n|\]\[]+) ", z):
-            z = re.sub("([\n[]File:[^ \n|\]\[]+) ", "\\1_", z)
-        z = re.sub("(\|book=.*?)(\|story=.*?)(\|.*?)?}}", "\\2\\1\\3}}", z.replace("\n", "").replace(" ", "")).replace("{{!}}", "|").replace("{{Journal|", "{{JournalCite|")
+        z = re.sub(r"<!--.*?-->", "", t.replace("&ndash;", "-").replace("&mdash;", "-").replace("—", "-").replace("—", "-")).replace("|coord=", "|coordinates=")
+        while re.search(r"([\n[]File:[^ \n|\]\[]+) ", z):
+            z = re.sub(r"([\n[]File:[^ \n|\]\[]+) ", "\\1_", z)
+        z = re.sub(r"(\|book=.*?)(\|story=.*?)(\|.*?)?}}", "\\2\\1\\3}}", z.replace("\n", "").replace(" ", "")).replace("{{!}}", "|").replace("{{Journal|", "{{JournalCite|")
         return z
 
     async def handle_create_list_command(self, message: Message, command: dict):
@@ -1240,7 +1240,7 @@ class C4DE_Bot(commands.Bot):
 
     def update_unused_files(self):
         exception_page = Page(self.site, "Wookieepedia:WookieeProject Images/Unused images/Not unused")
-        exceptions = [x.replace("_", " ") for x in re.findall("(File:.*?)\n", exception_page.get())]
+        exceptions = [x.replace("_", " ") for x in re.findall(r"(File:.*?)\n", exception_page.get())]
 
         page = Page(self.site, "Wookieepedia:WookieeProject Images/Unused images")
         text = page.get()
@@ -1311,7 +1311,7 @@ class C4DE_Bot(commands.Bot):
         current = "https://cdnvideo.dolimg.com/cdn_assets/02834527f17e4165d39a069a88161e5e330cd883.pdf"
         current_image = "https://lumiere-a.akamaihd.net/v1/images/star_wars_galaxy_map_4000x4000_20250625_ccff9272.jpeg"
         current_image = "https://lumiere-a.akamaihd.net/v1/images/star_wars_galaxy_map_4000x4000_20251009_3c4d0e08.jpeg"
-        x = re.search("<a.*?href=\"(.*?)\".*?title=\"Appendix of Star Systems", r.text)
+        x = re.search(r"<a.*?href=\"(.*?)\".*?title=\"Appendix of Star Systems", r.text)
         if x and x.group(1) != current:
             await self.text_channel(UPDATES).send(f"[New version of the Galaxy Map Appendix detected!]({x.group(1)})")
             await self.text_channel("astrography").send(f"[New version of the Galaxy Map Appendix detected!]({x.group(1)})")
@@ -1334,14 +1334,14 @@ class C4DE_Bot(commands.Bot):
                 await self.text_channel(COMMANDS).send(f"Encountered {type(e)} while removing expired spoiler template from {page.title()}. Please check template usage for anomalies.")
 
     def extract_tv_spoiler_data(self):
-        data = re.findall("\| ([A-z]+) ([0-9]+[AB]?) = .*?\|([0-9]+-[0-9]+-[0-9]+)\|",
+        data = re.findall(r"\| ([A-z]+) ([0-9]+[AB]?) = .*?\|([0-9]+-[0-9]+-[0-9]+)\|",
                           Page(self.site, "Template:SpoilerTV/data").get())
         tv_dates = {}
         for s, n, d in data:
             if s not in tv_dates:
                 tv_dates[s] = {}
             tv_dates[s][n] = d
-        default_show = re.search("{{{show\|([a-z]+)}}}", Page(self.site, "Template:SpoilerTV").get())
+        default_show = re.search(r"{{{show\|([a-z]+)}}}", Page(self.site, "Template:SpoilerTV").get())
         return tv_dates, default_show.group(1) if default_show else None
 
     @tasks.loop(hours=1)
@@ -1621,7 +1621,7 @@ class C4DE_Bot(commands.Bot):
             for f in files:
                 try:
                     if f.title() not in self.files_to_be_renamed:
-                        x = re.search("\{\{(FileRenameRequest|FTBR)\|.*\|(.*?)}}", f.get())
+                        x = re.search(r"\{\{(FileRenameRequest|FTBR)\|.*\|(.*?)}}", f.get())
                         new_name_text = f" to **{x.group(2)}**" if x else ""
                         m = f"⚠️ **{f.lastNonBotUser()}** requested [**{f.title()}**](<{f.full_url()}>) be renamed{new_name_text}\n"
                         msg = await self.text_channel(ADMIN_REQUESTS).send(m)
@@ -1671,7 +1671,7 @@ class C4DE_Bot(commands.Bot):
         urls = compile_tracked_urls(self.site)
         exists = False
         ep_urls, ep_db = set(), {}
-        for u in re.split(">,? <", command['url']):
+        for u in re.split(r">,? <", command['url']):
             print(u)
             e, x, d = check_target_url(u, urls)
             exists = e or exists
@@ -1722,7 +1722,7 @@ class C4DE_Bot(commands.Bot):
             youtube = "youtube.com" in command['url']
             if youtube:
                 template = "YouTube"
-                target = re.search("[?&](videoId|v|playlist)=(.*?)(&.*?)?$", command['url'])
+                target = re.search(r"[?&](videoId|v|playlist)=(.*?)(&.*?)?$", command['url'])
                 target = target.group(2) if target else None
             else:
                 target_site, site_data = None, {}
@@ -1969,7 +1969,7 @@ class C4DE_Bot(commands.Bot):
         #     page = Page(self.site, "Module:ArchiveAccess/Databank")
         #     new_text = page.get()
         #     for u, d in new_archivedates.items():
-        #         new_text = re.sub("\[['\"]" + u + "['\"]\].*?=.*?['\"][0-9]+?['\"]", f"['{u}'] = '{d}'", new_text)
+        #         new_text = re.sub(r"\[['\"]" + u + "['\"]\].*?=.*?['\"][0-9]+?['\"]", f"['{u}'] = '{d}'", new_text)
         #     if new_text != page.get():
         #         page.put(new_text, "Updating archivedates for changed Databank entries")
 
@@ -1985,7 +1985,7 @@ class C4DE_Bot(commands.Bot):
 
             items = []
             for e in all_entries:
-                t = re.search("{{Databank\|.*?\|(.*?)(\|.*?)?}}", e)
+                t = re.search(r"{{Databank\|.*?\|(.*?)(\|.*?)?}}", e)
                 txt = t.group(1).lower().replace("'", "").replace('"', "")
                 items.append((f"{txt}", e))
 
@@ -2019,8 +2019,8 @@ class C4DE_Bot(commands.Bot):
             include_archivedate = success
 
         f = m["title"].replace("''", "*").replace("’", "'").replace("“", '"').replace('“', '"')
-        f = re.sub("^(''[^'\n]+'')'s ", "\\1{{'s}} ", f)
-        f = re.sub("( ''[^'\n]+'')'s ", "\\1{{'s}} ", f)
+        f = re.sub(r"^(''[^'\n]+'')'s ", "\\1{{'s}} ", f)
+        f = re.sub(r"( ''[^'\n]+'')'s ", "\\1{{'s}} ", f)
 
         if success and not already_archived:
             try:
@@ -2035,10 +2035,10 @@ class C4DE_Bot(commands.Bot):
 
         if youtube:
             t = f"New Video on the official {m['site']} YouTube channel"
-            x = re.search("\|.*?\|(Star Wars:? )?(.*?) ?&#124; ?(.*?) ?&#124; ?(Disney\+|Star Wars|@?Star ?Wars ?Kids) *}}", f)
+            x = re.search(r"\|.*?\|(Star Wars:? )?(.*?) ?&#124; ?(.*?) ?&#124; ?(Disney\+|Star Wars|@?Star ?Wars ?Kids) *}}", f)
             skip = (x and x.group(2) in REPOSTS) or f.endswith("Full Episode") or " Full Episode " in f or "Compilation" in f
             if not skip:
-                x = re.search("\|.*?\|.*? &#124; (Star Wars:? )?(Episode [IXV]+ ?-? ?)?(.*?)( \(Episode [IXV]+\))? ?&#124; ?(Disney\+|Star Wars|@?Star ?Wars ?Kids|Official Clip) *}}", f)
+                x = re.search(r"\|.*?\|.*? &#124; (Star Wars:? )?(Episode [IXV]+ ?-? ?)?(.*?)( \(Episode [IXV]+\))? ?&#124; ?(Disney\+|Star Wars|@?Star ?Wars ?Kids|Official Clip) *}}", f)
                 skip = (x and x.group(3) in REPOSTS) or f.endswith("Full Episode") or " Full Episode " in f or "Compilation" in f
             if skip:
                 date = f"R: {date}"
@@ -2092,7 +2092,7 @@ class C4DE_Bot(commands.Bot):
         if archivedate:
             result += f"|archivedate={archivedate}"
         if "arena-news" in result:
-            result = re.sub("Hunters\|url=.*?arena-news/", "ArenaNews|url=", result)
+            result = re.sub(r"Hunters\|url=.*?arena-news/", "ArenaNews|url=", result)
         return "{{" + result + "}}"
 
     def get_archive_for_site(self, template):
@@ -2132,7 +2132,7 @@ class C4DE_Bot(commands.Bot):
         if not page.exists():
             return None
         archive = {}
-        for u, d in re.findall("\[['\"](.*?)['\"]] ?= ?['\"]?([0-9]+)/?['\"]?", page.get()):
+        for u, d in re.findall(r"\[['\"](.*?)['\"]] ?= ?['\"]?([0-9]+)/?['\"]?", page.get()):
             archive[u.replace("\\'", "'")] = d
         return archive
 

@@ -232,7 +232,7 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
     x = driver.find_elements(By.CSS_SELECTOR, "div[class^='listViewItemsCount']")
     if not x:
         x = driver.find_elements(By.CSS_SELECTOR, "div[class^='listViewItemsCount']")
-    total = re.sub("^.*?filtered to ([0-9]+).*?$", "\\1", x[0].text.replace("\n", ""))
+    total = re.sub(r"^.*?filtered to ([0-9]+).*?$", "\\1", x[0].text.replace("\n", ""))
     total = int(total) if total else 500
     print(f"Evaluating {total} items")
 

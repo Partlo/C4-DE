@@ -85,14 +85,14 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
     if current_page.exists():
         text = current_page.get().split("==Media index==")[-1].split("==Notes")[0].strip() + "\n"
         if "(Star Wars Encyclopedia)" in text:
-            text = re.sub("\(Star Wars Encyclopedia\)(\|.*?)?}}", "(booklet)}}", text)
+            text = re.sub(r"\(Star Wars Encyclopedia\)(\|.*?)?}}", "(booklet)}}", text)
         redirects = build_redirects(current_page, manual=text)
         text = fix_redirects(redirects, text, "Index", {}, {}, appearances, sources)
-        text = re.sub("(<ref name=.*?( />|</ref>))(<ref name=.*?( />|</ref>))*", "\\1", text)
+        text = re.sub(r"(<ref name=.*?( />|</ref>))(<ref name=.*?( />|</ref>))*", "\\1", text)
         if "  " in text:
-            text = re.sub("  +", " ", text)
+            text = re.sub(r"  +", " ", text)
         for ln in text.splitlines():
-            x = re.search("^\*([\[\]A-z. 0-9,]*\[*[12][0-9]{3}]*.*?|Current|Unknown):(<ref name.*?( />|</ref>))? ?(.*?[]}]+'*)( *\{\{[A-z0-9]+.*?}})?( *(–|—|&.dash;).*?)?$", ln)
+            x = re.search(r"^\*([\[\]A-z. 0-9,]*\[*[12][0-9]{3}]*.*?|Current|Unknown):(<ref name.*?( />|</ref>))? ?(.*?[]}]+'*)( *\{\{[A-z0-9]+.*?}})?( *(–|—|&.dash;).*?)?$", ln)
             if x:
                 current[x.group(4)] = (x.group(1), x.group(2), x.group(6) or '')
                 current_item = x.group(4)
@@ -101,7 +101,7 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
 
     add_by = {}
     for t, (date, ref, nt) in current.items():
-        u = re.search("(\|(video|url|link)=|(You[Tt]ube|StarWarsShow|ThisWeek|LegoMiniMovie|HighRepublicShow|Databank)\|)(?P<u>.*?)\|", t)
+        u = re.search(r"(\|(video|url|link)=|(You[Tt]ube|StarWarsShow|ThisWeek|LegoMiniMovie|HighRepublicShow|Databank)\|)(?P<u>.*?)\|", t)
         match = False
         z = clean(t.replace("&ndash;", "–").replace("&mdash;", "—"))
         for i in found:
@@ -140,10 +140,10 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
     found = sorted(found, key=lambda a: (a.master.date, a.master.mode == "DB", a.master.sort_index(results.canon), a.sort_text()))
 
     x = page.title()
-    title = re.search("(?<!SucessionBox)\n\|(name|title)=(.*?)\n", page.get())
+    title = re.search(r"(?<!SucessionBox)\n\|(name|title)=(.*?)\n", page.get())
     if title:
-        x = re.sub("<br ?/?>\{\{C\|.*?$", "", title.group(2))
-        x = re.sub("<br ?/?>", " ", x).replace("  ", "")
+        x = re.sub(r"<br ?/?>\{\{C\|.*?$", "", title.group(2))
+        x = re.sub(r"<br ?/?>", " ", x).replace("  ", "")
     elif x.endswith("/Legends") or x.endswith("/Canon"):
         x = page.title().replace("/Legends", "").replace("/Canon", "")
     if x.startswith("Unidentified"):
@@ -166,9 +166,9 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
             date_str = f"{add_by[i.master.original]} {date_str}"
         zt = i.current.original if i.use_original_text else i.master.original
         if i.master.mode == "Minis" and i.master.card:
-            zt = re.sub("\|link=.*?(\|.*?)?}}", "\\1}}", re.sub(" ?\{\{[Cc]\|[Rr]eissued.*?}}", "", zt))
+            zt = re.sub(r"\|link=.*?(\|.*?)?}}", "\\1}}", re.sub(r" ?\{\{[Cc]\|[Rr]eissued.*?}}", "", zt))
         xt = f"*{date_str}:{date_ref} {zt} {i.current.extra.strip()}".strip().replace("|reprint=1", "")
-        xt = re.sub(" ?\{\{Ab\|.*?}}", "", xt).replace("|audiobook=1", "")
+        xt = re.sub(r" ?\{\{Ab\|.*?}}", "", xt).replace("|audiobook=1", "")
         if xt.count("{{") < xt.count("}}") and xt.endswith("}}}}"):
             xt = xt[:-2]
         has_references = has_references or "<ref" in xt
@@ -181,11 +181,11 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
         lines.append("{{Reflist}}")
         if len(refs) > 20:
             lines.append("}}")
-    if re.search("\{\{Top\|(.*?\|)?(real|rwm|rwp)(\|.*?)?}}", page.get()):
+    if re.search(r"\{\{Top\|(.*?\|)?(real|rwm|rwp)(\|.*?)?}}", page.get()):
         lines.append("\n[[Category:Real-world index pages]]")
-    elif re.search("\{\{Top\|(.*?\|)?ncl(\|.*?)?}}", page.get()):
+    elif re.search(r"\{\{Top\|(.*?\|)?ncl(\|.*?)?}}", page.get()):
         lines.append("\n[[Category:Non-canon Legends index pages]]")
-    elif re.search("\{\{Top\|(.*?\|)?ncc(\|.*?)?}}", page.get()):
+    elif re.search(r"\{\{Top\|(.*?\|)?ncc(\|.*?)?}}", page.get()):
         lines.append("\n[[Category:Non-canon index pages]]")
     elif results.canon:
         lines.append("\n[[Category:Canon index pages]]")
@@ -198,8 +198,8 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
     if save and not index.exists():
         index.put(new_txt, "Source Engine: Generating Index page", botflag=False)
     else:
-        t1 = re.sub(">.*?</ref>", " />", re.sub("name=\".*?\"", "name=\"name\"", index.get() if index.exists() else ""))
-        t2 = re.sub(">.*?</ref>", " />", re.sub("name=\".*?\"", "name=\"name\"", new_txt))
+        t1 = re.sub(r">.*?</ref>", " />", re.sub(r"name=\".*?\"", "name=\"name\"", index.get() if index.exists() else ""))
+        t2 = re.sub(r">.*?</ref>", " />", re.sub(r"name=\".*?\"", "name=\"name\"", new_txt))
 
         showDiff(clean_date_strings(t1), clean_date_strings(t2))
         if save:
@@ -213,6 +213,6 @@ def create_index(site, page: Page, results: AnalysisResults, appearances: dict, 
 
 
 def clean_date_strings(t):
-    for x in re.findall("\*([^\n:{]*?\[[^\n:{]*):", t):
+    for x in re.findall(r"\*([^\n:{]*?\[[^\n:{]*):", t):
         t = t.replace(x, x.replace("[", "").replace("]", ""))
     return t

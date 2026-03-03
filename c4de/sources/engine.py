@@ -70,7 +70,7 @@ def list_templates(site, cat, data, template_type, recurse=False, web=False):
         if "/" not in p.title() and p.title(with_ns=False).lower() not in data:
             data[p.title(with_ns=False).lower()] = template_type
             # if web:
-            #     x = re.search("on \[\[(.*?)(\|.*?)?]].*?\[.*?official w?e?b?site",  p.get())
+            #     x = re.search(r"on \[\[(.*?)(\|.*?)?]].*?\[.*?official w?e?b?site",  p.get())
             #     if x:
             #         data["WebsiteNames"][p.title(with_ns=False).lower()] = x.group(1)
 
@@ -98,7 +98,7 @@ def build_template_types(site):
     for p in Category(site, "Category:Magazine citation templates").articles(recurse=True):
         txt = p.get()
         if "BaseCitation" in txt and ("mode=magazine" in txt or "mode=ref" in txt):
-            x = re.search("\|series=([A-z0-9:()\-&/ ]+)[|\n]", txt)
+            x = re.search(r"\|series=([A-z0-9:()\-&/ ]+)[|\n]", txt)
             if x:
                 results["Magazine"][p.title(with_ns=False)] = x.group(1)
     results["Magazine"]["InsiderCite"] = "Star Wars Insider"
@@ -197,7 +197,7 @@ def load_appearances(site, log, canon_only=False, legends_only=False):
             elif line and not line.startswith("=="):
                 if "/Header}}" in line or line.startswith("----"):
                     continue
-                x = re.search("[*#](.*?)( \(.*?\))?:(<!--.*?-->)? (.*?)$", line)
+                x = re.search(r"[*#](.*?)( \(.*?\))?:(<!--.*?-->)? (.*?)$", line)
                 if x:
                     i += 1
                     data.append({"index": i, "page": f"Appearances/{sp}", "date": x.group(1), "item": x.group(4),
@@ -226,16 +226,16 @@ def load_source_lists(site, log, include_web=True):
             if line and not line.startswith("==") and "/Header}}" not in line and not line.startswith("----"):
                 line = line.replace(" |reprint=", "|reprint=")
                 if "Miniatures" in sp or "RefMagazine" in sp or "CardSets" in sp or "CardTrader" in sp:
-                    line = re.sub("(\{\{SWMiniCite.*?)\|num=[0-9-]+", "\\1", line)
-                    line = re.sub("(\{\{SWIA.*?)\|page=[0-9]+", "\\1", line)
-                    line = re.sub("<!-- .*? -->", "", line)
-                    line = re.sub("}}<[0-9 A-z-]+>", "}}", line)
+                    line = re.sub(r"(\{\{SWMiniCite.*?)\|num=[0-9-]+", "\\1", line)
+                    line = re.sub(r"(\{\{SWIA.*?)\|page=[0-9]+", "\\1", line)
+                    line = re.sub(r"<!-- .*? -->", "", line)
+                    line = re.sub(r"}}<[0-9 A-z-]+>", "}}", line)
 
                 if "Toys" in sp:
-                    line = re.sub("(\|text=.*?)(\|set=.*?)\|", "\\2\\1|", line)
-                    line = re.sub("(\|a?l?t?link=.*?) ?(\|pack=.*?)(\|.*?)?}}", "\\2\\1\\3}}", line)
-                    line = re.sub(" {{C\|1?=?(original|alternate): (?P<a>.*?)}}", "", line)
-                x = re.search("[*#](?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (D: )?(?P<t>.*?)( {{C\|d: .*?}})?$", line)
+                    line = re.sub(r"(\|text=.*?)(\|set=.*?)\|", "\\2\\1|", line)
+                    line = re.sub(r"(\|a?l?t?link=.*?) ?(\|pack=.*?)(\|.*?)?}}", "\\2\\1\\3}}", line)
+                    line = re.sub(r" {{C\|1?=?(original|alternate): (?P<a>.*?)}}", "", line)
+                x = re.search(r"[*#](?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (D: )?(?P<t>.*?)( {{C\|d: .*?}})?$", line)
                 if x:
                     i += 1
                     data.append({"index": i, "page": sp, "date": x.group("d"), "item": x.group("t"),
@@ -255,7 +255,7 @@ def load_source_lists(site, log, include_web=True):
             for o, line in enumerate(lines):
                 if "/Header}}" in line or line.startswith("----"):
                     continue
-                x = re.search("\*([RP]: )?(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? *(?P<t>.*?) ?†?( {{C\|1?=?(original|alternate): (?P<a>.*?)}})?( {{C\|int: (?P<i>.*?)}})?( {{C\|d: [0-9X-]+?}})? ?†?$", line)
+                x = re.search(r"\*([RP]: )?(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? *(?P<t>.*?) ?†?( {{C\|1?=?(original|alternate): (?P<a>.*?)}})?( {{C\|int: (?P<i>.*?)}})?( {{C\|d: [0-9X-]+?}})? ?†?$", line)
                 if x:
                     i += 1
                     data.append({"index": i, "page": "Web/Repost" if y == "Special" else f"Web/{y}", "date": x.group("d"), "item": x.group("t"),
@@ -270,7 +270,7 @@ def load_source_lists(site, log, include_web=True):
     for line in p.get().splitlines():
         if "/Header}}" in line or line.startswith("----"):
             continue
-        x = re.search("\*Current:(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?)( †)?( {{C\|1?=?(original|alternate): (?P<a>.*?)}})? ?†?$", line)
+        x = re.search(r"\*Current:(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?)( †)?( {{C\|1?=?(original|alternate): (?P<a>.*?)}})? ?†?$", line)
         if x:
             i += 1
             data.append({"index": i, "page": "Web/Current", "date": "Current", "item": x.group("t"),
@@ -285,7 +285,7 @@ def load_source_lists(site, log, include_web=True):
     for line in p.get().splitlines():
         if "/Header}}" in line or line.startswith("----"):
             continue
-        x = re.search("\*(.*?):( [0-9:-]+)? (.*?)( †)?( {{C\|1?=?(original|alternate): (.*?)}})?( \{\{C\|[Nn]on-canon}})?$", line)
+        x = re.search(r"\*(.*?):( [0-9:-]+)? (.*?)( †)?( {{C\|1?=?(original|alternate): (.*?)}})?( \{\{C\|[Nn]on-canon}})?$", line)
         if x:
             i += 1
             data.append({"index": i, "page": "Web/Unknown", "date": "Unknown", "item": x.group(3) + (x.group(8) or ''), "alternate": x.group(7), "official": x.group(1) == "OfficialSite"})
@@ -300,7 +300,7 @@ def load_source_lists(site, log, include_web=True):
         for line in p.get().splitlines():
             if "/Header}}" in line or not line.strip():
                 continue
-            x = re.search("[#*]([RP]: )?(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?) ?†?( {{C\|1?=?(original|alternate): (?P<a>[^{}\[\]|]+?)}})?( {{C\|d: [0-9X-]+?}})?(?P<x> \{\{C\|[Nn]on-canon}})?$", line)
+            x = re.search(r"[#*]([RP]: )?(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?) ?†?( {{C\|1?=?(original|alternate): (?P<a>[^{}\[\]|]+?)}})?( {{C\|d: [0-9X-]+?}})?(?P<x> \{\{C\|[Nn]on-canon}})?$", line)
             if x:
                 i += 1
                 data.append({"index": i, "page": f"Web/{sp}", "date": x.group('d'), "item": x.group('t') + (x.group('x') or ''), "alternate": x.group('a')})
@@ -316,7 +316,7 @@ def load_source_lists(site, log, include_web=True):
         for line in p.get().splitlines():
             if "/Header}}" in line or not line.strip():
                 continue
-            x = re.search("\*((?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? )?(?P<t>{{.*?)( {{C\|1?=?(original|alternate): (?P<a>.*?)}})?$", line)
+            x = re.search(r"\*((?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? )?(?P<t>{{.*?)( {{C\|1?=?(original|alternate): (?P<a>.*?)}})?$", line)
             if x:
                 i += 1
                 data.append({"index": 0, "page": f"Web/{template}", "date": date, "item": x.group("t"),
@@ -333,7 +333,7 @@ def load_remap(site) -> dict:
     p = Page(site, "Wookieepedia:Appearances/Remap")
     results = {}
     for line in p.get().splitlines():
-        x = re.search("\[\[(.*?)(\|.*?)?]].*?[\[{]+(.*?)(\|.*?)?[]}]+", line)
+        x = re.search(r"\[\[(.*?)(\|.*?)?]].*?[\[{]+(.*?)(\|.*?)?[]}]+", line)
         if x:
             results[x.group(1)] = "Star Wars Galaxies" if x.group(3) == "GalaxiesNGE" else x.group(3)
     print(f"Loaded {len(results)} remap names")
@@ -348,8 +348,8 @@ ISSUE_REPRINTS = ["A Certain Point of View", "Classic Moment", "Behind the Magic
 
 def remove_templates(s):
     if s.count("{{") > 0:
-        s = re.sub(" ?\{+[Cc]rp}}", "", s)
-        y = re.sub('( ?' + EXTRA + '.*?$)', "", s)
+        s = re.sub(r" ?\{+[Cc]rp}}", "", s)
+        y = re.sub(r"( ?' + EXTRA + '.*?$)', "", s)
         if y != s:
             print(f"Unexpected template found: {s}")
             print(y)
@@ -426,11 +426,11 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
     sources = load_source_lists(site, log, include_web)
     set_formatting = {}
     for ln in Page(site, "Module:FormattedTextLookup/Cards").get().splitlines():
-        x = re.search("\[['\"](.*?)['\"]] ?= ?\"(.*?)\"", ln)
+        x = re.search(r"\[['\"](.*?)['\"]] ?= ?\"(.*?)\"", ln)
         if x:
             set_formatting[x.group(1)] = x.group(2)
     for ln in Page(site, "Module:CardMiniDB/shared").get().splitlines():
-        x = re.search("\[['\"](.*?)['\"]] ?= ?\"('*)?\[\[(.*?)]]('*)?\"", ln)
+        x = re.search(r"\[['\"](.*?)['\"]] ?= ?\"('*)?\[\[(.*?)]]('*)?\"", ln)
         if x and "|Core Set" not in ln:
             link, _, fmt = x.group(3).partition("|")
             if fmt:
@@ -439,15 +439,15 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
                 set_formatting[link] = x.group(2) + link + x.group(4)
 
     italic_templates = []
-    for z in re.findall("([ \t]+([A-z]+) = \{[ \t]*((\n.*?)+?)\n[ \t]+},)",  Page(site, "Module:CardGameCite/data").get()):
+    for z in re.findall(r"([ \t]+([A-z]+) = \{[ \t]*((\n.*?)+?)\n[ \t]+},)",  Page(site, "Module:CardGameCite/data").get()):
         if "noItalics" not in z[0]:
             italic_templates.append(z[1])
     departments, all_departments, department_map = set(), {}, {}
-    for z in re.findall("\[\"(.*?)-([0-9]+)\"] = \{.*?issues ?= ?\{(.*?)}", Page(site, "Module:Reprint/data").get()):
+    for z in re.findall(r"\[\"(.*?)-([0-9]+)\"] = \{.*?issues ?= ?\{(.*?)}", Page(site, "Module:Reprint/data").get()):
         a = z[0].replace(" (department)", "")
         departments.add(z[0])
         departments.add(a)
-        all_departments[f"{a}|{z[1]}"] = re.findall('"(.*?)"', z[2])
+        all_departments[f"{a}|{z[1]}"] = re.findall(r""(.*?)"', z[2])
 
     print(f"Loaded formatting text for {len(set_formatting)} sets")
 
@@ -467,9 +467,9 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
         old = f"{i['item']}"
         try:
             is_reprint = "{{c|republish" in old.lower() or i["page"].endswith("Reprint")
-            item = re.sub("{{C\|([Uu]nlicensed|[Nn]on[ -]?canon)}}", "", item)
-            item, parenthetical = remove_capture(item, re.compile("(\|p=(.*?))(?=(\|.*?)?}})"), 1, 2)
-            item, extra = remove_capture(item, re.compile("{{[Uu]n}}|{{[Nn]cm?}}|{{[Cc]rp}}"), 0)
+            item = re.sub(r"{{C\|([Uu]nlicensed|[Nn]on[ -]?canon)}}", "", item)
+            item, parenthetical = remove_capture(item, re.compile(r"(\|p=(.*?))(?=(\|.*?)?}})"), 1, 2)
+            item, extra = remove_capture(item, re.compile(r"{{[Uu]n}}|{{[Nn]cm?}}|{{[Cc]rp}}"), 0)
             x = extract_item(remove_templates(item), False, i['page'], types, master=True)
             if x and not x.invalid:
                 store_data(x, i, old, extra, parenthetical, i.get('alternate'), is_reprint, today)
@@ -596,12 +596,12 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
         old = f"{i['item']}"
         try:
             is_reprint = "{{c|republish" in item.lower() or i["page"] == "Reprint"
-            item = re.sub("{{C\|([Uu]nlicensed|[Nn]on[ -]?canon|source)}}", "", item)
-            item, reprint = remove_capture(item, re.compile("{{[Rr]eprint\|.*?}}"), 0)
-            item, ab = remove_capture(item, re.compile("\{\{[Aa]b\|.*?}}"), 0)
-            item, parenthetical = remove_capture(item, re.compile("(\|p=(.*?))(?=(\|.*?)?}})"), 1, 2)
-            item, extra = remove_capture(item, re.compile("{{[Uu]n}}|{{[Nn]cm?}}|{{[Cc]rp}}"), 0)
-            item, alternate = remove_capture(item, re.compile("{{C\|1?=?(original|alternate): (.*?)}}"), 0, 2)
+            item = re.sub(r"{{C\|([Uu]nlicensed|[Nn]on[ -]?canon|source)}}", "", item)
+            item, reprint = remove_capture(item, re.compile(r"{{[Rr]eprint\|.*?}}"), 0)
+            item, ab = remove_capture(item, re.compile(r"\{\{[Aa]b\|.*?}}"), 0)
+            item, parenthetical = remove_capture(item, re.compile(r"(\|p=(.*?))(?=(\|.*?)?}})"), 1, 2)
+            item, extra = remove_capture(item, re.compile(r"{{[Uu]n}}|{{[Nn]cm?}}|{{[Cc]rp}}"), 0)
+            item, alternate = remove_capture(item, re.compile(r"{{C\|1?=?(original|alternate): (.*?)}}"), 0, 2)
             item, has_content = remove_flag(item, '(content)')
             item, is_extra = remove_flag(item, '(extra)')
             if is_extra:
@@ -820,21 +820,21 @@ def parse_new_timeline(page: Page, types):
     is_adaptation = False
     index = 0
     unknown = None
-    text = re.sub("(\| ?[A-Z]+ ?)\n\|", "\\1|", text).replace("|simple=1", "").replace("(comic)", "(comic story)")
+    text = re.sub(r"(\| ?[A-Z]+ ?)\n\|", "\\1|", text).replace("|simple=1", "").replace("(comic)", "(comic story)")
     for line in text.splitlines():
         if "==Unknown placement==" in line:
             unknown = {}
             continue
-        line = re.sub("<!--.*?-->", "", line).replace("†", "").strip()
+        line = re.sub(r"<!--.*?-->", "", line).replace("†", "").strip()
 
-        m = re.search("^\|(data-sort-value=.*?\|)?(?P<date>.*?)\|(\|?style.*?\||\|- ?class.*?\|)?[ ]*?[A-Z]+[ ]*?\n?\|.*?\|+[* ]*?(?P<full>['\"]*[\[{]+.*?[]}]+['\"]*)( *?(†|‡|Ω|&dagger;))*?$", line)
+        m = re.search(r"^\|(data-sort-value=.*?\|)?(?P<date>.*?)\|(\|?style.*?\||\|- ?class.*?\|)?[ ]*?[A-Z]+[ ]*?\n?\|.*?\|+[* ]*?(?P<full>['\"]*[\[{]+.*?[]}]+['\"]*)( *?(†|‡|Ω|&dagger;))*?$", line)
         if m:
             x = extract_item(m.group('full'), True, "Timeline", types, master=False)
             if x and x.target:
                 timeline = None
                 # target = Page(page.site, x.target)
                 # if target.exists() and not target.isRedirectPage():
-                #     dt = re.search("\|timeline=[ \[]+(.*?)(\|.*?)?]+(.*?)\n", target.get())
+                #     dt = re.search(r"\|timeline=[ \[]+(.*?)(\|.*?)?]+(.*?)\n", target.get())
                 #     if dt:
                 #         timeline = dt.group(1)
                 t = f"{x.issue}-{x.target}" if x.target == "Galaxywide NewsNets" else x.target

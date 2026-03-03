@@ -43,18 +43,18 @@ EXTRA = "\{+ ?(1st[A-z]*|[Cc]|V?[A-z][od]|[Ff]act|[Bb]ts[Oo]nly|DLC|[Ll]n|[Cc]rp
 
 
 def clean_references(before):
-    before = re.sub("<ref name ?=([^'\">]*?) ?[\"'] ?/ ?>", "<ref name=\"\\1\" />", before)
-    before = re.sub("<ref name ?=([^'\">]*?) ?[\"'] ?>", "<ref name=\"\\1\">", before)
-    before = re.sub("<ref name ?=[\"']([^'\" ]+?) ?/ ?>", "<ref name=\"\\1\" />", before)
-    before = re.sub("<ref name ?=[\"']([^'\" ]+?) ?>", "<ref name=\"\\1\">", before)
-    before = re.sub("<ref name ?=([^'\">]+?) ?/ ?>", "<ref name=\"\\1\" />", before)
-    before = re.sub("<ref name ?=([^'\">]+?) ?>", "<ref name=\"\\1\">", before)
-    before = re.sub("(<ref name=\"(.*?)\")>[ \n\t]*?</ref>", "\\1 />", before)
-    before = re.sub("</ref>([A-z])", "</ref> \\1", before)
-    before = re.sub("(<ref( name=\".*?\")?>)\*", "\\1", before)
+    before = re.sub(r"<ref name ?=([^'\">]*?) ?[\"'] ?/ ?>", "<ref name=\"\\1\" />", before)
+    before = re.sub(r"<ref name ?=([^'\">]*?) ?[\"'] ?>", "<ref name=\"\\1\">", before)
+    before = re.sub(r"<ref name ?=[\"']([^'\" ]+?) ?/ ?>", "<ref name=\"\\1\" />", before)
+    before = re.sub(r"<ref name ?=[\"']([^'\" ]+?) ?>", "<ref name=\"\\1\">", before)
+    before = re.sub(r"<ref name ?=([^'\">]+?) ?/ ?>", "<ref name=\"\\1\" />", before)
+    before = re.sub(r"<ref name ?=([^'\">]+?) ?>", "<ref name=\"\\1\">", before)
+    before = re.sub(r"(<ref name=\"(.*?)\")>[ \n\t]*?</ref>", "\\1 />", before)
+    before = re.sub(r"</ref>([A-z])", "</ref> \\1", before)
+    before = re.sub(r"(<ref( name=\".*?\")?>)\*", "\\1", before)
     if "\n</ref>" in before:
-        before = re.sub("(<ref name=((?!</ref>).)*?)\n</ref>", "\\1</ref>", before)
-    return before.replace("\"/>", "\" />")
+        before = re.sub(r"(<ref name=((?!</ref>).)*?)\n</ref>", "\\1</ref>", before)
+    return before.replace(r"\"/>", "\" />")
 
 
 def initial_cleanup(target: Page, all_infoboxes, before: str=None):
@@ -62,20 +62,20 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     if not before:
         before = target.get(force=True)
     # priority fixes
-    before = before.replace("\u202c", "")
-    before = re.sub("(\{\{WebCite[^\n}]*?)\|title=(.*?}})", "\\1|text=\\2", before)
-    before = before.replace("\n}}</ref>", "}}</ref>")
-    before = re.sub("(\{\{(SWGcite|TORcite).*?)\|type=", "\\1|TORTYPE=", before)
+    before = before.replace(r"\u202c", "")
+    before = re.sub(r"(\{\{WebCite[^\n}]*?)\|title=(.*?}})", "\\1|text=\\2", before)
+    before = before.replace(r"\n}}</ref>", "}}</ref>")
+    before = re.sub(r"(\{\{(SWGcite|TORcite).*?)\|type=", "\\1|TORTYPE=", before)
 
     # whitespace/spacing issues
-    before = re.sub("\* +([A-z0-9'\[{])", "*\\1", before)
-    before = re.sub("\n<br ?/?>(\n+==)", "\\1", before)
-    before = re.sub("([A-z'0-9\]]+)  +([A-z'0-9\[]+)", "\\1 \\2", before)
-    before = re.sub("\n[ ]+\n", "\n\n", before)
+    before = re.sub(r"\* +([A-z0-9'\[{])", "*\\1", before)
+    before = re.sub(r"\n<br ?/?>(\n+==)", "\\1", before)
+    before = re.sub(r"([A-z'0-9\]]+)  +([A-z'0-9\[]+)", "\\1 \\2", before)
+    before = re.sub(r"\n[ ]+\n", "\n\n", before)
 
     # print(f"retrieval: {(datetime.now() - now).microseconds / 1000} microseconds")
     if "]]{{" in before or "}}{{" in before:
-        before = re.sub("(]]|}})(" + EXTRA + ")","\\1 \\2", before)
+        before = re.sub(r"(]]|}})(" + EXTRA + ")","\\1 \\2", before)
 
     # Handle title parameters in Template:Top
     x, _, y = target.title().replace("/Legends", "").replace("/Canon", "").partition(" (")
@@ -83,7 +83,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
         for i in ["|", "}"]:
             before = before.replace(f"|title=''{z}''{i}", f"|italics=1{i}")
             if f"Otheruses|title={z}" in before:
-                before = re.sub("(\{\{Top.*?)\|title=" + z + "(\|.*?)?}}", "\\1\\2", before)
+                before = re.sub(r"(\{\{Top.*?)\|title=" + z + "(\|.*?)?}}", "\\1\\2", before)
             else:
                 before = before.replace(f"|title={z}{i}", f"{i}")
     if y:
@@ -97,26 +97,26 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
         before = before.replace(x, y)
 
     # inline files, text/etc. in image field
-    before = re.sub("([A-z0-9.>])(\[\[File:.*?]]\n)", "\\1\n\\2", before)
-    before = re.sub("\|image=(File:)?([A-Z0-9 _]+\..+)(?=\n)", "|image=[[File:\\2]]", before)
-    before = re.sub("(\|image=\[\[File:[^\n\]]+?)\|.+?]]", "\\1]]", before)
-    before = re.sub("(\|image=\[\[File:.*?)(\|alt=.*?)]]\n", "\\1]]\n\\2\\n", before)
+    before = re.sub(r"([A-z0-9.>])(\[\[File:.*?]]\n)", "\\1\n\\2", before)
+    before = re.sub(r"\|image=(File:)?([A-Z0-9 _]+\..+)(?=\n)", "|image=[[File:\\2]]", before)
+    before = re.sub(r"(\|image=\[\[File:[^\n\]]+?)\|.+?]]", "\\1]]", before)
+    before = re.sub(r"(\|image=\[\[File:.*?)(\|alt=.*?)]]\n", "\\1]]\n\\2\\n", before)
 
     # multi-line templates, extra/wrong brackets, etc.
-    before = re.sub("(?<!\[)\[((?!Original)[^\[\]\n]+)]]", "[[\\1]]", before)
-    before = re.sub("([*#]\{\{[^}\n]+)\n([^{\n]+}})", "\\1\\2", before)
-    before = re.sub("\{\{([^\n{}\[]+?)]]", "{{\\1}}", before)
-    before = re.sub("\{\{(.*?[^\n\]])]}(?!})", "{{\\1}}", before)
-    before = re.sub("(?<!\{)\{(\{\{[^\n{}]+}})(?!})", "\\1", before)
-    before = re.sub("(?<!\{)(\{\{[^\n{}]+})(?!})", "\\1}", before)
-    before = re.sub("(?<!\{)(\{[^\n{}]+}})(?!})", "{\\1", before)
-    before = re.sub("(\{\{1st[A-z]*)\|\n}}", "\\1}}", before)
-    before = re.sub("(\{\{1st[A-z]*\|[^|}\n]*?)\n}}", "\\1}}", before)
-    before = re.sub("(\{\{[A-z0-9-]+[^{}\n]+?) *\n *}}", "\\1}}", before)
+    before = re.sub(r"(?<!\[)\[((?!Original)[^\[\]\n]+)]]", "[[\\1]]", before)
+    before = re.sub(r"([*#]\{\{[^}\n]+)\n([^{\n]+}})", "\\1\\2", before)
+    before = re.sub(r"\{\{([^\n{}\[]+?)]]", "{{\\1}}", before)
+    before = re.sub(r"\{\{(.*?[^\n\]])]}(?!})", "{{\\1}}", before)
+    before = re.sub(r"(?<!\{)\{(\{\{[^\n{}]+}})(?!})", "\\1", before)
+    before = re.sub(r"(?<!\{)(\{\{[^\n{}]+})(?!})", "\\1}", before)
+    before = re.sub(r"(?<!\{)(\{[^\n{}]+}})(?!})", "{\\1", before)
+    before = re.sub(r"(\{\{1st[A-z]*)\|\n}}", "\\1}}", before)
+    before = re.sub(r"(\{\{1st[A-z]*\|[^|}\n]*?)\n}}", "\\1}}", before)
+    before = re.sub(r"(\{\{[A-z0-9-]+[^{}\n]+?) *\n *}}", "\\1}}", before)
 
     # fixing same-line infobox fields
-    while re.search("(\n\*+\[\[[^\n\]}]+?]])(\|[a-z _]+=)", before):
-        before = re.sub("(\n\*+\[\[[^\n\]}]+?]])(\|[a-z _]+=)", "\\1\n\\2", before)
+    while re.search(r"(\n\*+\[\[[^\n\]}]+?]])(\|[a-z _]+=)", before):
+        before = re.sub(r"(\n\*+\[\[[^\n\]}]+?]])(\|[a-z _]+=)", "\\1\n\\2", before)
 
     # now = datetime.now()
     infobox, original = None, None
@@ -128,76 +128,76 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     before = clean_references(before)
 
     # section header issues
-    before = re.sub("\n=([A-z ]+)==", "\n==\\1==", before)
-    before = re.sub("==((?!Notes and references).)*?==(\n\{.*?}})?\n\{\{[Rr]eflist}}", "==Notes and references==\\2\n{{Reflist}}", before)
-    before = re.sub("=+ ?([Rr]eferences?|[Nn]otes? (and )?[Rr]ef.*?) ?=+", "==Notes and references==", before)
-    before = re.sub("= ?([Cc]ollections?|Collected [Ii]n) ?=", "=Collected in=", before)
-    # before = re.sub("=+ ?'*Non-canon(ical)? ([Aa]ppearances|[Ss]ources)'* ?=+", "===Non-canon \\2===", before)
-    before = re.sub("\n===(Merchandis(e|ing)(.*?)|Adaptations?|Tie[ -]ins?( media)?)===", "\n==Adaptations==", before)
-    before = re.sub("(\n===?.*?)<ref name=.*?(/>|</ref>)(.*?==+) ?\n", "\\1\\3\n", before)
+    before = re.sub(r"\n=([A-z ]+)==", "\n==\\1==", before)
+    before = re.sub(r"==((?!Notes and references).)*?==(\n\{.*?}})?\n\{\{[Rr]eflist}}", "==Notes and references==\\2\n{{Reflist}}", before)
+    before = re.sub(r"=+ ?([Rr]eferences?|[Nn]otes? (and )?[Rr]ef.*?) ?=+", "==Notes and references==", before)
+    before = re.sub(r"= ?([Cc]ollections?|Collected [Ii]n) ?=", "=Collected in=", before)
+    # before = re.sub(r"=+ ?'*Non-canon(ical)? ([Aa]ppearances|[Ss]ources)'* ?=+", "===Non-canon \\2===", before)
+    before = re.sub(r"\n===(Merchandis(e|ing)(.*?)|Adaptations?|Tie[ -]ins?( media)?)===", "\n==Adaptations==", before)
+    before = re.sub(r"(\n===?.*?)<ref name=.*?(/>|</ref>)(.*?==+) ?\n", "\\1\\3\n", before)
     if "<references" in before.lower():
-        before = re.sub("<[Rr]efe?rences ?/ ?>", "{{Reflist}}", before)
+        before = re.sub(r"<[Rr]efe?rences ?/ ?>", "{{Reflist}}", before)
 
     # now = datetime.now()
-    while re.search("\[\[(?!File:)([^\[\]{}\n]+?)&[mn]dash;([^\[\]{}\n]+?)]]", before):
-        before = re.sub("\[\[(?!File:)([^\[\]{}\n]+?)&ndash;([^\[\]{}\n]+?)]]", "[[\\1–\\2]]", before)
-        before = re.sub("\[\[(?!File:)([^\[\]{}\n]+?)&mdash;([^\[\]{}\n]+?)]]", "[[\\1—\\2]]", before)
+    while re.search(r"\[\[(?!File:)([^\[\]{}\n]+?)&[mn]dash;([^\[\]{}\n]+?)]]", before):
+        before = re.sub(r"\[\[(?!File:)([^\[\]{}\n]+?)&ndash;([^\[\]{}\n]+?)]]", "[[\\1–\\2]]", before)
+        before = re.sub(r"\[\[(?!File:)([^\[\]{}\n]+?)&mdash;([^\[\]{}\n]+?)]]", "[[\\1—\\2]]", before)
 
-    before = re.sub("(\{\{(Unknown|Series)Listing.*?}})\{\{", "\\1 {{", before)
-    before = before.replace("||text=", "|text=").replace("|Parent=1", "|parent=1")
-    before = before.replace("{{C|non-canon|reprint=1}}", "")
-    before = before.replace("<nowiki>|</nowiki>", "&#124;")
-    before = re.sub("({{[Ss]croll[_ ]?[Bb]ox\|)\*", "{{ScrollBox|\n*", before)
-    before = re.sub("<small>\((.*?)\)</small>", "{{C|\\1}}", before)
+    before = re.sub(r"(\{\{(Unknown|Series)Listing.*?}})\{\{", "\\1 {{", before)
+    before = before.replace(r"||text=", "|text=").replace("|Parent=1", "|parent=1")
+    before = before.replace(r"{{C|non-canon|reprint=1}}", "")
+    before = before.replace(r"<nowiki>|</nowiki>", "&#124;")
+    before = re.sub(r"({{[Ss]croll[_ ]?[Bb]ox\|)\*", "{{ScrollBox|\n*", before)
+    before = re.sub(r"<small>\((.*?)\)</small>", "{{C|\\1}}", before)
 
     # removing work= parameters and prioritizing
-    before = re.sub("(\{\{((?!([wW]ebCite|OfficialSite))[^{}\n])*?\|[^{}\n]+?)\|work=(\[\[[^]]+\|.*?]])?.*?(\|.*?)?}}", "\\1\\4}}", before)
-    before = re.sub("(\{\{[A-z]+)(\|url=[^\n{}]+?)(\|(subdomain|uk|lang)=[^\n{}]+?)(\|[^\n{}]*?)?}}", "\\1\\3\\2\\5}}", before)
-    before = re.sub("(\{\{Quote\|[^\n{}]+?(\{\{[^\n{}]+?}})?[^\n{}]+?}})(?!\n)", "\\1\n", before)
+    before = re.sub(r"(\{\{((?!([wW]ebCite|OfficialSite))[^{}\n])*?\|[^{}\n]+?)\|work=(\[\[[^]]+\|.*?]])?.*?(\|.*?)?}}", "\\1\\4}}", before)
+    before = re.sub(r"(\{\{[A-z]+)(\|url=[^\n{}]+?)(\|(subdomain|uk|lang)=[^\n{}]+?)(\|[^\n{}]*?)?}}", "\\1\\3\\2\\5}}", before)
+    before = re.sub(r"(\{\{Quote\|[^\n{}]+?(\{\{[^\n{}]+?}})?[^\n{}]+?}})(?!\n)", "\\1\n", before)
 
-    b1, b2, b3 = before.partition("{{App\n")
-    b3 = re.sub("\n?(\|(c-|l-)?(characters|organisms|droids|events|locations|organizations|species|vehicles|technology|miscellanea)=)\*", "\n\\1\n*", b3)
+    b1, b2, b3 = before.partition(r"{{App\n")
+    b3 = re.sub(r"\n?(\|(c-|l-)?(characters|organisms|droids|events|locations|organizations|species|vehicles|technology|miscellanea)=)\*", "\n\\1\n*", b3)
     before = f"{b1}{b2}{b3}"
 
-    before = re.sub("(\[\[[^\n\[{|]+)\|(an?) ([^\n|\[{]+?)]]", "\\2 \\1|\\3]]", before)
+    before = re.sub(r"(\[\[[^\n\[{|]+)\|(an?) ([^\n|\[{]+?)]]", "\\2 \\1|\\3]]", before)
 
     # weird multi-link listings, legacy formatting from the 2000s
-    before = re.sub("\*('*?)\[\[([^\n\]|{]*?)]]('*?) '*?\[\[(\\2\([^\n\]{]*?)\|(.*?)]]'*", "*[[\\4|\\1\\2\\3 \\5]]", before)
-    before = re.sub("\*'*?\[\[([^\n\]{]*?)(\|[^\n\]{]*?)]]'*? '*?\[\[(\\1 \([^\n\]{]*?)\|(.*?)]]'*", "*[[\\3|\\2 \\4]]", before)
-    before = re.sub("(\n\*[^\n]*?[\[{]+[^\n]*?[]}]+[^\n]*?)(\*[^\n]*?[\[{]+[^\n]*?[]}]+[^\n]*?\n)", "\\1\n\\2", before)
+    before = re.sub(r"\*('*?)\[\[([^\n\]|{]*?)]]('*?) '*?\[\[(\\2\([^\n\]{]*?)\|(.*?)]]'*", "*[[\\4|\\1\\2\\3 \\5]]", before)
+    before = re.sub(r"\*'*?\[\[([^\n\]{]*?)(\|[^\n\]{]*?)]]'*? '*?\[\[(\\1 \([^\n\]{]*?)\|(.*?)]]'*", "*[[\\3|\\2 \\4]]", before)
+    before = re.sub(r"(\n\*[^\n]*?[\[{]+[^\n]*?[]}]+[^\n]*?)(\*[^\n]*?[\[{]+[^\n]*?[]}]+[^\n]*?\n)", "\\1\n\\2", before)
 
-    before = re.sub("(\|set=(.*?))\|sformatted=''\\2''", "\\1", before)
+    before = re.sub(r"(\|set=(.*?))\|sformatted=''\\2''", "\\1", before)
 
-    before = re.sub("\|story=\[\[(.*?)(\|.*?)?]]", "|story=\\1", before)
-    before = re.sub("(\|set=.*?)(\|subset=.*?)(\|stext=.*?)(\|.*?)?}}", "\\1\\3\\2\\4}}", before)
-    before = re.sub("(\{\{([A-z_ ]+)\|(set=)?[^|=\n}]+?)(\|link=[^|\n}]+?)(\|cardname=[^|\n}]+?)(\|[^\n}]*?)?}}", "\\1\\5\\4\\6}}", before)
+    before = re.sub(r"\|story=\[\[(.*?)(\|.*?)?]]", "|story=\\1", before)
+    before = re.sub(r"(\|set=.*?)(\|subset=.*?)(\|stext=.*?)(\|.*?)?}}", "\\1\\3\\2\\4}}", before)
+    before = re.sub(r"(\{\{([A-z_ ]+)\|(set=)?[^|=\n}]+?)(\|link=[^|\n}]+?)(\|cardname=[^|\n}]+?)(\|[^\n}]*?)?}}", "\\1\\5\\4\\6}}", before)
 
-    before = re.sub("\{\{[Ii]ncomplete[ _]?[Ll]ist.*?}}\n?\{\{(App|Credits)", "{{Incomplete\\1}}\n{{\\1", before)
+    before = re.sub(r"\{\{[Ii]ncomplete[ _]?[Ll]ist.*?}}\n?\{\{(App|Credits)", "{{Incomplete\\1}}\n{{\\1", before)
 
-    before = re.sub("( \{\{(C\|Hologram|1st|[MmPpCcVv]o).*?}})\\1+", "\\1", before)
+    before = re.sub(r"( \{\{(C\|Hologram|1st|[MmPpCcVv]o).*?}})\\1+", "\\1", before)
 
     # Visual Editor fix, can't remove
-    before = re.sub("\[\[(.*?) (.*?)\|('*\\1'*)]] \[\[\\1 \\2|\\2]]", "[[\\1 \\2|\\3 \\2]]", before)
+    before = re.sub(r"\[\[(.*?) (.*?)\|('*\\1'*)]] \[\[\\1 \\2|\\2]]", "[[\\1 \\2|\\3 \\2]]", before)
 
     # temp fixes
-    before = re.sub("\|name=\[\[Friends of the Force(\|Friends of the Force|]]): A Star Wars Podcast]*\|", "|name=[[Friends of the Force]]|", before)
-    before = re.sub("\{\{InsiderCite\|link=(.*?)(.*?)\|''\\1''\\2\|(.*?)}}", "{{StoryCite|book=\\1|story=\\3}}", before)
-    before = re.sub("(\{\{([A-z _0-9]+)\|.*?}}) (\{\{1st[a-z]*)\|\{\{\\2.*?}}( \{.*?)?\n", "\\1 \\3}}\\4\n", before)
-    before = re.sub("\[\[K-Zone\|'*K-Zone'* (Volume [0-9]+, Number [0-9]+)]]", "[[K-Zone \\1|''K-Zone'' \\1]]", before)
-    before = re.sub("'*\[(https?://[w.]*?archive.org/.*?) (.*?)]'* (on|at)( the)? ('*\[https?://[w.]*archive\.org/? )?Internet Archive]?'*",
+    before = re.sub(r"\|name=\[\[Friends of the Force(\|Friends of the Force|]]): A Star Wars Podcast]*\|", "|name=[[Friends of the Force]]|", before)
+    before = re.sub(r"\{\{InsiderCite\|link=(.*?)(.*?)\|''\\1''\\2\|(.*?)}}", "{{StoryCite|book=\\1|story=\\3}}", before)
+    before = re.sub(r"(\{\{([A-z _0-9]+)\|.*?}}) (\{\{1st[a-z]*)\|\{\{\\2.*?}}( \{.*?)?\n", "\\1 \\3}}\\4\n", before)
+    before = re.sub(r"\[\[K-Zone\|'*K-Zone'* (Volume [0-9]+, Number [0-9]+)]]", "[[K-Zone \\1|''K-Zone'' \\1]]", before)
+    before = re.sub(r"'*\[(https?://[w.]*?archive.org/.*?) (.*?)]'* (on|at)( the)? ('*\[https?://[w.]*archive\.org/? )?Internet Archive]?'*",
                     "{{WebCite|url=\\1|text=\\2}}", before)
-    before = re.sub("(\{\{GalaxyMapAppendix}})( |&.dash;)*[Bb]ased on (corresponding )?(info(rmation)?|data) for (the )?(\[\[((?! and ).)*?]]).?</ref>", "\\1 &mdash; Based on corresponding data for the \\7</ref>", before)
-    before = re.sub("''\[\[(The Acolyte|The Mandalorian|The Book of Boba Fett)]]''", "''[[Star Wars: \\1]]''", before)
-    before = re.sub("'?'?\[\[(Andor|Ahsoka|Obi-Wan Kenobi) \(television series\)\|'?'?\\1'?'?]]'?'?", "''[[Star Wars: \\1]]''", before)
-    before = re.sub("\*(\{\{SeriesListing.*?}} )?\[\[Star Wars Rebels \(webcomic\)\|.*?{{C\|Appears through imagination}}\n", "", before)
-    before = re.sub("(\{\{EncyclopediaCite\|.*?) \(reference book\)}}", "\\1}}", before)
-    before = re.sub("'>*\[\[Star Wars Rebels: (Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\]\]'*", ">{{Rebels|\\1}}", before)
-    before = re.sub(">'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \\1'*\]\]'*", ">{{Rebels|\\1}}", before)
-    before = re.sub("'*\[\[Star Wars Rebels: (Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\]\]'*", "\"[[\\1]]\"", before)
-    before = re.sub("'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \\1'*\]\]'*", "\"[[\\1]]\"", before)
+    before = re.sub(r"(\{\{GalaxyMapAppendix}})( |&.dash;)*[Bb]ased on (corresponding )?(info(rmation)?|data) for (the )?(\[\[((?! and ).)*?]]).?</ref>", "\\1 &mdash; Based on corresponding data for the \\7</ref>", before)
+    before = re.sub(r"''\[\[(The Acolyte|The Mandalorian|The Book of Boba Fett)]]''", "''[[Star Wars: \\1]]''", before)
+    before = re.sub(r"'?'?\[\[(Andor|Ahsoka|Obi-Wan Kenobi) \(television series\)\|'?'?\\1'?'?]]'?'?", "''[[Star Wars: \\1]]''", before)
+    before = re.sub(r"\*(\{\{SeriesListing.*?}} )?\[\[Star Wars Rebels \(webcomic\)\|.*?{{C\|Appears through imagination}}\n", "", before)
+    before = re.sub(r"(\{\{EncyclopediaCite\|.*?) \(reference book\)}}", "\\1}}", before)
+    before = re.sub(r"'>*\[\[Star Wars Rebels: (Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\]\]'*", ">{{Rebels|\\1}}", before)
+    before = re.sub(r">'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \\1'*\]\]'*", ">{{Rebels|\\1}}", before)
+    before = re.sub(r"'*\[\[Star Wars Rebels: (Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\]\]'*", "\"[[\\1]]\"", before)
+    before = re.sub(r"'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \\1'*\]\]'*", "\"[[\\1]]\"", before)
 
-    while re.search("\[\[Category:[^\n|\]_]+_", before):
-        before = re.sub("(\[\[Category:[^\n|\]_]+)_", "\\1 ", before)
+    while re.search(r"\[\[Category:[^\n|\]_]+_", before):
+        before = re.sub(r"(\[\[Category:[^\n|\]_]+)_", "\\1 ", before)
     # print(f"regex-1: {(datetime.now() - now).microseconds / 1000} microseconds")
 
     # now = datetime.now()
@@ -205,14 +205,14 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     # print(f"regex-2: {(datetime.now() - now).microseconds / 1000} microseconds")
 
     while "== " in before or " ==" in before:
-        before = before.replace("== ", "==").replace(" ==", "==")
+        before = before.replace(r"== ", "==").replace(" ==", "==")
     if "{{C|unlicensed}}" in before:
-        before = re.sub("( {{[Cc]\|[Uu]nlicensed}})+", "", before)
+        before = re.sub(r"( {{[Cc]\|[Uu]nlicensed}})+", "", before)
     if "{{Mentioned" in before or "{{mentioned" in before:
-        before = re.sub("\{\{[Mm]entioned[ _]only\|?}}", "{{Mo}}", before)
+        before = re.sub(r"\{\{[Mm]entioned[ _]only\|?}}", "{{Mo}}", before)
 
     if "‎" in before:
-        before = before.replace("‎", "")
+        before = before.replace(r"‎", "")
         print(f"Found ‎ in {target.title()}")
     return before, infobox, original
 
@@ -224,7 +224,7 @@ def clear_page_numbers(before, in_src=None):
     rp = "(['\"]*[\[{]+[^\n\[{]*?[}\]]+['\"]*)" + PAGE_NUMBER_REGEX
     if "{{PageNumber}}" in before:
         if in_src:
-            x = re.findall("((<ref name=\".*?\">'')(.*?)'')", before)
+            x = re.findall(r"((<ref name=\".*?\">'')(.*?)'')", before)
             for i in x:
                 if i in in_src:
                     before = before.replace(x[1], f"{x[2]}[[{i}]]''")
@@ -233,10 +233,10 @@ def clear_page_numbers(before, in_src=None):
                     if z:
                         before = before.replace(x[1], f"{x[2]}[[{z[0]}|''{i}'']]")
 
-        before = re.sub("\">(((?!\{\{PageNumber)[^\n<])+? ?" + rp + ")", "\">{{PageNumber}} \\1", before)
-        before = re.sub("\">\{\{PageNumber}} ''(\[\[.*?]])( .+?)''</ref>", "\">{{PageNumber}} ''\\1''\\2</ref>", before)
+        before = re.sub(r"\">(((?!\{\{PageNumber)[^\n<])+? ?" + rp + ")", "\">{{PageNumber}} \\1", before)
+        before = re.sub(r"\">\{\{PageNumber}} ''(\[\[.*?]])( .+?)''</ref>", "\">{{PageNumber}} ''\\1''\\2</ref>", before)
         skip = []
-        for x in re.findall("((<ref name=\"([^\"\n>]+?)\")>\{\{PageNumber}} ?(\{\{UnlinkedRef}} )?" + rp + ")", before):
+        for x in re.findall(r"((<ref name=\"([^\"\n>]+?)\")>\{\{PageNumber}} ?(\{\{UnlinkedRef}} )?" + rp + ")", before):
             unlinked = None
             if in_src:
                 if not any(a in x[0] if a.startswith("{{") else (f"[[{a}|" in x[0] or f"[[{a}]]") for a in in_src):
@@ -250,10 +250,10 @@ def clear_page_numbers(before, in_src=None):
             if unlinked and unlinked[0] in before:
                 before = before.replace(unlinked[0], f">[[{unlinked[1]}|''{unlinked[1].split(' (')[1]}]]" if " (" in unlinked[1] else f">''[[{unlinked[1]}]]''")
 
-        for x in re.findall("((<ref name=\"([^\"\n>]+?)\")>\{\{PageNumber}} ?(\{\{UnlinkedRef}} )?" + rp + ")", before):
+        for x in re.findall(r"((<ref name=\"([^\"\n>]+?)\")>\{\{PageNumber}} ?(\{\{UnlinkedRef}} )?" + rp + ")", before):
             if x[2] in skip:
                 continue
-            zy = re.sub("[_:\- ]p?" + x[7] + "\"", '"', x[1])
+            zy = re.sub(r"[_:\- ]p?" + x[7] + "\"", '"', x[1])
             if zy.endswith(f"{x[7]}\"") and x[7] not in x[4]:
                 zy = zy.replace(f"{x[7]}\"", '"')
             if zy != x[1] and before.count(zy + ">") > 0:
@@ -261,7 +261,7 @@ def clear_page_numbers(before, in_src=None):
                 before = before.replace(x[1], zy)
                 continue
             elif before.count(f"\">{x[4]}<") > 0:
-                z = re.search("(<ref name=\"[^\"\n>]+?\")>" + re.escape(x[4]) + "</ref>", before)
+                z = re.search(r"(<ref name=\"[^\"\n>]+?\")>" + re.escape(x[4]) + "</ref>", before)
                 if z:
                     before = before.replace(x[0], f"{z.group(1)} />").replace(x[1], z.group(1))
             else:
@@ -269,18 +269,18 @@ def clear_page_numbers(before, in_src=None):
                 before = before.replace(x[1], zy)
 
             # if before.count(f"\">{x[4]}<") >= 1:
-            #     z = re.search("(<ref name=\"[^\"\n>]+?\")>" + re.escape(x[4]) + "</ref>", before)
+            #     z = re.search(r"(<ref name=\"[^\"\n>]+?\")>" + re.escape(x[4]) + "</ref>", before)
             #     if z:
             #         before = before.replace(x[0], f"{z.group(1)} />").replace(x[1], z.group(1))
             #         check_multi = True
             #
             # replace = before.count(f"\">{x[4]}<") == 0
             # if not replace and before.count(f"\">{x[4]} ") <= 2:
-            #     z = re.search("\">" + re.escape(x[4]) + " (((?![/<]ref).)*?\[\[((?![/<]ref).)*?)</ref>", before)
+            #     z = re.search(r"\">" + re.escape(x[4]) + " (((?![/<]ref).)*?\[\[((?![/<]ref).)*?)</ref>", before)
             #     replace = z and len(z.group(1)) > 10
             #
             # if before.count(f"\">{x[4]}<") > 1:
-            #     z = re.search("(<ref name=\"[^\"\n>]+?\")>" + re.escape(x[4]) + "</ref>", before)
+            #     z = re.search(r"(<ref name=\"[^\"\n>]+?\")>" + re.escape(x[4]) + "</ref>", before)
             #     if z:
             #         before = before.replace(x[0], f"{z.group(1)} />").replace(x[1], z.group(1))
             #         check_multi = True
@@ -291,15 +291,15 @@ def clear_page_numbers(before, in_src=None):
             #     before = before.replace(x[0], f"{zy}>{x[4]}</ref>")
             #     before = before.replace(x[1], zy)
 
-        before = re.sub("(\">''\[\[[^]]+?]])</ref>", "\\1''</ref>", before)
+        before = re.sub(r"(\">''\[\[[^]]+?]])</ref>", "\\1''</ref>", before)
 
     return before
 
 
 def regex_cleanup(before: str) -> str:
-    if before.count("==Appearances==") > 1:
+    if before.count(r"==Appearances==") > 1:
         before = re.sub(r"(==Appearances==(\n.*?)+)\n==Appearances==", "\\1", before)
-    if before.count("==Sources==") > 1:
+    if before.count(r"==Sources==") > 1:
         before = re.sub(r"(==Sources==(\n.*?)+)\n==Sources==", "\\1", before)
 
     if "{{SWU" in before:
@@ -307,11 +307,11 @@ def regex_cleanup(before: str) -> str:
 
     if "<nowiki>|" in before:
         while re.search(r"<nowiki>(\|.*?\|.*?)</nowiki>", before):
-            before = re.sub("<nowiki>\|(.*?)\|(.*?)?</nowiki>", "<nowiki>|\\1&#124;\\2</nowiki>", before)
+            before = re.sub(r"<nowiki>\|(.*?)\|(.*?)?</nowiki>", "<nowiki>|\\1&#124;\\2</nowiki>", before)
         before = re.sub(r"<nowiki>\|(.*?)</nowiki>", "&#124;\\1", before)
     if "cardname=" in before:
         before = re.sub(r"(\|cardname=[^\n}]+?)\{\{C\|(.*?)}}", "\\1(\\2)", before)
-        before = before.replace("cardname=\n", "cardname=")
+        before = before.replace(r"cardname=\n", "cardname=")
     if "web.archive" in before:
         before = re.sub(r"(?<!\[)\[https?://(.*?) (.*?)] (\(|\{\{C\|)\[http.*?web.archive.org/web/([0-9]+)/https?://.*?\\1.*?][)}]+","{{WebCite|url=https://\\1|text=\\2|archivedate=\\4}}", before)
     if "width=100%" in before:
@@ -334,5 +334,5 @@ def regex_cleanup(before: str) -> str:
     if "SWGTCG" in before:
         before = re.sub(r"(\{\{SWGTCG\|.*?)}} {{C\|(.*?scenario.*?)}}", "\\1|scenario=\\2}}", before)
     if "Rebelscum.com" in before or "TheForce.net" in before:
-        before = re.sub("\*'*?\[(http.*?) (.*?)]'*? (on|at|-).*?\[\[(Rebelscum\.com|TheForce\.net).*]].*?\n","{{WebCite|url=\\1|text=\\2|work=\\4}}", before)
+        before = re.sub(r"\*'*?\[(http.*?) (.*?)]'*? (on|at|-).*?\[\[(Rebelscum\.com|TheForce\.net).*]].*?\n","{{WebCite|url=\\1|text=\\2|work=\\4}}", before)
     return before

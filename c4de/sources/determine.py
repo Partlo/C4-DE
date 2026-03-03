@@ -79,7 +79,7 @@ def determine_id_for_item(
         return ItemId(o, m, False, o.unique_id() not in data)
     elif "cargobay" in o.original:
         return ItemId(o, o, True, False)
-    elif "HoloNet News" in o.original and re.search("\[https://web.archive.*?\.gif .*?].*?\[\[Holonet News", o.original):
+    elif "HoloNet News" in o.original and re.search(r"\[https://web.archive.*?\.gif .*?].*?\[\[Holonet News", o.original):
         x = ItemId(o, o, True, False)
         x.master.date = "2002-02-28"
         return x
@@ -587,7 +587,7 @@ def match_specific_target(o: Item, target: str, by_target: Dict[str, List[Item]]
         if o.template in ["Tales", "TCWUKCite", "IDWAdventuresCite-2017"] and "(" not in target and target not in by_target:
             targets.append(f"{target} (comic story)")
 
-        # m = re.search("^(Polyhedron|Challenge|Casus Belli|Valkyrie|Inphobia) ([0-9]+)$", target)
+        # m = re.search(r"^(Polyhedron|Challenge|Casus Belli|Valkyrie|Inphobia) ([0-9]+)$", target)
         # if m:
         #     x = m.group(1).replace(" ", "") + "Cite"
         #     for dct in [by_target, other_targets or {}]:
@@ -665,8 +665,8 @@ def matches_up_to_string(d, u, x, in_both: bool):
 
 def match_news_format(d, u):
     if "/news2" in d and "/news2" in u:
-        x = re.search("^(.*?)/.*?/(news[0-9]+)", d)
-        y = re.search("^(.*?)/.*?/(news[0-9]+)", u)
+        x = re.search(r"^(.*?)/.*?/(news[0-9]+)", d)
+        y = re.search(r"^(.*?)/.*?/(news[0-9]+)", u)
         return x and y and x.group(1) == y.group(1) and x.group(2) == y.group(2)
     return False
 
@@ -690,10 +690,10 @@ def do_urls_match(url, template, d: Item, replace_page, log=False):
         return 2
     elif d_url and matches_up_to_string(d_url.lower(), url.lower(), "?var=", False):
         return 2
-    elif d_url and "index.html" in d_url and re.search("indexp[0-9]\.html", url):
-        if replace_page and d_url == re.sub("indexp[0-9]+\.html", "index.html", url):
+    elif d_url and "index.html" in d_url and re.search(r"indexp[0-9]\.html", url):
+        if replace_page and d_url == re.sub(r"indexp[0-9]+\.html", "index.html", url):
             return 2
-        elif d_url == re.sub("indexp([0-9]+)\.html", "index.html?page=\\1", url):
+        elif d_url == re.sub(r"indexp([0-9]+)\.html", "index.html?page=\\1", url):
             return 2
     elif d_url and template == "SWArchive" and match_news_format(d_url, url):
         return 2
@@ -744,9 +744,9 @@ def match_url(o: Item, u: str, data: dict, urls: dict, other_data: dict, other_u
 
     mx = None
     if o.original and "Homing Beacon" in o.original:
-        mx = re.search("Homing Beacon #([0-9]+)", o.original)
+        mx = re.search(r"Homing Beacon #([0-9]+)", o.original)
     elif "/beacon" in o.url:
-        mx = re.search("/beacon([0-9]+)\.html", o.url)
+        mx = re.search(r"/beacon([0-9]+)\.html", o.url)
     if mx:
         for x in ["", "None"]:
             t = f"Web|HBCite|None|None|Homing Beacon (newsletter)|{mx.group(1)}|None|{x}"
@@ -770,7 +770,7 @@ def evaluate_match(x: int, url, o: Item, d: Item, ad, is_old, check_sw, merge, p
                    new_versions, valid):
     if x == 2:
         if o.mode == "Toys" and o.card and d.card and o.card != d.card:
-            if re.sub("^#[0-9]+: ", "", d.card) == o.card:
+            if re.sub(r"^#[0-9]+: ", "", d.card) == o.card:
                 return ItemId(o, d, False, False)
             possible.append(d)
         elif d.original and "oldversion=" in d.original and ad and ad in d.original:
@@ -808,15 +808,15 @@ def match_by_url(o: Item, url: str, data: Dict[str, Item], urls: Dict[str, List[
     old_versions = []
     new_versions = []
     possible = []
-    y = re.search("(archive(date|url)=.*?)(\|.*?)?}}", o.original)
+    y = re.search(r"(archive(date|url)=.*?)(\|.*?)?}}", o.original)
     is_old = "oldversion=" in o.original
     if is_old and not y and "|oldversion=1" not in o.original:
-        y = re.search("(oldversion=.*?)(\|.*?)?}}", o.original)
+        y = re.search(r"(oldversion=.*?)(\|.*?)?}}", o.original)
     ad = y.group(1) if y else None
 
     # TODO: remove
     if o.template == "SWArchive" and "_picview" in url:
-        url = re.sub("_picview.*?$", ".html", url)
+        url = re.sub(r"_picview.*?$", ".html", url)
 
     checked = []
     if urls.get(url):

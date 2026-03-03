@@ -110,8 +110,8 @@ def build_missing_and_new(page, types, archives, new_data, skip):
             if "na=video file" in a:
                 continue
             x = x.replace("{{=}}", "=").strip()
-            if re.search("^([0-9]|[a-z]+)=(...+?)$", x):
-                x = re.sub("^([0-9]|[a-z]+)=", "", x)
+            if re.search(r"^([0-9]|[a-z]+)=(...+?)$", x):
+                x = re.sub(r"^([0-9]|[a-z]+)=", "", x)
 
             if "oldversion" in a or "nobackup=1" in a:
                 continue
@@ -358,7 +358,7 @@ def clean_archive_usages(page: Page, text, archive_data: dict, redo=False):
     else:
         for c in page.categories():
             if c.title().endswith("same archivedate value") or c.title().endswith("with custom archivedate"):
-                templates_to_check.add(re.search("^(.*?) usages with.*?$", c.title(with_ns=False)).group(1))
+                templates_to_check.add(re.search(r"^(.*?) usages with.*?$", c.title(with_ns=False)).group(1))
     if not templates_to_check:
         return text, archive_data
 

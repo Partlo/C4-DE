@@ -127,7 +127,7 @@ def handle_title_format(actual, fmt):
 def sort_top_template(title, t, add_ref=False, fmt=None):
     if t and add_ref and "|ref" not in t:
         t = t.replace("{{Top|", "{{Top|ref|")
-    px = re.search("^(.*?\{\{Top\|)(.*?)(}}.*?)$", t)
+    px = re.search(r"^(.*?\{\{Top\|)(.*?)(}}.*?)$", t)
     replacement = handle_title_format(title, fmt)
     new_params = [(k, v) for k, v in (replacement or {}).items()]
     unknown = []
@@ -167,19 +167,19 @@ def build_redirects(page: Page, manual: str = None):
         pages.append(r)
         pagenames.append(r.title())
     if manual and isinstance(manual, str):
-        for _, x, _ in re.findall("\[\[(?!(Category:))(.*?)(\|.*?)?]]", manual):
+        for _, x, _ in re.findall(r"\[\[(?!(Category:))(.*?)(\|.*?)?]]", manual):
             if x not in pagenames:
                 pages.append(Page(page.site, x))
                 pagenames.append(x)
-        for _, x in re.findall("\{\{([Tt]emplate)?:?([^\n|{}[\]]+)", manual):
+        for _, x in re.findall(r"\{\{([Tt]emplate)?:?([^\n|{}[\]]+)", manual):
             if f"Template:{x}" not in pagenames:
                 pages.append(Page(page.site, f"Template:{x}"))
                 pagenames.append(x)
-        # for _, x, _ in re.findall("\|(title=|set=)(.*?)(\|.*?)?}}", manual):
+        # for _, x, _ in re.findall(r"\|(title=|set=)(.*?)(\|.*?)?}}", manual):
         #     if x not in pagenames:
         #         pages.append(Page(page.site, x))
         #         pagenames.append(x)
-        # for _, x, _ in re.findall("\{\{(?!(Quote))[A-z0-9]+\|([^=|\n]+?)(\|.*?)?}}", manual):
+        # for _, x, _ in re.findall(r"\{\{(?!(Quote))[A-z0-9]+\|([^=|\n]+?)(\|.*?)?}}", manual):
         #     if x not in pagenames:
         #         pages.append(Page(page.site, x))
         #         pagenames.append(x)
@@ -196,15 +196,15 @@ def build_redirects(page: Page, manual: str = None):
 
 def fix_disambigs(r, t, text):
     if "{{otheruses" in text.lower() or "{{youmay" in text.lower():
-        lowercase = re.search("\|title=[a-z]", text)
+        lowercase = re.search(r"\|title=[a-z]", text)
         tx = t.replace(' (disambiguation)', '')
         if lowercase:
             tx = tx[0].lower() + tx[1:]
-        text = re.sub("(\{\{[Oo]theruses(.*?)\|)title=" + prepare_title(r) + "((\|.*?)?}})",
+        text = re.sub(r"(\{\{[Oo]theruses(.*?)\|)title=" + prepare_title(r) + "((\|.*?)?}})",
                       f"\\1 {tx}\\3", text)
-        text = re.sub("(\{\{[Oo]theruses(.*?)\|) ", "\\1", text)
-        text = re.sub("(\{\{[Oo]theruses(.*?)\|)\[\[" + prepare_title(r) + "((\|.*?)?]].*?}})", f"\\1[[{t}\\3", text)
-        text = re.sub("(\{\{[Yy]oumay\|.*?)\[\[" + prepare_title(r) + "(\|.*?)?]](.*?}})", f"\\1[[{t}\\2]]\\3", text)
+        text = re.sub(r"(\{\{[Oo]theruses(.*?)\|) ", "\\1", text)
+        text = re.sub(r"(\{\{[Oo]theruses(.*?)\|)\[\[" + prepare_title(r) + "((\|.*?)?]].*?}})", f"\\1[[{t}\\3", text)
+        text = re.sub(r"(\{\{[Yy]oumay\|.*?)\[\[" + prepare_title(r) + "(\|.*?)?]](.*?}})", f"\\1[[{t}\\2]]\\3", text)
     elif f"[[{r}" in text or f"|{r}|" in text or f"|{r}}}}}" in text:
         log(f"Skipping disambiguation redirect {t}")
     return text
@@ -267,7 +267,7 @@ def handle_multiple_issues(text: Union[List[str], str]):
         new_lines = []
         current = current or "{{MultipleIssues}}"
         if "{{MultipleIssues" not in current:
-            current = re.sub("{{[Mm]ultiple.?[Ii]ssues", "{{MultipleIssues", current)
+            current = re.sub(r"{{[Mm]ultiple.?[Ii]ssues", "{{MultipleIssues", current)
         for x in params:
             current = current.replace("MultipleIssues", f"MultipleIssues|{x}")
         for ln in lines:
@@ -299,7 +299,7 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
                 print(f"Fixing {section_name} redirect {r} to {t}")
             x = prepare_title(r.replace("Template:", "")).replace(" ", "[ _]")
             tx = t.replace("Template:", "").replace(" ", "_")
-            text = re.sub("\{\{" + x + " *([\n|}])", f"{{{{{tx}\\1", text)
+            text = re.sub(r"\{\{" + x + " *([\n|}])", f"{{{{{tx}\\1", text)
 
         elif canon and "/Legends" in t and "/Legends" not in r:
             continue
@@ -322,33 +322,33 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
                     rep = f"[[{y[0].target}|{y[0].format_text}]]"
                 elif "(" in y[0].target:
                     rep = f"[[{y[0].target}|''{y[0].target.split(' (')[0]}'']]"
-                text = re.sub("'?'?\[\[" + x + "(\|.*?)?]]'?'?", rep, text)
+                text = re.sub(r"'?'?\[\[" + x + "(\|.*?)?]]'?'?", rep, text)
             elif y and not y[0].template:
-                text = re.sub("'?'?\[\[" + x + "(\|.*?)?]]'?'?", y[0].original, text)
+                text = re.sub(r"'?'?\[\[" + x + "(\|.*?)?]]'?'?", y[0].original, text)
             else:
                 if "Ltd" in r or "Limited" in r or " Inc" in r or " LLC" in r or " Co" in r:
-                    if re.sub(",? (Ltd|Limited|Inc|LLC)\.?", "", r) == t:
-                        text = re.sub("\[\[" + x + "(\|" + prepare_title(t) + ")?]]", f"[[{t}]]", text)
+                    if re.sub(r",? (Ltd|Limited|Inc|LLC)\.?", "", r) == t:
+                        text = re.sub(r"\[\[" + x + "(\|" + prepare_title(t) + ")?]]", f"[[{t}]]", text)
 
-                text = re.sub("(''')?('')?\[\[" + x + "\|('')?(" + prepare_title(t) + ")('')?]](s)?(''')?('')?", f"\\1\\2\\3[[\\4]]\\6\\2\\3", text)
+                text = re.sub(r"(''')?('')?\[\[" + x + "\|('')?(" + prepare_title(t) + ")('')?]](s)?(''')?('')?", f"\\1\\2\\3[[\\4]]\\6\\2\\3", text)
                 if r.startswith("File:"):
-                    text = re.sub("\[\[(" + x + ")(\|.*?)?]]", f"[[{t}\\2]]", text)
+                    text = re.sub(r"\[\[(" + x + ")(\|.*?)?]]", f"[[{t}\\2]]", text)
                 elif file or r.replace("Star Wars: Republic: ", "Star Wars: ") == t \
                         or r.startswith("File:") or (overwrite and "/Legends" not in t and "/Canon" not in t):
-                    text = re.sub("\[\[(" + x + ")(s)?]]", f"[[{t}]]\\2", text)
-                    text = re.sub("\[\[" + x + "(\|.*?)]](s)?", f"[[{t}]]\\2", text)
+                    text = re.sub(r"\[\[(" + x + ")(s)?]]", f"[[{t}]]\\2", text)
+                    text = re.sub(r"\[\[" + x + "(\|.*?)]](s)?", f"[[{t}]]\\2", text)
                 else:
-                    text = re.sub("(''')?('')?\[\[(" + x + ")]]([A-Za-z']*)", f"\\1[[{t}|\\2\\3\\4]]\\1", text)
-                    text = re.sub("\[\[" + x + "(\|.*?)]](s)?", f"[[{t}\\1\\2]]", text)
+                    text = re.sub(r"(''')?('')?\[\[(" + x + ")]]([A-Za-z']*)", f"\\1[[{t}|\\2\\3\\4]]\\1", text)
+                    text = re.sub(r"\[\[" + x + "(\|.*?)]](s)?", f"[[{t}\\1\\2]]", text)
             if "/" not in r:
                 try:
-                    text = re.sub("(\{\{(?!(WP|1stID))[A-Za-z0-9]+\|)" + x + "}}", "\\1    " + t + "}}", text).replace("    ", "")
+                    text = re.sub(r"(\{\{(?!(WP|1stID))[A-Za-z0-9]+\|)" + x + "}}", "\\1    " + t + "}}", text).replace("    ", "")
                 except Exception as e:
                     print(e, x, t)
             if r.split(" (")[0] != t.split(" (")[0]:
                 text = text.replace(f"set={r}|", f"set={t}|").replace(f"set={r}}}", f"set={t}}}")
             if t.startswith(f"{r} ("):
-                text = re.sub("book=" + x + "([|}])", f"book={r}\\1", text)
+                text = re.sub(r"book=" + x + "([|}])", f"book={r}\\1", text)
             else:
                 text = text.replace(f"book={r}", f"book={t}")
             text = text.replace(f"story={r}|", f"story={t}|")
@@ -357,18 +357,18 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
 
 
 def handle_repeated_references(text, status):
-    if "{{FamilyTree" not in text and re.search("(?<!>)((<ref name=\"[^\"\n>]+?\")(>((?!(<ref|\{\{Fact}})[^\n])*?</ref>| ?/>)(((?!<ref).)*?)\\2 ?/>))(?!<ref)", text):
+    if "{{FamilyTree" not in text and re.search(r"(?<!>)((<ref name=\"[^\"\n>]+?\")(>((?!(<ref|\{\{Fact}})[^\n])*?</ref>| ?/>)(((?!<ref).)*?)\\2 ?/>))(?!<ref)", text):
         nx = text.splitlines()
         for i in range(len(nx)):
             if nx[i].startswith("|") or "{{RepeatedRef" in nx[i]:
                 continue
-            nx[i] = re.sub("(?<!>)((<ref name=\"[^\"\n>]+?\")(>((?!<ref)[^\n])*?</ref>| ?/>)(((?!<ref).)*?)\\2 ?/>)(?!<ref)", "{{RepeatedRef}}\\1" if status else "\\5\\2\\3", nx[i])
+            nx[i] = re.sub(r"(?<!>)((<ref name=\"[^\"\n>]+?\")(>((?!<ref)[^\n])*?</ref>| ?/>)(((?!<ref).)*?)\\2 ?/>)(?!<ref)", "{{RepeatedRef}}\\1" if status else "\\5\\2\\3", nx[i])
         return "\n".join(nx)
     return text
 
 
 def remove_links_from_quotes(new_txt):
-    for x in re.findall("((\{\{[Qq]uote\|[^{}\[\]|\n]*)(\[\[([^{}\[\]\n]*?\|)?[^{}\[\]\n]*?]][^{}\n]*?)(\|audio=[^|{}\[\]]*?)?\|<ref.*?}})", new_txt):
+    for x in re.findall(r"((\{\{[Qq]uote\|[^{}\[\]|\n]*)(\[\[([^{}\[\]\n]*?\|)?[^{}\[\]\n]*?]][^{}\n]*?)(\|audio=[^|{}\[\]]*?)?\|<ref.*?}})", new_txt):
         new_quote, attr, link, bc = "", "", "", 0
         for c in x[2]:
             if (c == "|" and bc == 0) or attr:
@@ -393,52 +393,52 @@ def remove_links_from_quotes(new_txt):
 def do_final_replacements(new_txt, replace, is_status):
     new_txt = remove_links_from_quotes(new_txt)
     new_txt = new_txt.replace("TORTYPE", "type")
-    new_txt = re.sub("(==(Sources|Appearances)==)\n\n(===Non-canon (appearances|sources)===)", "\\1\n\\3", new_txt)
+    new_txt = re.sub(r"(==(Sources|Appearances)==)\n\n(===Non-canon (appearances|sources)===)", "\\1\n\\3", new_txt)
 
     while replace:
-        new_txt2 = re.sub("(\[\[(?!File:)[^\[\]|\r\n]+)&ndash;", "\\1–",
-                          re.sub("(\[\[(?!File:)[^\[\]|\n]+)&mdash;", "\\1—", new_txt))
-        new_txt2 = re.sub("(\[\[(?!File:)[^\[\]|\r\n]+–[^\[\]|\r\n]+\|[^\[\]|\r\n]+)&ndash;", "\\1–",
-                          re.sub("(\[\[(?!File:)[^\[\]|\n]+—[^\[\]|\r\n]+\|[^\[\]|\r1\n]+)&mdash;", "\\1—", new_txt2))
-        new_txt2 = re.sub("\[\[(.*?)\|\\1((?!(Bestoon)[^\n \[\]}{])*?)]]", "[[\\1]]\\2", new_txt2)
-        new_txt2 = re.sub("(\|set=(.*?) \(.*?\))\|(s?text|sformatt?e?d?)=\\2([|}])", "\\1\\4", new_txt2)
+        new_txt2 = re.sub(r"(\[\[(?!File:)[^\[\]|\r\n]+)&ndash;", "\\1–",
+                          re.sub(r"(\[\[(?!File:)[^\[\]|\n]+)&mdash;", "\\1—", new_txt))
+        new_txt2 = re.sub(r"(\[\[(?!File:)[^\[\]|\r\n]+–[^\[\]|\r\n]+\|[^\[\]|\r\n]+)&ndash;", "\\1–",
+                          re.sub(r"(\[\[(?!File:)[^\[\]|\n]+—[^\[\]|\r\n]+\|[^\[\]|\r1\n]+)&mdash;", "\\1—", new_txt2))
+        # new_txt2 = re.sub(r"\[\[(.*?)\|\\1((?!(Bestoon)[^\n \[\]}{])*?)]]", "[[\\1]]\\2", new_txt2)
+        new_txt2 = re.sub(r"(\|set=(.*?) \(.*?\))\|(s?text|sformatt?e?d?)=\\2([|}])", "\\1\\4", new_txt2)
         new_txt2 = handle_repeated_references(new_txt2, is_status)
 
         # italicization & apostrophes
-        new_txt2 = re.sub("([^']''[^' ][^']+?'')'s ", "\\1{{'s}} ", new_txt2)
-        new_txt2 = re.sub("([^']''((?!-class)[^' ])+?[^']+?s'')' ", "\\1{{'}} ", new_txt2)
+        new_txt2 = re.sub(r"([^']''[^' ][^']+?'')'s ", "\\1{{'s}} ", new_txt2)
+        new_txt2 = re.sub(r"([^']''((?!-class)[^' ])+?[^']+?s'')' ", "\\1{{'}} ", new_txt2)
         new_txt2 = new_txt2.replace("{{'}}s", "{{'s}}")
         new_txt2 = new_txt2.replace("{{'}}\n", "{{'}}")
         if "'''s " in new_txt2:
-            new_txt2 = re.sub("( ''[^'\n]+'')'s ", "\\1{{'s}} ", new_txt2)
+            new_txt2 = re.sub(r"( ''[^'\n]+'')'s ", "\\1{{'s}} ", new_txt2)
 
-        new_txt2 = re.sub("(\|url=[^\n|{}]+?)/\|", "\\1|", new_txt2)
+        new_txt2 = re.sub(r"(\|url=[^\n|{}]+?)/\|", "\\1|", new_txt2)
         new_txt2 = new_txt2.replace("\n\n*{{ISBN", "\n*{{ISBN")
         if "stext=" in new_txt2:
-            new_txt2 = re.sub("(\|set=[^|{}\n]*?)(\|stext=[^|{}\n]*?)}}", "\\1}}", new_txt2)
+            new_txt2 = re.sub(r"(\|set=[^|{}\n]*?)(\|stext=[^|{}\n]*?)}}", "\\1}}", new_txt2)
 
-        new_txt2 = re.sub("(\[\[((.*?) \((.*?)\)).*?]].*?)(\{\{Ab\|.*?)\[\[\\2\|''\\3'' \\4]]", "\\1\\5[[\\2|\\4]]", new_txt2)
-        new_txt2 = re.sub("(\{\{[^\n{}]+?)(\|nolive=1)([^\n{}]*?(\|nobackup=1)?[^\n{}]*?)}}", "\\1\\3\\2}}", new_txt2)
-        new_txt2 = re.sub("(\{\{[^\n{}]+?)(\|nobackup=1)([^\n{}]+?)}}", "\\1\\3\\2}}", new_txt2)
-        new_txt2 = re.sub("([\n[]File:[^ \n|\]\[]+) ", "\\1_", new_txt2)
+        new_txt2 = re.sub(r"(\[\[((.*?) \((.*?)\)).*?]].*?)(\{\{Ab\|.*?)\[\[\\2\|''\\3'' \\4]]", "\\1\\5[[\\2|\\4]]", new_txt2)
+        new_txt2 = re.sub(r"(\{\{[^\n{}]+?)(\|nolive=1)([^\n{}]*?(\|nobackup=1)?[^\n{}]*?)}}", "\\1\\3\\2}}", new_txt2)
+        new_txt2 = re.sub(r"(\{\{[^\n{}]+?)(\|nobackup=1)([^\n{}]+?)}}", "\\1\\3\\2}}", new_txt2)
+        new_txt2 = re.sub(r"([\n[]File:[^ \n|\]\[]+) ", "\\1_", new_txt2)
 
-        x = re.search("\[\[([A-Z])(.*?)\|(.\\2)(.*?)]]", new_txt2)
-        if x and x.group(3).lower().startswith(x.group(1).lower()) and x.group(3).lower() != "ochi of bestoon":
-            new_txt2 = new_txt2.replace(x.group(0), f"[[{x.group(3)}]]{x.group(4)}")
+        # x = re.search(r"\[\[([A-Z])(.*?)\|(.\\2)(.*?)]]", new_txt2)
+        # if x and x.group(3).lower().startswith(x.group(1).lower()) and x.group(3).lower() != "ochi of bestoon":
+        #     new_txt2 = new_txt2.replace(x.group(0), f"[[{x.group(3)}]]{x.group(4)}")
 
-        new_txt2 = re.sub("(\|[a-z]+=[^|{}\n]*)\\1+", "\\1", new_txt2)
+        new_txt2 = re.sub(r"(\|[a-z]+=[^|{}\n]*)\\1+", "\\1", new_txt2)
 
         if "''{{Film|" in new_txt2:
-            new_txt2 = re.sub("(?<!')''(\{\{Film\|.*?}})'*", "\\1", new_txt2)
+            new_txt2 = re.sub(r"(?<!')''(\{\{Film\|.*?}})'*", "\\1", new_txt2)
 
-        new_txt2 = re.sub("2012 edition}} \{\{C\|\[*2012]* edition}}", "2012 edition}}", new_txt2)
-        new_txt2 = re.sub("(\{\{SWMiniCite\|set=[^\n}]+?\|)cardname=", "\\1pack=", new_txt2)
+        new_txt2 = re.sub(r"2012 edition}} \{\{C\|\[*2012]* edition}}", "2012 edition}}", new_txt2)
+        new_txt2 = re.sub(r"(\{\{SWMiniCite\|set=[^\n}]+?\|)cardname=", "\\1pack=", new_txt2)
         new_txt2 = new_txt2.replace(" (SWGTCG)|scenario=", "|scenario=")
         new_txt2 = new_txt2.replace("[[Ochi]] of Bestoon", "[[Ochi|Ochi of Bestoon]]")
         new_txt2 = new_txt2.replace("[[Battle station/Legends|battlestation", "[[Battle station/Legends|battle station")
-        new_txt2 = re.sub("\*.*?\{\{FactFile\|1\|Gala.*? [Mm]ap.*?}}", "*<!-- 2001-12-27 -->{{FactFile|1|[[:File:Galaxymap3.jpg|Galaxy Map poster]]}}", new_txt2)
+        new_txt2 = re.sub(r"\*.*?\{\{FactFile\|1\|Gala.*? [Mm]ap.*?}}", "*<!-- 2001-12-27 -->{{FactFile|1|[[:File:Galaxymap3.jpg|Galaxy Map poster]]}}", new_txt2)
         if "{{more" in new_txt2.lower():
-            new_txt2 = re.sub("\{\{[Mm]ore[ _]?[Ss]ources}}\n+}}", "}}\n{{MoreSources}}", new_txt2)
+            new_txt2 = re.sub(r"\{\{[Mm]ore[ _]?[Ss]ources}}\n+}}", "}}\n{{MoreSources}}", new_txt2)
         replace = new_txt != new_txt2
         new_txt = new_txt2
     return new_txt
@@ -451,21 +451,21 @@ def determine_title_format(page_title, text) -> str:
     if page_title.startswith("en:"):
         page_title = page_title[3:]
 
-    pagename = re.match("{{[Tt]op\|[^\n]+\|title=''{{PAGENAME}}''", text)
+    pagename = re.match(r"{{[Tt]op\|[^\n]+\|title=''{{PAGENAME}}''", text)
     if pagename:
         return f"''[[{page_title}]]''"
 
     title1 = None
-    title_match = re.match("{{[Tt]op\|[^\n]+\|title=(?P<title>.*?)[|}]", text)
+    title_match = re.match(r"{{[Tt]op\|[^\n]+\|title=(?P<title>.*?)[|}]", text)
     if title_match:
         title1 = title_match.groupdict()['title']
         if title1 == f"''{page_title}''":
             return f"''[[{page_title}]]''"
 
-    match = re.match("^(?P<title>.+?) \((?P<paren>.*?)\)$", page_title)
+    match = re.match(r"^(?P<title>.+?) \((?P<paren>.*?)\)$", page_title)
     if match:
         title2 = None
-        title2_match = re.match("{{[Tt]op\|[^\n]+\|title2=(?P<title>.*?)[|}]", text)
+        title2_match = re.match(r"{{[Tt]op\|[^\n]+\|title2=(?P<title>.*?)[|}]", text)
         if title2_match:
             title2 = title2_match.groupdict()['title']
 
@@ -489,7 +489,7 @@ def determine_nominator(page: Page, nom_type: str, nom_page: Page) -> str:
 
 
 def extract_nominator(nom_page: Page, page_text: str = None):
-    match = re.search("Nominated by.*?(User:|U\|)(.*?)[]|}/]", page_text or nom_page.get())
+    match = re.search(r"Nominated by.*?(User:|U\|)(.*?)[]|}/]", page_text or nom_page.get())
     if match:
         return match.group(2).replace("_", " ").strip()
     else:
@@ -539,7 +539,7 @@ def compare_category_and_page(site, nom_type):
             break
         elif start_found:
             if line.count("[[") > 1:
-                for r in re.findall("\[\[(.*?)[|\]]", line):
+                for r in re.findall(r"\[\[(.*?)[|\]]", line):
                     if r.replace("\u200e", "") in page_articles:
                         dupes.append(r.replace("\u200e", ""))
                     else:
@@ -594,7 +594,7 @@ def archive_url(url, force_new=False, timeout=30, enabled=True, skip=False, star
         try:
             x = f"{start}/" if start else ""
             r = requests.get(f"https://web.archive.org/web/{x}{url}", timeout=timeout)
-            if re.search("/web/([0-9]+)/", r.url):
+            if re.search(r"/web/([0-9]+)/", r.url):
                 z = r.url.split("/web/", 1)[1].split("/", 1)[0]
                 if z != start and not (start and start[:4] == z[:4]):
                     log(f"URL is archived already: {z} -> {url}")
@@ -619,7 +619,7 @@ def archive_url(url, force_new=False, timeout=30, enabled=True, skip=False, star
         archive = wayback.save()
         log(f"Successful archive: {archive.archive_url}")
         return True, archive.archive_url.split("/web/", 1)[1].split("/", 1)[0]
-    except TooManyRequestsError as e:
+    except TooManyRequestsError as _:
         err_msg = "Too many save requests, server is overwhelmed"
     except WaybackError as e:
         print(e)
@@ -632,7 +632,7 @@ def archive_url(url, force_new=False, timeout=30, enabled=True, skip=False, star
 
     try:
         r = requests.get(f"https://web.archive.org/web/{url}")
-        if re.search("/web/([0-9]+)/", r.url):
+        if re.search(r"/web/([0-9]+)/", r.url):
             log(f"URL is archived already: {url}")
             return True, r.url.split("/web/", 1)[1].split("/", 1)[0]
     except (TimeoutError, ConnectionError, requests.exceptions.ConnectionError, urllib3.exceptions.MaxRetryError):
