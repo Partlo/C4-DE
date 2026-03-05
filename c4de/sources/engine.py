@@ -15,7 +15,7 @@ SUBPAGES = [
     # "Canon/General", "Legends/General/1977-2000", "Legends/General/2000s", "Legends/General/2010s",
     "Canon/General", "Legends/General",
     "Canon/Toys", "Legends/Toys", "Canon/RefMagazine", "Legends/RefMagazine", "Canon/CardSets", "Legends/CardSets",
-    "Canon/Miniatures", "Legends/Miniatures", "Reprint", "Soundtracks", "CardTrader"
+    "Canon/Miniatures", "Legends/Miniatures", "Reprint", "Soundtracks", "CardTrader", "LEGO"
 ]
 
 LIST_AT_START = ["Star Wars: Galactic Defense", "Star Wars: Force Arena", "Star Wars: Starfighter Missions", "Unlock!: Star Wars Escape Game"]
@@ -171,7 +171,7 @@ def load_auto_categories(site):
 def load_appearances(site, log, canon_only=False, legends_only=False):
     data = []
     pages = ["Legends", "Canon", "Audiobook", "Unlicensed", "Audiobook/German"]
-    other = ["Extra", "Series", "Collections", "Reprint", "Crossover"]
+    other = ["Extra", "Series", "Collections", "Reprint", "Crossover", "LEGO"]
     if canon_only:
         pages = ["Canon", "Audiobook"]
     elif legends_only:
@@ -479,11 +479,14 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
                 elif i["page"] == "Web/Publisher":
                     x.mode = "Publisher"
                     x.publisher_listing = True
+                    x.both_continuities = True
                 elif i.get("official"):
                     x.publisher_listing = True
                 elif i["page"].startswith("Web/1") or i["page"].startswith("Web/2"):
                     if x.mode == "Publisher" or x.mode == "Commercial":
                         x.mode = "Web"
+                elif "Crossover" in i['page'] or "LEGO" in i['page']:
+                    x.non_canon = True
                 x.index = i['index']
                 x.date_ref = i.get('ref')
                 x.extra_date = i.get('extraDate')
@@ -648,7 +651,7 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                     if x.alternate_url not in urls:
                         urls[x.alternate_url] = []
                     urls[x.alternate_url].append(x)
-                if "Crossover" in i['page']:
+                if "Crossover" in i['page'] or "LEGO" in i['page']:
                     x.non_canon = True
                     x.both_continuities = True
 
