@@ -394,6 +394,8 @@ def check_category(c: Category, cats_checked, pages_checked, tracked, infoboxes,
 def build_item_type(item_type, i: FutureProduct):
     z = item_type or ''
     is_legends = (i.canon_type == 'leg' or i.canon_type == 'ncl') if i.canon_type else False
+    if "lego" in i.page.title().lower():
+        return "LEGO Appearances" if "Appearances" in z else "LEGO Sources"
     if z.startswith("Appearances") or z.startswith("Sources") or z.startswith("CardSets"):
         z = f"{z}|{is_legends}"
     return z
@@ -413,6 +415,10 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
     audio = parse_page(audio_page, types)
     col_page = Page(site, "Wookieepedia:Appearances/Collections")
     cols = parse_page(col_page, types)
+    lego_app_page = Page(site, "Wookieepedia:Appearances/LEGO")
+    lego_apps = parse_page(lego_app_page, types)
+    lego_src_page = Page(site, "Wookieepedia:Sources/LEGO")
+    lego_src = parse_page(lego_src_page, types)
     l_src_page = Page(site, "Wookieepedia:Sources/Legends/General")
     l_srcs = parse_page(l_src_page, types)
     c_src_page = Page(site, "Wookieepedia:Sources/Canon/General")
@@ -427,8 +433,8 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
     master_data = {
         "Audiobooks": audio, "Collections": cols, "Soundtracks": tracks, "Series": series, "Extra": extra,
         # "Legends-2010s Sources": l_srcs1, "Legends-2000s Sources": l_srcs2, "Legends-1900s Sources": l_srcs3,
-        "Canon Sources": c_srcs, "Legends Appearances": l_apps, "Canon Appearances": c_apps,
-        "Legends CardSets": l_sets, "Canon CardSets": c_sets, "Legends Sources": l_srcs}
+        "Canon Sources": c_srcs, "Legends Sources": l_srcs, "Legends Appearances": l_apps, "Canon Appearances": c_apps,
+        "LEGO Sources": lego_src, "LEGO Appearances": lego_apps, "Legends CardSets": l_sets, "Canon CardSets": c_sets}
 
     new_items = {"Audiobooks": [], "Collections": collections, "Soundtracks": []}
     changed_dates = {}
@@ -486,6 +492,8 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
     build_new_page(audio_page, audio, "Audiobooks", new_items, changed_dates, True, save)
     build_new_page(tracks_page, tracks, "Soundtracks", new_items, changed_dates, True, save)
     build_new_page(col_page, cols, "Collections", new_items, changed_dates, True, save)
+    build_new_page(lego_app_page, lego_apps, "LEGO Appearances", new_items, changed_dates, True, save)
+    build_new_page(lego_src_page, lego_src, "LEGO Sources", new_items, changed_dates, True, save)
 
 
 DATES = {"Wookieepedia:Appearances/Legends": "1977",
