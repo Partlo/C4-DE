@@ -809,7 +809,7 @@ def match_audiobook(x: Item, target, data: Dict[str, int], log, page):
         return data[target.replace(" audiobook)", ")")]
     elif target.replace(" demo", "") in data:
         return data[target.replace(" demo", "")]
-    if log:
+    if log and target not in LIST_AT_END and target not in LIST_AT_START:
         print(f"{page} No match found: {target}")
     return None
 

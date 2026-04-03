@@ -41,7 +41,7 @@ from c4de.sources.archive import create_archive_categories
 from c4de.sources.build import analyze_target_page
 from c4de.sources.domain import FullListData
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, reload_auto_categories, \
-    load_auto_categories, load_template_types, reload_templates
+    load_auto_categories, load_template_types, reload_templates, LIST_AT_END, LIST_AT_START
 from c4de.sources.index import create_index, prepare_ordered_list
 from c4de.sources.infoboxer import reload_infoboxes, load_infoboxes
 from c4de.sources.parsing import fix_template_redirects
@@ -333,12 +333,12 @@ class C4DE_Bot(commands.Bot):
     def is_new_nomination_message(message: Message):
         m = re.search(r"New .*? article nomination.*? by \**(.*?)\**:", message.content)
         if m:
-            u = re.search(r"/wiki/Wookieepedia:.*?_article_nominations/(.*?)(_\(.*?nomination\))?>", message.content)
+            u = re.search(r"/wiki/(Wookieepedia:.*?_article_nominations/(.*?)(_\(.*?nomination\))?)>", message.content)
             if u:
-                return {"user": m.group(1), "article": u.group(1)}
+                return {"user": m.group(1), "article": u.group(2), "nom_page": u.group(1)}
         m = re.search(r"New review.*? requested for .*?(Featured|Good|Comprehensive) article: \[(.*?)([_ ]\(.*?review\))?\].*?$", message.content)
         if m:
-            return {"user": None, "article": m.group(2)}
+            return {"user": None, "article": m.group(2), "nom_page": None}
         return None
 
     async def on_message(self, message: Message):
@@ -525,6 +525,7 @@ class C4DE_Bot(commands.Bot):
         ]
 
         text2 = [
+            f"- **@C4-DE recheck nominations** - reruns source analysis on any recent nominations that were missed in their initial reporting."
             f"- **@C4-DE record Template:<name> <url>** - records a given URL in the Masterlist. The Template: prefix is not required for recognized sites such as SW.com, and a custom date can be given with (YYYY-MM-DD) following the URL."
             f"- **@C4-DE archive Template:<name> <url>** - attempts to archive the given URL in the Wayback Machine, and records the archivedate in the corresponding ArchiveAccess if successful."
             f"- **@C4-DE check target URL: <url>** - mass-record command for episode guide pages on StarWars.com, which checks all subpages and linked Databank entries. Please ask before using.",
@@ -898,9 +899,10 @@ class C4DE_Bot(commands.Bot):
             await self.report_error("Sources rebuild", type(e), e)
 
     def build_missing_page(self):
-        skip = [c.title() for c in Category(self.site, "Category:Real-world attractions").articles(recurse=True)]
+        skip = LIST_AT_END + LIST_AT_START
+        skip += [c.title() for c in Category(self.site, "Category:Real-world attractions").articles(recurse=True)]
         skip += [c.title() for c in Category(self.site, "Category:Real-world arcade games").articles()]
-        skip += [c.title() for c in Category(self.site, "Category:Mobile games").articles(recurse=True)]
+        # skip += [c.title() for c in Category(self.site, "Category:Mobile games").articles(recurse=True)]
         skip += [c.title() for c in Category(self.site, "Category:Web-based games").articles()]
         skip += [c.title() for c in Category(self.site, "Category:Commercials").articles()]
         skip += [c.title() for c in Category(self.site, "Category:RPGA adventures").articles()]
@@ -1025,11 +1027,14 @@ class C4DE_Bot(commands.Bot):
             results = analyze_target_page(target, self.infoboxes, self.templates, self.disambigs, self.appearances,
                                           self.sources, self.auto_cats, self.remap, old_text=old_text,
                                           save=True, include_date=False, use_index=True, redirects=redirects)
-            mc = "\n".join([f"- {c.title()}" for c in target.categories() if c.title() in self.maintenance_cats])
+            mcx = [c.title() for c in target.categories() if c.title() in self.maintenance_cats]
             await message.remove_reaction(TIMER, self.user)
             await message.add_reaction(self.emoji_by_name("bb8thumbsup"))
-            if mc:
+            if mcx:
+                mc = "\n".join([f"- {c.title()}" for c in mcx])
                 await message.reply(f"Maintenance categories detected on nomination:\n{mc}")
+                if command['nom_page']:
+                    self.add_objections(command, mcx)
 
             revs = [r for r in target.revisions(content=False, total=3) if r.user == "C4-DE Bot"]
             if not revs or revs[0].revid <= rev_id:
@@ -1054,6 +1059,17 @@ class C4DE_Bot(commands.Bot):
             await message.remove_reaction(TIMER, self.user)
             await message.add_reaction(EXCLAMATION)
             await message.channel.send("Encountered error while analyzing page")
+
+    def add_objections(self, command: dict, mcx):
+        try:
+            nom_page = Page(self.site, command['nom_page'])
+            if nom_page.exists():
+                txt = nom_page.get()
+                mc_txt = "\n".join([f"*Maintenance category detected: [[:{c}]]" for c in mcx])
+                txt = txt.replace("====Objections====", "====Objections====\n======C4-DE Bot=====\n" + mc_txt)
+                nom_page.put(txt, "Reporting objections")
+        except Exception as e:
+            error_log(type(e), e)
 
     async def handle_analyze_source_command(self, message: Message, command: dict):
         try:
@@ -1245,11 +1261,16 @@ class C4DE_Bot(commands.Bot):
         page = Page(self.site, "Wookieepedia:WookieeProject Images/Unused images")
         text = page.get()
         unused = []
+        social = {}
         audio1 = []
         for x in self.site.unusedfiles(total=250):
             if x.title() not in exceptions and ":Video" not in x.title():
                 if x.title().lower().endswith(".ogg") or x.title().lower().endswith(".flac"):
                     audio1.append(x.title())
+                elif "screenshots of social media posts" in x.get():
+                    t = re.search("\{\{(Twitter|Instagram|Bluesky|Facebook|LinkedIn|TikTok|Threads)\|", x.get())
+                    d = re.search("\|date=(.*?)(\|.*?)?}}", x.get())
+                    social[x.title()] = {"template": t.group(1) if t else None, "date": d.group(1) if d else None}
                 else:
                     unused.append(x.title())
 
@@ -1289,6 +1310,52 @@ class C4DE_Bot(commands.Bot):
         text = "\n".join(new_lines)
         if text != page.get():
             page.put(text, botflag=False, summary="Recording newly unused files")
+
+    def build_social_page(self, new_items: dict):
+        page = Page(self.site, "Wookieepedia:Social media screenshots")
+        text = page.get()
+        # by_headers, headers, current = {}, [], "Intro"
+        # for ln in text.splitlines():
+        #     if ln.startswith("===2010"):
+        #         current = "Pre-2010"
+        #         headers.append(current)
+        #     elif ln.startswith("==="):
+        #         d = re.search("===\[*([0-9]+)]*", ln)
+        #         if d:
+        #             current = d.group(1)
+        #             headers.append(current)
+        #     elif ln.startswith("==Profile"):
+        #         current = "Profile"
+        #         headers.append(current)
+        #     elif ln.startswith("==Uncategorized"):
+        #         current = "Uncategorized"
+        #         headers.append(current)
+        #
+        #     if current not in headers:
+        #         headers[current] = []
+        #     by_headers[current].append(ln)
+        #
+        # has_date, no_date = [], []
+        # for k, v in new_items.items():
+        #     if v['date']:
+        #         has_date.append("|-")
+        #         has_date.append(f"| {v['date']} || [[{k}|100px]] || <!-- Author --> || {v.get('template', 'Unknown')} || ")
+        #     else:
+        #         no_date.append("|-")
+        #         no_date.append(f"| TBD || [[{k}|100px]] || <!-- Author --> || {v.get('template', 'Unknown')} || ")
+        # if has_date:
+        #     text = re.sub("\|}\n+==Profile", )
+        text, end = text.strip().rsplit("|}", 1)
+        rows = []
+        for k, v in new_items.items():
+            if k in text or k.replace(" ", "_") in text:
+                continue
+            rows.append("|-")
+            rows.append(f"| {v.get('date') or 'TBD'} || [[{k.replace(' ', '_')}|100px]] || <!-- Author --> || {v.get('template') or 'Unknown'} || ")
+        if not rows:
+            return
+
+        text += "\n".join(rows) + "|}" + end
 
     def fix_double_redirects(self):
         for x in self.site.double_redirects(total=250):

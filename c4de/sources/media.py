@@ -57,7 +57,7 @@ MEDIA_STRUCTURE = {
 SUBSECTIONS = {
     "Contents": ["Articles", "Departments", "Features"],
     "Development": ["Conception", "Production"],
-    "Media": ["Installments", "Issues", "Editions", "Shorts", "Episodes", "Seasons", "Cover gallery", "Poster gallery", "Content gallery", "Collections"],
+    "Media": ["Installments", "Issues", "Editions", "Shorts", "Episodes", "Seasons", "Poster gallery", "Cover gallery", "Content gallery", "Collections"],
     "Appearances": ["In-universe appearances", "Out-of-universe appearances"]
 }
 

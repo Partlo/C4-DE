@@ -195,6 +195,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     before = re.sub(r">'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \\1'*\]\]'*", ">{{Rebels|\\1}}", before)
     before = re.sub(r"'*\[\[Star Wars Rebels: (Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\]\]'*", "\"[[\\1]]\"", before)
     before = re.sub(r"'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \\1'*\]\]'*", "\"[[\\1]]\"", before)
+    before = re.sub(r">\[\[Star Wars Galaxy Map \(poster\)\|[^\n\]\[]+\]\]<", ">{{GalaxyMapPoster}}<", before)
 
     while re.search(r"\[\[Category:[^\n|\]_]+_", before):
         before = re.sub(r"(\[\[Category:[^\n|\]_]+)_", "\\1 ", before)
