@@ -203,8 +203,8 @@ def sort_categories(pieces, namespace_id, bad_categories):
         final.append("")
         final += related_cats
     x = "\n".join(final).replace("|\n[[Category:", "|[[Category:")
-    x = re.sub(r"(\[\[Category:.*?)(\|.*?]])\n\\1]]", "\\1\\2", x)
-    x = re.sub(r"(\[\[Category:.*?)]]\n\\1(\|.*?]])", "\\1\\2", x)
+    x = re.sub(r"(\[\[Category:.*?)(\|.*?]])\n\1]]", "\\1\\2", x)
+    x = re.sub(r"(\[\[Category:.*?)]]\n\1(\|.*?]])", "\\1\\2", x)
     return x
 
 
@@ -413,7 +413,7 @@ def build_final_text(pieces, otx, page: Page, results: PageComponents, disambigs
 
 
 def strip_page_number(t):
-    return re.sub(r"\{\{PageNumber}} ('*\[+.*?]+'*),? \(?[pagechtr.]+ ?[0-9- ]+[.,)]?(.*?</ref>.*?(\n.*?)*?\r?\n\*.*?\\1)", "\\1\\2", t)
+    return re.sub(r"\{\{PageNumber}} ('*\[+.*?]+'*),? \(?[pagechtr.]+ ?[0-9- ]+[.,)]?(.*?</ref>.*?(\n.*?)*?\r?\n\*.*?\1)", "\\1\\2", t)
 
 
 def final_steps(page: Page, results: PageComponents, components: NewComponents, pieces: list, disambigs: list,

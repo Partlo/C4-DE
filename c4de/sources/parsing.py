@@ -243,7 +243,14 @@ def parse_data(results: PageComponents, lines: list, master_header, redirects, d
             after = pieces2[1] + pieces2[2]
     if master_header == "Sources" and extra and not results.real:
         for i in extra:
-            section_text += f"\n*''[[{i}]]''"
+            if i == "Star Wars Galaxy Map (poster)":
+                if "{{GalaxyMapPoster}}" not in section_text:
+                    section_text += "\n*{{GalaxyMapPoster}} {{MapPoint}}"
+            if i == "Star Wars Galaxy Map":
+                if "{{StarWarsGalaxyMap}}" not in section_text:
+                    section_text += "\n*{{StarWarsGalaxyMap}} {{MapPoint}}"
+            elif f"[[{i}]]" not in section_text:
+                section_text += f"\n*''[[{i}]]'' {{{{MapPoint}}}}"
 
     section_text = fix_redirects(redirects, section_text, f"Parsing-{master_header}", disambigs, remap)
     results.redirects_fixed.add(master_header)
@@ -712,7 +719,7 @@ def build_card_text(o: ItemId, c: ItemId, replace_parent=True):
     if c.current.subset and "subset=" not in ot:
         ot = re.sub(r"({{[^|}]*?\|(set=)?[^|}]*?\|(s?text=.*?\|)?)", f"\\1subset={o.current.subset}|", ot)
     while ot.count("|subset=") > 1:
-        ot = re.sub(r"(\|subset=.*?)\\1", "\\1", ot)
+        ot = re.sub(r"(\|subset=.*?)\1", "\\1", ot)
     if o.master.template and o.master.master_page:
         y = re.sub(r"\|p=.*?(\|.*?)?}}", "\\1", o.master.original.replace("}}", ""))
         z = re.search(r"\{\{([A-z0-9]+)(\|.*?)\|(num=|url=|subset=|scenario=|pack=|unit=|mission=|cardname=|(swg)?(alt)?link=)", y)
@@ -722,17 +729,17 @@ def build_card_text(o: ItemId, c: ItemId, replace_parent=True):
             ot = re.sub(r"\|link=.*?(\|.*?)?}}", "\\1}}", ot)
             if "link=" in ot:
                 ot = re.sub(r"\|link=.*?(\|.*?)?}}", "\\1}}", ot)
-            ot = re.sub(r"(\|(cardname|mission)=.*?)(\|.*?)?\|\\2=.*?(\|.*?)?}}", "\\1\\3\\4}}", ot)
+            ot = re.sub(r"(\|(cardname|mission)=.*?)(\|.*?)?\|\2=.*?(\|.*?)?}}", "\\1\\3\\4}}", ot)
     if o.master.template == "SWIA" and "text" in ot:
-        ot = re.sub(r"\|set=(.*?)\|text=''\\1''", "|set=\\1", ot)
-    ot = re.sub(r"(\{\{.*?\|set=(.*?))\|s?text=\\2\|", "\\1|", ot)
-    ot = re.sub(r"(\|set='*?(.*?)\|stext=.*?)\|'*?\\2'*?\|", "\\1", ot)
-    ot = re.sub(r"\{\{SWU\|(.*?)( \(.*?\))?\|'*\\1'*\|", "{{SWU|set=\\1|", ot)
+        ot = re.sub(r"\|set=(.*?)\|text=''\1''", "|set=\\1", ot)
+    ot = re.sub(r"(\{\{.*?\|set=(.*?))\|s?text=\2\|", "\\1|", ot)
+    ot = re.sub(r"(\|set='*?(.*?)\|stext=.*?)\|'*?\2'*?\|", "\\1", ot)
+    ot = re.sub(r"\{\{SWU\|(.*?)( \(.*?\))?\|'*\1'*\|", "{{SWU|set=\\1|", ot)
     ot = re.sub(r"\{\{SWU\|(?!(cardname=|set=))", "{{SWU|set=", ot)
-    ot = re.sub(r"\|stext=(.*?)\|\\1\|", "|stext=\\1|", ot)
-    ot = re.sub(r"(\|(ship|pack|cardname)=.*?)\\1(\|.*?)?}}", "\\1\\3}}", ot)
+    ot = re.sub(r"\|stext=(.*?)\|\1\|", "|stext=\\1|", ot)
+    ot = re.sub(r"(\|(ship|pack|cardname)=.*?)(\|.*?)?\1(\|.*?)?}}", "\\1\\3\\4}}", ot)
     ot = ot.replace("–", "&ndash;").replace("—", "&mdash;").replace("  ", " ")
-    ot = re.sub(r"(\|reprint=1)\\1+", "\\1", ot)
+    ot = re.sub(r"(\|reprint=1)\1+", "\\1", ot)
     if replace_parent:
         ot = ot.replace("|parent=1", "")
     return ot

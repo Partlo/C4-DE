@@ -330,6 +330,9 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
                     if re.sub(r",? (Ltd|Limited|Inc|LLC)\.?", "", r) == t:
                         text = re.sub(r"\[\[" + x + "(\|" + prepare_title(t) + ")?]]", f"[[{t}]]", text)
 
+                if r == f"{t}s":
+                    text = text.replace(f"[[{r}]]", f"[[{t}]]s")
+
                 text = re.sub(r"(''')?('')?\[\[" + x + "\|('')?(" + prepare_title(t) + ")('')?]](s)?(''')?('')?", f"\\1\\2\\3[[\\4]]\\6\\2\\3", text)
                 if r.startswith("File:"):
                     text = re.sub(r"\[\[(" + x + ")(\|.*?)?]]", f"[[{t}\\2]]", text)
@@ -400,8 +403,8 @@ def do_final_replacements(new_txt, replace, is_status):
                           re.sub(r"(\[\[(?!File:)[^\[\]|\n]+)&mdash;", "\\1—", new_txt))
         new_txt2 = re.sub(r"(\[\[(?!File:)[^\[\]|\r\n]+–[^\[\]|\r\n]+\|[^\[\]|\r\n]+)&ndash;", "\\1–",
                           re.sub(r"(\[\[(?!File:)[^\[\]|\n]+—[^\[\]|\r\n]+\|[^\[\]|\r1\n]+)&mdash;", "\\1—", new_txt2))
-        # new_txt2 = re.sub(r"\[\[(.*?)\|\\1((?!(Bestoon)[^\n \[\]}{])*?)]]", "[[\\1]]\\2", new_txt2)
-        new_txt2 = re.sub(r"(\|set=(.*?) \(.*?\))\|(s?text|sformatt?e?d?)=\\2([|}])", "\\1\\4", new_txt2)
+        # new_txt2 = re.sub(r"\[\[(.*?)\|\1((?!(Bestoon)[^\n \[\]}{])*?)]]", "[[\\1]]\\2", new_txt2)
+        new_txt2 = re.sub(r"(\|set=(.*?) \(.*?\))\|(s?text|sformatt?e?d?)=\2([|}])", "\\1\\4", new_txt2)
         new_txt2 = handle_repeated_references(new_txt2, is_status)
 
         # italicization & apostrophes
@@ -417,16 +420,16 @@ def do_final_replacements(new_txt, replace, is_status):
         if "stext=" in new_txt2:
             new_txt2 = re.sub(r"(\|set=[^|{}\n]*?)(\|stext=[^|{}\n]*?)}}", "\\1}}", new_txt2)
 
-        new_txt2 = re.sub(r"(\[\[((.*?) \((.*?)\)).*?]].*?)(\{\{Ab\|.*?)\[\[\\2\|''\\3'' \\4]]", "\\1\\5[[\\2|\\4]]", new_txt2)
+        new_txt2 = re.sub(r"(\[\[((.*?) \((.*?)\)).*?]].*?)(\{\{Ab\|.*?)\[\[\2\|''\3'' \4]]", "\\1\\5[[\\2|\\4]]", new_txt2)
         new_txt2 = re.sub(r"(\{\{[^\n{}]+?)(\|nolive=1)([^\n{}]*?(\|nobackup=1)?[^\n{}]*?)}}", "\\1\\3\\2}}", new_txt2)
         new_txt2 = re.sub(r"(\{\{[^\n{}]+?)(\|nobackup=1)([^\n{}]+?)}}", "\\1\\3\\2}}", new_txt2)
         new_txt2 = re.sub(r"([\n[]File:[^ \n|\]\[]+) ", "\\1_", new_txt2)
 
-        # x = re.search(r"\[\[([A-Z])(.*?)\|(.\\2)(.*?)]]", new_txt2)
+        # x = re.search(r"\[\[([A-Z])(.*?)\|(.\2)(.*?)]]", new_txt2)
         # if x and x.group(3).lower().startswith(x.group(1).lower()) and x.group(3).lower() != "ochi of bestoon":
         #     new_txt2 = new_txt2.replace(x.group(0), f"[[{x.group(3)}]]{x.group(4)}")
 
-        new_txt2 = re.sub(r"(\|[a-z]+=[^|{}\n]*)\\1+", "\\1", new_txt2)
+        new_txt2 = re.sub(r"(\|[a-z]+=[^|{}\n]*)\1+", "\\1", new_txt2)
 
         if "''{{Film|" in new_txt2:
             new_txt2 = re.sub(r"(?<!')''(\{\{Film\|.*?}})'*", "\\1", new_txt2)

@@ -170,8 +170,8 @@ def load_auto_categories(site):
 
 def load_appearances(site, log, canon_only=False, legends_only=False):
     data = []
-    pages = ["Legends", "Canon", "Audiobook", "Unlicensed", "Audiobook/German"]
-    other = ["Extra", "Series", "Collections", "Reprint", "Crossover", "LEGO"]
+    pages = ["Legends", "Canon", "Audiobook", "Unlicensed", "Audiobook/German", "Crossover", "LEGO"]
+    other = ["Extra", "Series", "Collections", "Reprint"]
     if canon_only:
         pages = ["Canon", "Audiobook"]
     elif legends_only:

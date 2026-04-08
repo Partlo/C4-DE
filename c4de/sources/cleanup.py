@@ -162,11 +162,11 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     before = re.sub(r"(\[\[[^\n\[{|]+)\|(an?) ([^\n|\[{]+?)]]", "\\2 \\1|\\3]]", before)
 
     # weird multi-link listings, legacy formatting from the 2000s
-    before = re.sub(r"\*('*?)\[\[([^\n\]|{]*?)]]('*?) '*?\[\[(\\2\([^\n\]{]*?)\|(.*?)]]'*", "*[[\\4|\\1\\2\\3 \\5]]", before)
-    before = re.sub(r"\*'*?\[\[([^\n\]{]*?)(\|[^\n\]{]*?)]]'*? '*?\[\[(\\1 \([^\n\]{]*?)\|(.*?)]]'*", "*[[\\3|\\2 \\4]]", before)
+    before = re.sub(r"\*('*?)\[\[([^\n\]|{]*?)]]('*?) '*?\[\[(\2\([^\n\]{]*?)\|(.*?)]]'*", "*[[\\4|\\1\\2\\3 \\5]]", before)
+    before = re.sub(r"\*'*?\[\[([^\n\]{]*?)(\|[^\n\]{]*?)]]'*? '*?\[\[(\1 \([^\n\]{]*?)\|(.*?)]]'*", "*[[\\3|\\2 \\4]]", before)
     before = re.sub(r"(\n\*[^\n]*?[\[{]+[^\n]*?[]}]+[^\n]*?)(\*[^\n]*?[\[{]+[^\n]*?[]}]+[^\n]*?\n)", "\\1\n\\2", before)
 
-    before = re.sub(r"(\|set=(.*?))\|sformatted=''\\2''", "\\1", before)
+    before = re.sub(r"(\|set=(.*?))\|sformatted=''\2''", "\\1", before)
 
     before = re.sub(r"\|story=\[\[(.*?)(\|.*?)?]]", "|story=\\1", before)
     before = re.sub(r"(\|set=.*?)(\|subset=.*?)(\|stext=.*?)(\|.*?)?}}", "\\1\\3\\2\\4}}", before)
@@ -174,28 +174,29 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
 
     before = re.sub(r"\{\{[Ii]ncomplete[ _]?[Ll]ist.*?}}\n?\{\{(App|Credits)", "{{Incomplete\\1}}\n{{\\1", before)
 
-    before = re.sub(r"( \{\{(C\|Hologram|1st|[MmPpCcVv]o).*?}})\\1+", "\\1", before)
+    before = re.sub(r"( \{\{(C\|Hologram|1st|[MmPpCcVv]o).*?}})\1+", "\\1", before)
 
     # Visual Editor fix, can't remove
-    before = re.sub(r"\[\[(.*?) (.*?)\|('*\\1'*)]] \[\[\\1 \\2|\\2]]", "[[\\1 \\2|\\3 \\2]]", before)
+    before = re.sub(r"\[\[(.*?) (.*?)\|('*\1'*)]] \[\[\1 \2\|\2]]", "[[\\1 \\2|\\3 \\2]]", before)
 
     # temp fixes
     before = re.sub(r"\|name=\[\[Friends of the Force(\|Friends of the Force|]]): A Star Wars Podcast]*\|", "|name=[[Friends of the Force]]|", before)
-    before = re.sub(r"\{\{InsiderCite\|link=(.*?)(.*?)\|''\\1''\\2\|(.*?)}}", "{{StoryCite|book=\\1|story=\\3}}", before)
-    before = re.sub(r"(\{\{([A-z _0-9]+)\|.*?}}) (\{\{1st[a-z]*)\|\{\{\\2.*?}}( \{.*?)?\n", "\\1 \\3}}\\4\n", before)
+    before = re.sub(r"\{\{InsiderCite\|link=(.*?)(.*?)\|''\1''\2\|(.*?)}}", "{{StoryCite|book=\\1|story=\\3}}", before)
+    before = re.sub(r"(\{\{([A-z _0-9]+)\|.*?}}) (\{\{1st[a-z]*)\|\{\{\2.*?}}( \{.*?)?\n", "\\1 \\3}}\\4\n", before)
     before = re.sub(r"\[\[K-Zone\|'*K-Zone'* (Volume [0-9]+, Number [0-9]+)]]", "[[K-Zone \\1|''K-Zone'' \\1]]", before)
     before = re.sub(r"'*\[(https?://[w.]*?archive.org/.*?) (.*?)]'* (on|at)( the)? ('*\[https?://[w.]*archive\.org/? )?Internet Archive]?'*",
                     "{{WebCite|url=\\1|text=\\2}}", before)
     before = re.sub(r"(\{\{GalaxyMapAppendix}})( |&.dash;)*[Bb]ased on (corresponding )?(info(rmation)?|data) for (the )?(\[\[((?! and ).)*?]]).?</ref>", "\\1 &mdash; Based on corresponding data for the \\7</ref>", before)
     before = re.sub(r"''\[\[(The Acolyte|The Mandalorian|The Book of Boba Fett)]]''", "''[[Star Wars: \\1]]''", before)
-    before = re.sub(r"'?'?\[\[(Andor|Ahsoka|Obi-Wan Kenobi) \(television series\)\|'?'?\\1'?'?]]'?'?", "''[[Star Wars: \\1]]''", before)
+    before = re.sub(r"'?'?\[\[(Andor|Ahsoka|Obi-Wan Kenobi) \(television series\)\|'?'?\1'?'?]]'?'?", "''[[Star Wars: \\1]]''", before)
     before = re.sub(r"\*(\{\{SeriesListing.*?}} )?\[\[Star Wars Rebels \(webcomic\)\|.*?{{C\|Appears through imagination}}\n", "", before)
     before = re.sub(r"(\{\{EncyclopediaCite\|.*?) \(reference book\)}}", "\\1}}", before)
-    before = re.sub(r"'>*\[\[Star Wars Rebels: (Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\]\]'*", ">{{Rebels|\\1}}", before)
-    before = re.sub(r">'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \\1'*\]\]'*", ">{{Rebels|\\1}}", before)
-    before = re.sub(r"'*\[\[Star Wars Rebels: (Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\]\]'*", "\"[[\\1]]\"", before)
-    before = re.sub(r"'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \\1'*\]\]'*", "\"[[\\1]]\"", before)
-    before = re.sub(r">\[\[Star Wars Galaxy Map \(poster\)\|[^\n\]\[]+\]\]<", ">{{GalaxyMapPoster}}<", before)
+    before = before.replace(">'>{{", ">{{")
+    before = re.sub(r">'*\[\[Star Wars Rebels: (Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)]]'*", ">{{Rebels|\\1}}", before)
+    before = re.sub(r">'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \1'*]]'*", ">{{Rebels|\\1}}", before)
+    before = re.sub(r"'*\[\[Star Wars Rebels: (Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)]]'*", "\"[[\\1]]\"", before)
+    before = re.sub(r"'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \1'*]]'*", "\"[[\\1]]\"", before)
+    before = re.sub(r">\[\[Star Wars Galaxy Map \(poster\)\|[^\n\]\[]+]]<", ">{{GalaxyMapPoster}}<", before)
 
     while re.search(r"\[\[Category:[^\n|\]_]+_", before):
         before = re.sub(r"(\[\[Category:[^\n|\]_]+)_", "\\1 ", before)
@@ -314,7 +315,7 @@ def regex_cleanup(before: str) -> str:
         before = re.sub(r"(\|cardname=[^\n}]+?)\{\{C\|(.*?)}}", "\\1(\\2)", before)
         before = before.replace(r"cardname=\n", "cardname=")
     if "web.archive" in before:
-        before = re.sub(r"(?<!\[)\[https?://(.*?) (.*?)] (\(|\{\{C\|)\[http.*?web.archive.org/web/([0-9]+)/https?://.*?\\1.*?][)}]+","{{WebCite|url=https://\\1|text=\\2|archivedate=\\4}}", before)
+        before = re.sub(r"(?<!\[)\[https?://(.*?) (.*?)] (\(|\{\{C\|)\[http.*?web.archive.org/web/([0-9]+)/https?://.*?\1.*?][)}]+","{{WebCite|url=https://\\1|text=\\2|archivedate=\\4}}", before)
     if "width=100%" in before:
         before = re.sub(r"\{\{[Ss]croll[ _]?[Bb]ox(\n?\|.*?)?\n?\|width=100%", "{{ScrollBox\\1", before)
     if "simultaneous with" in before:
@@ -328,7 +329,7 @@ def regex_cleanup(before: str) -> str:
         before = re.sub(r"(\|archive(date|url)=([^|\n}{]+))(\|[^\n}{]*?)?\|oldversion=1", "|oldversion=\\3\\4", before)
         before = re.sub(r"\|oldversion=1(\|[^\n}{]*?)?(\|archive(date|url)=([^|\n}{]+))", "|oldversion=\\4\\1", before)
 
-    before = re.sub(r"(\{\{[A-z0-9 _]+\|.*?\|(.*?) \(.*?\))\|\\2}}", "\\1}}", before)
+    before = re.sub(r"(\{\{[A-z0-9 _]+\|.*?\|(.*?) \(.*?\))\|\2}}", "\\1}}", before)
     if "{{Blog|" in before:
         before = re.sub(r"(\{\{Blog\|(official=true\|)?[^|\n}\]]+?\|[^|\n}\]]+?\|[^|\n}\]]+?)(\|(?!(archive|date|nolive|nobackup))[^}\n]*?)(\|(?!(archive|date|nolive|nobackup))[^}\n]*?)(\|.*?)?}}","\\1\\6}}", before)
         before = re.sub(r"(\{\{Blog\|listing=true\|[^|\n}\]]+?)(\|(?!(archive|date|nolive|nobackup))[^}\n]*?)(\|(?!(archive|date|nolive|nobackup))[^}\n]*?)(\|.*?)?}}","\\1\\6}}", before)

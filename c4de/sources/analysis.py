@@ -684,7 +684,7 @@ def handle_card_item(d: ItemId, o: Item, cards: Dict[str, List[ItemId]], found: 
         x = re.search(r"(\|stext=.*?)[|}]", d.master.original)
         if x:
             d.current.original = d.current.original.replace(f"|set={parent_set}", f"|set={parent_set}{x.group(1)}")
-            d.current.original = re.sub(r"\|stext=('*(.*?)'*)\|(stext|sformatt?e?d?)?'*\\3'*\|", "|stext=\\2|", d.current.original)
+            d.current.original = re.sub(r"\|stext=('*(.*?)'*)\|(stext|sformatt?e?d?)?'*\3'*\|", "|stext=\\2|", d.current.original)
     elif parent_set and "|stext=" not in d.master.original:
         d.current.original = re.sub(r"\|s(formatt?e?d?|text)=('*(.*?)'*)\|", "|", d.current.original)
 
@@ -1097,7 +1097,7 @@ def build_item_text(o: ItemId, d: str, sl: str, final_without_extra: list, final
     if o.current.subset:
         zt = re.sub(r"({{[^|}]*?\|(set=)?[^|}]*?\|)(stext=.*?\|)?", f"\\1subset={o.current.subset}|", zt)
     while zt.count("|subset=") > 1:
-        zt = re.sub(r"(\|subset=.*?)\\1", "\\1", zt)
+        zt = re.sub(r"(\|subset=.*?)\1", "\\1", zt)
     zt = re.sub(r"<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", zt)
     while zt.strip().startswith("*"):
         zt = zt[1:].strip()
@@ -1151,7 +1151,7 @@ def build_item_text(o: ItemId, d: str, sl: str, final_without_extra: list, final
         z = z.replace("–", "&ndash;").replace("—", "&mdash;").replace("  ", " ")
         if not skip_parent:
             z = z.replace("|parent=1", "")
-        # z = re.sub(r"\|stext=(.*?)\|\\1\|", "|stext=\\1|", z)
+        # z = re.sub(r"\|stext=(.*?)\|\1\|", "|stext=\\1|", z)
         final_items.append(o)
         final_without_extra.append(zn)
         return z

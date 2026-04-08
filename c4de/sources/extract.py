@@ -6,7 +6,7 @@ from pywikibot import Page
 from c4de.sources.domain import Item, ItemId
 
 
-IGNORE_TEMPLATES = ["BookCite", "=", "Subtitles", "PAGENAME", "Planetnamia"]
+IGNORE_TEMPLATES = ["BookCite", "=", "Subtitles", "PAGENAME", "Planetnamia", "GalaxyMapHyperlanes", "LegendsSystemPlacement", "SliceRegion", "Battlenamia"]
 
 
 COLLAPSE = {
@@ -178,7 +178,7 @@ def extract_fact_file(z: str, s: str, a: bool):
         issue = decide_ff_issue(x.group(2), x.group(3))
         return Item(z, "General", a, template=x.group(1), target=f"The Official Star Wars Fact File {issue}")
 
-    x = re.search(r"(FactFile(201[34])?)\|(?P<i>[0-9]+)\|(German Edition - )?(?P<p>(?P<a>[0-9]* ?[A-Z]+)[ -]?(?P<n>[0-9]+) ?(-|–|—|&mdash;|&ndash;)? ?\\7?(?P<m>[0-9]*)?)(?P<s>[|,])? ?(?P<t>.*?)$", s)
+    x = re.search(r"(FactFile(201[34])?)\|(?P<i>[0-9]+)\|(German Edition - )?(?P<p>(?P<a>[0-9]* ?[A-Z]+)[ -]?(?P<n>[0-9]+) ?(-|–|—|&mdash;|&ndash;)? ?\7?(?P<m>[0-9]*)?)(?P<s>[|,])? ?(?P<t>.*?)$", s)
     if x:
         issue = decide_ff_issue(x.group(2), x.group('i'))
         page = x.group('p')

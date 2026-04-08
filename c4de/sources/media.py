@@ -798,7 +798,7 @@ def prepare_media_infobox_and_intro(page: Page, results: PageComponents, redirec
             elif ln.startswith("|"):
                 media_field = is_infobox_field(ln, prev, MEDIA_FIELDS)
                 if ln.startswith("|season="):
-                    ln = re.sub(r"season=\[\[(.*? Season )(One|Two|Three|Four|Five|Six|Seven|[0-9]+)\|(?!\\2).*?]]", "season=[[\\1\\2|\\2]]", ln)
+                    ln = re.sub(r"season=\[\[(.*? Season )(One|Two|Three|Four|Five|Six|Seven|[0-9]+)\|(?!\2).*?]]", "season=[[\\1\\2|\\2]]", ln)
                 elif media_field:
                     x = re.search(r"^((\|[a-z ]+=)?\*?)'*\[\[(.*?)(\|'*(.*?)'*)?]]'*", ln)
                     if x:

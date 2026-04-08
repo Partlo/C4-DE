@@ -284,7 +284,7 @@ def extract_date(text):
         m = re.search(r"\*Finished episode.*\n.*?([A-z]+ [0-9]+).*?([0-9]{4})", m.group(3))
     if m:
         date_str = m.group(3).replace("[", "").replace("]", "").replace("*", "").strip()
-        date_str = re.sub(r"\[\[([A-Z][a-z][a-z]+)([A-z]+) ([0-9]+)\|\\1 \\3, ([0-9]+)]]", "\\1\\2 \\3, \\4", date_str)
+        date_str = re.sub(r"\[\[([A-Z][a-z][a-z]+)([A-z]+) ([0-9]+)\|\1 \3, ([0-9]+)]]", "\\1\\2 \\3, \\4", date_str)
         date_str = re.sub(r"^.*?([A-Za-z]+ [0-9]*?) ?( ?&[mn]dash; ?[A-Za-z]+( [0-9]+))?,? ([0-9]{4}).*", "\\1, \\4",
                           date_str)
     return date_str
@@ -378,8 +378,8 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
                     v = x.group('t')
             if f == "published in" and not v and not iu_media:
                 v = data.get("issue") or ''
-                if re.search(r"\[\[(.*?) ([0-9]+)\|\\2( of .*?)?]]", v):
-                    v = re.sub(r"\[\[(.*?) ([0-9]+)\|\\2( of .*?)?]]", "[[\\1 \\2|''\\1'' \\2]]", v)
+                if re.search(r"\[\[(.*?) ([0-9]+)\|\2( of .*?)?]]", v):
+                    v = re.sub(r"\[\[(.*?) ([0-9]+)\|\2( of .*?)?]]", "[[\\1 \\2|''\\1'' \\2]]", v)
                 elif extract:
                     x = re.search(
                         "(published|adventure|released|article|supplement|appearing|appeare?[sd]|included|feature|department) (w?i?t?h?in|of|from) (\[\[(Fantasy Flight Games|De ?Agostini)]]'?s? )?(the )?(magazine )?(?P<t>'*\[\[.*?]]'*)",
