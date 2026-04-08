@@ -266,7 +266,7 @@ class FullListData:
         self.urls = urls
         self.target = target
         self.by_parent = by_parent
-        self.parentheticals = parantheticals
+        self.parantheticals = parantheticals
         self.reprints = reprints
         self.both_continuities = both_continuities
         self.no_canon_index = no_canon_index

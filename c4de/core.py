@@ -34,7 +34,7 @@ from c4de.protocols.edelweiss import run_edelweiss_protocol, calculate_isbns_for
 from c4de.protocols.rss import check_rss_feed, check_latest_url, check_wookieepedia_feeds, check_sw_news_page, \
     check_review_board_nominations, check_policy, check_consensus_duration, check_user_rights_nominations, \
     check_blog_list, check_ea_news, check_unlimited, check_ubisoft_news, compare_site_map, handle_site_map, \
-    check_target_url, compile_tracked_urls, check_title_formatting, check_hunters_news, check_ilm
+    check_target_url, compile_tracked_urls, check_title_formatting, check_hunters_news, check_ilm, check_audible
 
 from c4de.sources.analysis import get_analysis_from_page
 from c4de.sources.archive import create_archive_categories
@@ -238,6 +238,7 @@ class C4DE_Bot(commands.Bot):
                 self.load_isbns.start()
                 self.manage_archive.start()
                 self.check_edelweiss.start()
+                self.check_audible.start()
                 await self.build_sources()
                 self.check_index_requests.start()
             log("Startup process completed.")
@@ -457,6 +458,11 @@ class C4DE_Bot(commands.Bot):
         if "edelweiss" in message.content.lower():
             self.run_edelweiss = False
             messages, _ = run_edelweiss_protocol(self.site, self.edelweiss_cache)
+            for m in messages:
+                await channel.send(m)
+            return True
+        if "audible" in message.content.lower():
+            messages = check_audible(self.external_rss_cache["sites"])
             for m in messages:
                 await channel.send(m)
             return True
@@ -1031,7 +1037,7 @@ class C4DE_Bot(commands.Bot):
             await message.remove_reaction(TIMER, self.user)
             await message.add_reaction(self.emoji_by_name("bb8thumbsup"))
             if mcx:
-                mc = "\n".join([f"- {c.title()}" for c in mcx])
+                mc = "\n".join([f"- {c}" for c in mcx])
                 await message.reply(f"Maintenance categories detected on nomination:\n{mc}")
                 if command['nom_page']:
                     self.add_objections(command, mcx)
@@ -1234,9 +1240,9 @@ class C4DE_Bot(commands.Bot):
     async def check_future_products(self):
         if datetime.now().hour != 5:
             return
-        await self.handle_future_products()
+        await self.handle_future_products(None)
 
-    async def handle_future_products(self):
+    async def handle_future_products(self, _):
         try:
             results = get_future_products_list(self.site)
             handle_results(self.site, results, [])
@@ -1889,7 +1895,9 @@ class C4DE_Bot(commands.Bot):
                 if not self.tracked_urls:
                     self.tracked_urls = compile_tracked_urls(self.site)
                 other, db = compare_site_map(self.site, ["star-wars-maul-shadow-lord"], messages, self.tracked_urls)
-                messages += other
+                for x in other:
+                    if x["url"] not in self.external_rss_cache["sites"]["StarWars.com"]:
+                        messages.append(x)
             except Exception as e:
                 error_log(f"Encountered {type(e).__name__} while checking site map")
         elif site_data["template"] == "UnlimitedWeb":
@@ -1925,6 +1933,21 @@ class C4DE_Bot(commands.Bot):
         if messages:
             self.tracked_urls = compile_tracked_urls(self.site)
         return db
+
+    @tasks.loop(hours=1)
+    async def check_audible(self):
+        if datetime.now().hour != 13:
+            return
+        log("Scheduled Operation: Checking Audible")
+        messages = check_audible(self.external_rss_cache["sites"])
+        with open(EXTERNAL_RSS_CACHE, "w") as f:
+            f.writelines(json.dumps({k: {i: c[-250:] for i, c in v.items()} for k, v in self.external_rss_cache.items()}, indent=4))
+        for m in messages:
+            try:
+                await self.text_channel(UPDATES).send(m)
+            except Exception as e:
+                print(m)
+                print(e)
 
     @tasks.loop(minutes=10)
     async def check_external_rss(self):
@@ -2067,7 +2090,7 @@ class C4DE_Bot(commands.Bot):
             target = m["videoId"]
         else:
             m["url"] = m["url"].replace("http:", "https:")
-            target = m["url"].replace(base_url + "/", "").replace("www.", "").replace(base_url.replace("www.", "") + "/", "")
+            target = m["url"].replace(base_url.replace("www.", "") + "/", "").replace(base_url + "/", "").replace("www.", "")
 
         if target.endswith("/"):
             target = target[:-1]
@@ -2152,7 +2175,8 @@ class C4DE_Bot(commands.Bot):
             url = msg["url"].replace(site_data["baseUrl"] + "/", "").replace("databank/", "")
             result = f"Databank|{url}|{t}"
         else:
-            url = msg["url"].replace(site_data["baseUrl"] + "/", "")
+            url = msg["url"].replace("http:", "https:").replace(site_data["baseUrl"].replace("www.", "") + "/", "")\
+                .replace(site_data["baseUrl"] + "/", "").replace("www.", "")
             if url.endswith("/"):
                 url = url[:-1]
             result = f"{x}|url={url}|text={t}"

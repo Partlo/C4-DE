@@ -247,3 +247,6 @@
 **Variety of minor fixes
 *'''4.6.7''': March 2, 2026
 **Minor tweaks, and first pass at Audible scanner
+*'''4.6.8''': April 5, 2026
+**Objections will now be left on nomination pages for maintenance categories
+**Assorted tweaks

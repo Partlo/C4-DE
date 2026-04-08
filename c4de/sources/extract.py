@@ -25,6 +25,10 @@ COLLAPSE = {
     "DatapadCite": "Star Wars: Datapad",  # "[[Star Wars: Datapad|''Star Wars'': Datapad]]"
 }
 
+REFERENCE_MAGAZINE_ISSUES = {
+    "DarthVaderCite": 50
+}
+
 REFERENCE_MAGAZINES = {
     "BuildFalconCite": "Star Wars: Build the Millennium Falcon <x>",
     "BuildR2Cite": "Star Wars: Build Your Own R2-D2 <x>",
@@ -284,12 +288,16 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
             m = re.search(r"\{\{" + i + "\|([0-9]+)(\|(.*?))?(\|(.*?))?}}", s)
             mode = types.get(i, "General")
             zx = re.sub(r"'*?(\{\{(?!FactFile)[A-z0-9]+\|[0-9]+\|.*?)(\|.*?(\{\{'s?}})?.*?)?}}'*?", "\\1}}", s)
-            if m and m.group(3) and "|parent=" in m.group(0):
-                return Item(zx, mode, a, target=k.replace("<x>", m.group(1)), template=i, issue=m.group(1), ref_magazine=True)
-            elif m and m.group(3):
-                return Item(zx, mode, a, parent=k.replace("<x>", m.group(1)), template=i, issue=m.group(1), target=m.group(3), text=m.group(5), ref_magazine=True)
-            elif m:
-                return Item(zx, mode, a, parent=k.replace("<x>", m.group(1)), template=i, issue=m.group(1), text=m.group(2), collapsed=True, ref_magazine=True)
+            if m:
+                target = k.replace("<x>", m.group(1))
+                if i in REFERENCE_MAGAZINE_ISSUES and m.group(1).isnumeric() and int(m.group(1)) > REFERENCE_MAGAZINE_ISSUES[i]:
+                    target = target.replace(" (magazine)", "")
+                if m.group(3) and "|parent=" in m.group(0):
+                    return Item(zx, mode, a, target=target, template=i, issue=m.group(1), ref_magazine=True)
+                elif m.group(3):
+                    return Item(zx, mode, a, parent=target, template=i, issue=m.group(1), target=m.group(3), text=m.group(5), ref_magazine=True)
+                else:
+                    return Item(zx, mode, a, parent=target, template=i, issue=m.group(1), text=m.group(2), collapsed=True, ref_magazine=True)
 
     template = re_if(re.search(r'\{\{([^|\[}\n]+)[|}]', s), 1, '')
     if template and template[0].islower():

@@ -157,9 +157,7 @@ def check_wookieepedia_feeds(site: Site, cache: Dict[str, List[str]]):
         error_log(type(e), e.args)
 
     try:
-        print("Checking Community")
         entries = check_new_pages(Site(fam='community'), cache, namespace=500)
-        print(entries)
         for cm in entries:
             messages.append(cm)
     except Exception as e:
@@ -312,6 +310,16 @@ def check_sw_news_page(feed_url, cache: Dict[str, List[str]], title_regex):
     today = datetime.now().strftime("%B %d, %Y")
 
     initial_entries = []
+    entities = soup.find_all("div", class_="entity-details")
+    for bumper in entities:
+        try:
+            h3 = bumper.find("h3", class_="title")
+            link = bumper.find("a", class_="entity-link").get("href")
+            title = h3.text.strip()
+            initial_entries.append({"title": title, "url": link})
+        except Exception as e:
+            error_log(type(e), e)
+
     bumpers = soup.find_all("div", class_="content-bumper")
     for bumper in bumpers:
         try:
@@ -606,6 +614,7 @@ def check_audible(cache: Dict[str, List[str]]):
     if not r:
         return []
 
+    today = datetime.today()
     if "Audible" not in cache:
         cache["Audible"] = []
     data = {}
@@ -621,6 +630,12 @@ def check_audible(cache: Dict[str, List[str]]):
 
             date = x.find(class_="releaseDateLabel")
             date_text = date.text.split("Release date:")[-1].strip()
+            try:
+                dx = datetime.strptime(date_text, "%m-%d-%y")
+                if today > dx:
+                    continue
+            except Exception as e:
+                print(f"Cannot parse date string {date_text}: {e}")
             data[link['href']] = {"text": link.text, "date": date_text}
 
     results = []

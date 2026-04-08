@@ -107,7 +107,7 @@ def find_matching_audiobook(a: ItemId, existing: list, appearances: FullListData
         return []
 
     z = None
-    if a.master.target in appearances.parentheticals:
+    if a.master.target in appearances.parantheticals:
         z = a.master.target
     elif a.master.target.endswith(")") and not a.master.target.endswith("webcomic)"):
         z = a.master.target.rsplit("(", 1)[0].strip()
@@ -143,7 +143,7 @@ def find_matching_parent_audiobook(a: ItemId, existing: list, appearances: FullL
         return []
 
     z = None
-    if a.master.parent in appearances.parentheticals:
+    if a.master.parent in appearances.parantheticals:
         z = a.master.parent
     elif a.master.parent.endswith(")"):
         z = a.master.parent.rsplit("(", 1)[0].strip()
