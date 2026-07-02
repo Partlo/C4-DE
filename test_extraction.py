@@ -55,7 +55,7 @@ def prep(text, old_text):
     z2 = re.sub(r"(\{\{1st.*?\|\[\[(.*?) \(.*?audiobook\)\|)''\\2'' (.*?audiobook)", "\\1\\3", z2)
     z2 = re.sub(r"\[\[([Cc])redit]](s)?", "[[Galactic Credit Standard|\\1redit\\2]]", z2)
 
-    for ix in re.findall(r"((\{\{(BuildFalconCite|BuildR2Cite|BuildXWingCite|BustCollectionCite|DarthVaderCite|FalconCite|FigurineCite|HelmetCollectionCite|ShipsandVehiclesCite|StarshipsVehiclesCite)\|[0-9]+\|[^|\[{}]+?)(\|((?!reprint).)*?)}})", text):
+    for ix in re.findall(r"((\{\{(BuildFalconCite|BuildR2Cite|BuildXWingCite|BustCollectionCite|DarthVaderCite|FalconCite|FigurineCite|HelmetCollectionCite|ShipsandVehiclesCite|StarshipsVehiclesCite)\|S?[0-9]+\|[^|\[{}]+?)(\|((?!reprint).)*?)}})", text):
         text = text.replace(ix[0], ix[1] + "}}")
         if ix[1] + "}}" in old_text:
             z1 = z1.replace(ix[0], ix[1] + "}}")

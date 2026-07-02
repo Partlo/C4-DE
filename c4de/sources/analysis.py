@@ -417,7 +417,7 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
     wrong = []
     links = []
     non_canon = []
-    group_items = _cards()
+    group_items, app_group_items = _cards(), _cards()
     extra = {}
     page_links = []
     any_expanded = []
@@ -489,6 +489,8 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
             add_to_list(group_items, d.master.target, d)
         elif d and d.current.ref_magazine and d.master.parent and not o.override_date:
             add_to_list(group_items, d.master.parent, d)
+        elif d and d.current.template == "DatapadCite":
+            add_to_list(app_group_items, d.master.target, d)
         elif o.mode != "Toys" and (is_official_product_page(o, real) or is_external_link(d, o, unknown)):
             if d:
                 o.master_text = d.master.original
@@ -577,9 +579,11 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
         pass
     elif src:
         handle_groups(group_items, data, other, src.found, src.group_ids, extra, unknown, canon, src)
-        group_items = {}
+        handle_groups(app_group_items, data, other, found, group_ids, extra, unknown, canon)
+        group_items = app_group_items
     else:
         handle_groups(group_items, data, other, found, group_ids, extra, unknown, canon)
+        handle_groups(app_group_items, data, other, found, group_ids, extra, unknown, canon)
 
     found += list(extra.values())
     if any_expanded:
@@ -964,8 +968,9 @@ def build_new_section(title, name, section: SectionItemIds, results: PageCompone
             new_text.append(itext)
             rows += 1
 
-        if not results.real and o.master.canon is not None and o.master.canon != results.canon \
-                and o.master.target not in both_continuities and "{{BtsOnly}}" not in o.current.extra:
+        if not results.real and not o.master.is_lego_or_crossover() and o.master.canon is not None \
+                and o.master.canon != results.canon and o.master.target not in both_continuities \
+                and "{{BtsOnly}}" not in o.current.extra:
             mismatch.append(o)
 
     return FinishedSection(name, rows, "\n".join(new_text), section.keep_empty), final_items
@@ -977,14 +982,17 @@ def build_card_block(o: ItemId, d: str, section: SectionItemIds, sl: str, final_
     ct = 0
     rx = 1
     block = []
-    if o.master.template == FC:
+    if o.master.template == FC or o.master.template == "DatapadCite":
         set_items = sorted(set_items, key=lambda a: a.current.original)
     elif o.master.is_card_or_mini():
         set_items = sorted(set_items, key=lambda a: ("rulebook" not in a.current.original and "rulebook" not in a.master.original,
                                                      "mission" not in a.current.original and "mission" not in a.master.original,
                                                      a.master.index, a.current.card_sort_text()))
 
-    if any(i.master.ref_magazine for i in set_items):
+    if o.master.template == "DatapadCite":
+        master = "[[Star Wars: Datapad|''Star Wars'' Datapad]]"
+        parent = f"{master} {o.current.extra}".strip()
+    elif any(i.master.ref_magazine for i in set_items):
         master = f"{{{{{set_items[0].current.template}|{set_items[0].master.issue}"
         parent = f"{master}|parent=1}}}} {o.current.extra}".strip()
     elif o.master.template == FC or o.master.target == "Star Wars: Force Collection":
@@ -1004,6 +1012,8 @@ def build_card_block(o: ItemId, d: str, section: SectionItemIds, sl: str, final_
             continue
         elif c.current.card:
             ot = build_card_text(o, c).replace("|parent=1", "")
+        elif c.current.template == "DatapadCite":
+            ot = c.current.original
         else:
             ot = c.master.original
         if (o.master.mode == "Minis" or "mission=" in o.master.original) and o.master.card:

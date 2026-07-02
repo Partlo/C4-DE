@@ -21,9 +21,9 @@ class Item:
     :type text: str
     """
     def __init__(self, original: str, mode: str, is_app: bool, *, invalid=False, target: str = None, text: str = None,
-                 parent: str = None, template: str = None, url: str = None, issue: str = None, subset: str=None,
+                 parent: str = None, template: str = None, url: str = None, issue: str = None, subset: str = None,
                  card: str = None, special=None, collapsed=False, format_text: str = None, no_issue=False, ref_magazine=False,
-                 full_url: str=None, publisher_listing=False, check_both=False, date="", archivedate="", issue2=None,
+                 full_url: str = None, publisher_listing=False, check_both=False, date="", archivedate="", issue2=None,
                  alternate_url=None):
         self.master_page = None
         self.mode = "General" if mode == "TV" else mode
@@ -143,6 +143,9 @@ class Item:
 
     def is_card_or_toy(self):
         return self.is_card_or_mini() or self.mode == "Toys"
+
+    def is_lego_or_crossover(self):
+        return self.master_page and ("LEGO" in self.master_page or "Crossover" in self.master_page)
 
     def __str__(self):
         return f"Item[{self.full_id()}]"

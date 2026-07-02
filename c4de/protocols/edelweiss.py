@@ -200,7 +200,7 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
         found = None
         for x in driver.find_elements(By.CLASS_NAME, "MuiListItem-root"):
             b = x.find_element(By.CSS_SELECTOR, "button.MuiButtonBase-root")
-            if b and b.text == "Publishing Status":
+            if b and b.get_attribute('aria-label') == "Expand Publishing Status":
                 found = x
                 b.click()
                 time.sleep(1)
@@ -233,7 +233,8 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
     if not x:
         x = driver.find_elements(By.CSS_SELECTOR, "div[class^='listViewItemsCount']")
     total = re.sub(r"^.*?filtered to ([0-9]+).*?$", "\\1", x[0].text.replace("\n", ""))
-    total = int(total) if total else 500
+    total = re.sub(" [Tt]itles.*?$", "", total)
+    total = int(total) if total and total.isnumeric() else 500
     print(f"Evaluating {total} items")
 
     try:

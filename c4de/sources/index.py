@@ -11,14 +11,18 @@ from c4de.sources.domain import Item, ItemId, AnalysisResults
 
 
 def build_alternate(i: ItemId):
-    if "livestream=" in i.master.original:
+    date = None
+    if i.master.template == "GalaxyMapPoster":
+        o = "{{SW|url=news/swca-2022-lucasfilm-publishing-behind-the-page-panel|text=SWCA 2022: 7 Things We Learned from the Lucasfilm Publishing Behind the Page Panel}}"
+        template, mode, date = "SW", "Web", "2022-05-28"
+    elif "livestream=" in i.master.original:
         o = "{{" + i.master.template + "|" + i.master.special + "|" + i.master.text + " (Livestream)}}"
         template, mode = i.master.template, i.master.mode
     else:
         o = "{{SW|url=" + i.master.special + "|text=" + i.master.text + "}}"
         template, mode = "SW", "Web"
     x = Item(o, mode, i.master.is_appearance, url=i.master.special, template=template, text=i.master.text)
-    x.date = i.master.date
+    x.date = date or i.master.date
     x.index = (i.master.index or 0) + 0.1
     x.canon_index = i.master.canon_index
     x.legends_index = i.master.legends_index
@@ -33,6 +37,8 @@ def flatten(items: List[ItemId], found: List[ItemId], missing: List[ItemId]):
         if i.master.has_date():
             found.append(i)
             if i.master.mode == "YT" and i.master.special:
+                found.append(build_alternate(i))
+            elif i.master.template == "GalaxyMapPoster":
                 found.append(build_alternate(i))
         else:
             missing.append(i)

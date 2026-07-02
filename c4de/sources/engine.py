@@ -95,12 +95,21 @@ def build_template_types(site):
     list_templates(site, "Category:Interwiki link templates", results, "Interwiki")
 
     results["Magazine"] = {}
+    results["Suffix"] = {}
+    results["Suffix2"] = {}
     for p in Category(site, "Category:Magazine citation templates").articles(recurse=True):
         txt = p.get()
         if "BaseCitation" in txt and ("mode=magazine" in txt or "mode=ref" in txt):
-            x = re.search(r"\|series=([A-z0-9:()\-&/ ]+)[|\n]", txt)
-            if x:
-                results["Magazine"][p.title(with_ns=False)] = x.group(1)
+            m = re.search(r"\|series=([A-z0-9:()\-&/ ]+)[|\n]", txt)
+            if m:
+                results["Magazine"][p.title(with_ns=False)] = m.group(1)
+                x = re.search("\|suffix(2)?=(.*?)[|\n]", txt)
+                if x:
+                    y = re.search("\|threshold=([0-9]+)", txt)
+                    if y and x.group(1):
+                        results["Suffix2"][p.title()] = (int(y.group(1)), x.group(2))
+                    elif y:
+                        results["Suffix"][p.title()] = (int(y.group(1)), x.group(2))
     results["Magazine"]["InsiderCite"] = "Star Wars Insider"
 
     for k, cat in {"Nav": "Navigation templates", "Dates": "Dating citation templates"}.items():
@@ -255,7 +264,7 @@ def load_source_lists(site, log, include_web=True):
             for o, line in enumerate(lines):
                 if "/Header}}" in line or line.startswith("----"):
                     continue
-                x = re.search(r"\*([RP]: )?(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? *(?P<t>.*?) ?†?( {{C\|1?=?(original|alternate): (?P<a>.*?)}})?( {{C\|int: (?P<i>.*?)}})?( {{C\|d: [0-9X-]+?}})? ?†?$", line)
+                x = re.search(r"\*([RPF]: )?(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? *(?P<t>.*?) ?†?( {{C\|1?=?(original|alternate): (?P<a>.*?)}})?( {{C\|int: (?P<i>.*?)}})?( {{C\|d: [0-9X-]+?}})? ?†?$", line)
                 if x:
                     i += 1
                     data.append({"index": i, "page": "Web/Repost" if y == "Special" else f"Web/{y}", "date": x.group("d"), "item": x.group("t"),
@@ -410,7 +419,8 @@ def check_for_both_continuities(x: Item, targets: Dict[str, List[Item]], both_co
 
 def record_reprints(reprints, x: Item):
     if x.target.replace(" (department)", "") in ISSUE_REPRINTS:
-        print(f"{x.parent} {x.target} -> {x.format_text} fell through logic")
+        if "Caroline" not in (x.format_text or ""):
+            print(f"{x.parent} {x.target} -> {x.format_text} fell through logic")
         if f"{x.target.replace(' (department)', '')}|{x.issue}" not in reprints:
             reprints[f"{x.target.replace(' (department)', '')}|{x.issue}"] = []
         reprints[f"{x.target.replace(' (department)', '')}|{x.issue}"].append(x)
@@ -487,6 +497,7 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
                         x.mode = "Web"
                 elif "Crossover" in i['page'] or "LEGO" in i['page']:
                     x.non_canon = True
+                    x.both_continuities = True
                 x.index = i['index']
                 x.date_ref = i.get('ref')
                 x.extra_date = i.get('extraDate')

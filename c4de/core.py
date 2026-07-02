@@ -220,6 +220,7 @@ class C4DE_Bot(commands.Bot):
 
                 self.check_spoiler_templates_and_cleanup.start()
 
+                self.check_edelweiss.start()
                 self.check_internal_rss.start()
                 self.check_external_rss.start()
             else:
@@ -237,8 +238,7 @@ class C4DE_Bot(commands.Bot):
                 self.check_for_sources_rebuild.start()
                 self.load_isbns.start()
                 self.manage_archive.start()
-                self.check_edelweiss.start()
-                self.check_audible.start()
+                self.check_audible_listings.start()
                 await self.build_sources()
                 self.check_index_requests.start()
             log("Startup process completed.")
@@ -809,17 +809,22 @@ class C4DE_Bot(commands.Bot):
             return
 
         category = Category(self.site, "Category:Articles with /Canon")
-        messages = [f"Beginning Canon/Legends swap for {len(list(category.articles()))} articles:", ""]
-        for page in category.articles():
-            y = f"- {page.title()}"
-            if len(y) + len(messages[-1]) > 500:
-                messages.append(y)
-            else:
-                messages[-1] += f"\n{y}"
+        count = len(list(category.articles()))
+        if count == 0:
+            messages = ["No /Canon pages to move; skipping swap"]
+        else:
+            messages = [f"Beginning Canon/Legends swap for {count} articles:", ""]
+            for page in category.articles():
+                y = f"- {page.title()}"
+                if len(y) + len(messages[-1]) > 500:
+                    messages.append(y)
+                else:
+                    messages[-1] += f"\n{y}"
 
         for m in messages:
             await self.text_channel("admin-help").send(m)
-        subprocess.run(f"""cd {PROJECT_DIR}/robo & {ENVIRONMENT_DIR}/Scripts/python switch_canon_legends.py""", shell=True)
+        if count > 0:
+            subprocess.run(f"""cd {PROJECT_DIR}/robo & {ENVIRONMENT_DIR}/Scripts/python switch_canon_legends.py""", shell=True)
 
     @staticmethod
     def is_check_archive_command(message: Message):
@@ -1072,7 +1077,7 @@ class C4DE_Bot(commands.Bot):
             if nom_page.exists():
                 txt = nom_page.get()
                 mc_txt = "\n".join([f"*Maintenance category detected: [[:{c}]]" for c in mcx])
-                txt = txt.replace("====Objections====", "====Objections====\n======C4-DE Bot=====\n" + mc_txt)
+                txt = txt.replace("====Objections====", "====Objections====\n=====C4-DE Bot=====\n" + mc_txt)
                 nom_page.put(txt, "Reporting objections")
         except Exception as e:
             error_log(type(e), e)
@@ -1935,7 +1940,7 @@ class C4DE_Bot(commands.Bot):
         return db
 
     @tasks.loop(hours=1)
-    async def check_audible(self):
+    async def check_audible_listings(self):
         if datetime.now().hour != 13:
             return
         log("Scheduled Operation: Checking Audible")
@@ -1983,7 +1988,6 @@ class C4DE_Bot(commands.Bot):
         await self.report_rss_results(messages_to_post, templates, updated_db_entries, new_db_entries)
 
     async def report_rss_results(self, messages_to_post, templates, updated_db_entries, new_db_entries):
-
         for channel, message in messages_to_post:
             try:
                 if "Star Wars Kids" in message.replace("*", "") and "®" not in message and "™" not in message and emoji.emoji_count(message) > 1:
@@ -2124,7 +2128,8 @@ class C4DE_Bot(commands.Bot):
         template = self.build_citation_template(m, youtube, site_data, archivedate if include_archivedate and not already_archived else None)
 
         if youtube:
-            t = f"New Video on the official {m['site']} YouTube channel"
+            tx = f"Livestream Scheduled for {date}" if m.get('livestream') else "Video"
+            t = f"New {tx} on the official {m['site']} YouTube channel"
             x = re.search(r"\|.*?\|(Star Wars:? )?(.*?) ?&#124; ?(.*?) ?&#124; ?(Disney\+|Star Wars|@?Star ?Wars ?Kids) *}}", f)
             skip = (x and x.group(2) in REPOSTS) or f.endswith("Full Episode") or " Full Episode " in f or "Compilation" in f
             if not skip:

@@ -605,7 +605,47 @@ def check_ea_news(site, url, feed_url, cache: Dict[str, List[str]]):
     return results
 
 
+def check_marvel_page(cache: dict, site):
+    r = None
+    try:
+        r = requests.get("https://www.marvel.com", timeout=15).text
+    except Exception as e:
+        error_log("https://www.marvel.com", type(e))
+    if not r:
+        return []
+
+    results = []
+    soup = BeautifulSoup(r, "html.parser")
+    for x in soup.findAll("p", class_="FeedCard__Meta__Headline"):
+        link = x.find("a")
+        if not link:
+            continue
+        # if "Star Wars" not in link.text:
+        #     continue
+        u = "https://www.marvel.com/" + link.get('href')
+        if site not in cache:
+            cache[site] = []
+        if cache[site] and u in cache[site]:
+            continue
+
+        d = None
+        try:
+            dx = x.find("span", class_="FeedCard__Meta__Timestamp")
+            if dx:
+                y = re.search("([0-9]+) days ago", dx.text)
+                if y:
+                    d = (datetime.now() - timedelta(days=int(y.group(1)))).strftime("%Y-%m-%d")
+        except Exception:
+            pass
+
+        results.append({"site": site, "title": link.text, "url": u, "content": "", "date": d})
+        cache[site].append(u)
+
+    return results
+
+
 def check_audible(cache: Dict[str, List[str]]):
+    print("Checking Audible")
     r = None
     try:
         r = requests.get("https://www.audible.com/search?keywords=star+wars&sort=pubdate-desc-rank&pageSize=50&feature_six_browse-bin=18685580011&feature_twelve_browse-bin=18685552011", timeout=15).text
@@ -716,6 +756,9 @@ def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, che
             content = e.description
         elif e.get("summary"):
             content = e.summary
+        y = re.search("<meta .*?startDate.*?content=.(20[0-9][0-9]-[0-9][0-9]-[0-9][0-9])", r)
+        livestream = y is not None
+        date = y.group(1) if y else e.get("date", "").split("T")[0]
 
         if check_star_wars and not check_sw(title.lower().replace("-", " ")) and \
                 (site == "LEGO" or not check_sw(content.lower().replace("-", " "))):
@@ -736,8 +779,8 @@ def check_rss_feed(feed_url, cache: Dict[str, List[str]], site, title_regex, che
         elif content and "the high republic show" in content.lower():
             template = "HighRepublicShow"
 
-        entries_to_report.append({"site": site, "title": title, "url": e.link, "content": content, "date": e.get("date", "").split("T")[0],
-                                  "videoId": e.get("yt_videoid"), "template": template})
+        entries_to_report.append({"site": site, "title": title, "url": e.link, "content": content, "date": date,
+                                  "videoId": e.get("yt_videoid"), "template": template, "livestream": livestream})
         cache[site].append(e.link)
 
     if cache.get(site):
@@ -750,7 +793,7 @@ def check_latest_url(url, cache: dict, site, title_regex):
     last_post_url = cache[site]
     response = requests.get(url, timeout=10)
     if response.url == url:
-        error_log("Unexpected state, URL did not redirect")
+        error_log(f"Unexpected state, URL {url} did not redirect")
         return []
     elif response.url == last_post_url:
         # log(f"No new articles found on {site}.")
@@ -1128,7 +1171,7 @@ def augment_site_map(site, series, urls):
     series_db_entries = {}
     for s in series:
         st = convert_to_url(s.replace(":", ""))
-        _, series_urls, series_db = check_series_page(f"https://starwars.com/series/{st}")
+        _, series_urls, series_db = check_series_page(f"https://starwars.com/series/{st}", urls)
         urls_to_check.update(series_urls)
         series_db_entries.update(series_db)
 
@@ -1162,7 +1205,7 @@ def check_target_url(url, urls):
     x, u = url.split(".com/", 1)
     if u in urls:
         return True, None, None
-    exists, ep_urls, ep_db = check_series_page(f"https://www.starwars.com/{u}")
+    exists, ep_urls, ep_db = check_series_page(f"https://www.starwars.com/{u}", urls)
     if exists:
         ep_urls.add(u)
         log(f"Found {len(list(ep_db))} entries and {len(ep_urls)} pages on {u}")
@@ -1174,7 +1217,7 @@ def check_episode(st, episode, urls, urls_to_check, db_entries):
     if u in urls:
         return True
 
-    exists, ep_urls, ep_db = check_series_page(f"https://www.starwars.com/{u}")
+    exists, ep_urls, ep_db = check_series_page(f"https://www.starwars.com/{u}", urls)
     if exists:
         urls_to_check.add(u)
         urls_to_check.update(ep_urls)
@@ -1183,7 +1226,7 @@ def check_episode(st, episode, urls, urls_to_check, db_entries):
     return exists
 
 
-def check_series_page(url):
+def check_series_page(url, tracked):
     urls_to_check, db_entries = set(), {}
     r = requests.get(url)
     if r.status_code == 200 and r.url == url:
@@ -1191,9 +1234,13 @@ def check_series_page(url):
         for l in [*soup.find_all("ol", class_="slider-list"), *soup.find_all("section", class_="incredibles_slider"), *soup.find_all("div", "display_filters")]:
             if 'data-title' in l.attrs and "Galleries" in l['data-title']:
                 for a in l.find_all("a", class_="entity-link"):
-                    urls_to_check.add(a['href'].split('.com/')[-1])
+                    z = a['href'].split('.com/')[-1]
+                    if z not in tracked:
+                        urls_to_check.add(z)
             elif 'data-title' in l.attrs and "Databank" in l['data-title']:
                 for a in l.find_all("a", class_="title-link"):
-                    db_entries[a['href'].split('.com/')[-1]] = re.sub(r" ?- ?The Acolyte", "", a['data-title'])
+                    z = a['href'].split('.com/')[-1]
+                    if z not in tracked and z.split("databank/")[-1] not in tracked:
+                        db_entries[z] = re.sub(r" ?- ?The Acolyte", "", a['data-title'])
 
     return r.status_code == 200, urls_to_check, db_entries

@@ -231,6 +231,9 @@ def rearrange_sections(target: Page, results: PageComponents, valid: Dict[str, L
                     sections[key].lines.append("")
                 sections[key].lines += items[0].lines
 
+            if key == "Media" and results.infobox == "Multimedia":
+                continue
+
             for sx, subsection in items[0].subsections.items():
                 sxm = match_header(sx, results.infobox)
                 if key in SUBSECTIONS and key != "Development":

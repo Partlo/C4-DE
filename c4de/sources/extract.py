@@ -22,7 +22,7 @@ COLLAPSE = {
     "TCWA": "Star Wars: Clone Wars Adventures (video game)",  # "[[Star Wars: Clone Wars Adventures (video game)|''Star Wars: Clone Wars Adventures'' video game]]",
     "GEAttr": "Star Wars: Galaxy's Edge",  #"[[Star Wars: Galaxy's Edge|''Star Wars'': Galaxy's Edge]] (template)",
     "GSAttr": "Star Wars: Galactic Starcruiser",  # "[[Star Wars: Galactic Starcruiser|''Star Wars'': Galactic Starcruiser]] (template)",
-    "DatapadCite": "Star Wars: Datapad",  # "[[Star Wars: Datapad|''Star Wars'': Datapad]]"
+    # "DatapadCite": "Star Wars: Datapad",  # "[[Star Wars: Datapad|''Star Wars'': Datapad]]"
 }
 
 REFERENCE_MAGAZINE_ISSUES = {
@@ -216,6 +216,21 @@ def fix_insider_departments(name, template):
     return name
 
 
+def build_magazine_target(template, issue: str, types):
+    if template in types["Magazine"]:
+        target = f"{types['Magazine']} {issue}"
+        if issue.isnumeric():
+            if template in types["Suffix"]:
+                threshold, suffix = types["Suffix"][template]
+                if int(issue) <= threshold:
+                    return f"{target} {suffix}"
+            elif template in types["Suffix2"]:
+                threshold, suffix = types["Suffix2"][template]
+                if int(issue) > threshold:
+                    return f"{target} {suffix}"
+        return target
+
+
 def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     """ Extracts an Item object from the given source/appearance line, parsing out the target article and all other
     relevant information.
@@ -324,6 +339,9 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     elif template == "FilmVideo":
         m = re.search(r"\{\{FilmVideo\|(.*?)(\|.*?)?}}", s)
         return Item(z, mode, a, issue=m.group(1), template=template)
+    elif template == "DatapadCite":
+        m = re.search("\{\{DatapadCite\|(.*?)(\|.*?)?}}", s)
+        return Item(z, mode, a, target="Star Wars: Datapad", issue=m.group(1), template=template, ref_magazine=True)
     # HoloNet News
     elif template == "Hnn" or template == "HoloNetNewsWeb":
         m = re.search(r"\{\{" + template + "\|([0-9]+)(\|(.*?)\|(.*?))?}", s)
