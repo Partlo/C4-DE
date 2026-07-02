@@ -528,9 +528,16 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
             s = re.sub(r"^.*?{{CardGameSet\|(set=)?(.*?)\|cards=", "", s)
             s = re.sub(r"\|parent=1(.*?)\|parent=1", "|parent=1\\1", s)
             cs += 1
-        if "SourceContents" in s:
+
+        if "SourceContents-start" in s:
+            s = re.sub(r"^.*?{{SourceContents-start\|(set=|parent=|issue=)?(\{\{.*?)}}( \{\{.*?}}.*?)}}", "*\\2|parent=1}}\\3", s)
+            s = re.sub(r"^.*?{{SourceContents-start\|(set=|parent=|issue=)?('*\[\[.*?]]'*)( \{\{.*?}}.*?)}}", "*\\2}}\\3", s)
+            s = re.sub(r"^.*?{{SourceContents-start\|(set=|parent=|issue=)?(.*?)\n", "", s)
+            s = re.sub(r"\|parent=1(.*?)\|parent=1", "|parent=1\\1", s)
+            cs += 1
+        elif "SourceContents|" in s:
             s = re.sub(r"^.*?{{SourceContents\|(parent=|issue=)?(\{\{.*?)}}( \{\{.*?}}.*?)\|contents=", "*\\2|parent=1}}\\3", s)
-            s = re.sub(r"^.*?{{SourceContents\|(parent=|issue=)?('*\[\[.*?]]'*)( \{\{.*?}}.*?)\|contents=", "*\\2}\\3", s)
+            s = re.sub(r"^.*?{{SourceContents\|(parent=|issue=)?('*\[\[.*?]]'*)( \{\{.*?}}.*?)\|contents=", "*\\2}}\\3", s)
             s = re.sub(r"^.*?{{SourceContents\|(parent=|issue=)?(.*?)\|contents=", "", s)
             s = re.sub(r"\|parent=1(.*?)\|parent=1", "|parent=1\\1", s)
             cs += 1

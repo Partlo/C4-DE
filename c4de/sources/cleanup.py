@@ -39,7 +39,7 @@ REPLACEMENTS = [
 ]
 
 
-EXTRA = "\{+ ?(1st[A-z]*|[Cc]|V?[A-z][od]|[Ff]act|[Bb]ts[Oo]nly|DLC|[Ll]n|[Cc]rp|[Uu]n|[Nn]c[ms]?|[Aa]mbig|[Aa]dvert|[Mm]ap[Pp]oint|[Cc]osmetic|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Uu]nborn|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene|[Cc]rawl) ?[|}]"
+EXTRA = r"\{+ ?(1st[A-z]*|[Cc]|V?[A-z][od]|[Ff]act|[Bb]ts[Oo]nly|DLC|[Ll]n|[Cc]rp|[Uu]n|[Nn]c[ms]?|[Aa]mbig|[Aa]dvert|[Mm]ap[Pp]oint|[Cc]osmetic|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Uu]nborn|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene|[Cc]rawl) ?[|}]"
 
 
 def clean_references(before):
@@ -150,6 +150,8 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     before = re.sub(r"({{[Ss]croll[_ ]?[Bb]ox\|)\*", "{{ScrollBox|\n*", before)
     before = re.sub(r"<small>\((.*?)\)</small>", "{{C|\\1}}", before)
 
+    before = re.sub(r"(\{\{[A-z]+YouTube\|[^\n[\]{}]*?\|[^\n[\]{}]*?) \| ([^\n[\]{}]*?(\|[a-z]+=.*?)?}})", "\\1 &#124; \\2", before)
+
     # removing work= parameters and prioritizing
     before = re.sub(r"(\{\{((?!([wW]ebCite|OfficialSite))[^{}\n])*?\|[^{}\n]+?)\|work=(\[\[[^]]+\|.*?]])?.*?(\|.*?)?}}", "\\1\\4}}", before)
     before = re.sub(r"(\{\{[A-z]+)(\|url=[^\n{}]+?)(\|(subdomain|uk|lang)=[^\n{}]+?)(\|[^\n{}]*?)?}}", "\\1\\3\\2\\5}}", before)
@@ -180,6 +182,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     before = re.sub(r"\[\[(.*?) (.*?)\|('*\1'*)]] \[\[\1 \2\|\2]]", "[[\\1 \\2|\\3 \\2]]", before)
 
     # temp fixes
+    before = re.sub(r"'*\[\[Fortnite]]'* ?&[mn]dash; ?'*\[\[(.*?)(\|.*?)?]]'*", "{{Fortnite|\\2}}", before)
     before = re.sub(r"\|name=\[\[Friends of the Force(\|Friends of the Force|]]): A Star Wars Podcast]*\|", "|name=[[Friends of the Force]]|", before)
     before = re.sub(r"\{\{InsiderCite\|link=(.*?)(.*?)\|''\1''\2\|(.*?)}}", "{{StoryCite|book=\\1|story=\\3}}", before)
     before = re.sub(r"(\{\{([A-z _0-9]+)\|.*?}}) (\{\{1st[a-z]*)\|\{\{\2.*?}}( \{.*?)?\n", "\\1 \\3}}\\4\n", before)
@@ -196,7 +199,13 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     before = re.sub(r">'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \1'*]]'*", ">{{Rebels|\\1}}", before)
     before = re.sub(r"'*\[\[Star Wars Rebels: (Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)]]'*", "\"[[\\1]]\"", before)
     before = re.sub(r"'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \1'*]]'*", "\"[[\\1]]\"", before)
+    before = before.replace("{{Rebels|Siege of Lothal}}", "{{Rebels|The Siege of Lothal}}")
+    before = before.replace("{{EncyclopediaCite|Padmé Amidala Naberrie}}", "{{EncyclopediaCite|Padmé Amidala}}")
     before = re.sub(r">\[\[Star Wars Galaxy Map \(poster\)\|[^\n\]\[]+]]<", ">{{GalaxyMapPoster}}<", before)
+
+    before = re.sub(r">The \[\[Star Wars Galaxy Map \(poster\)\|[^\n\]\[]+]]", ">The {{GalaxyMapPoster}}", before)
+
+    before = re.sub(r"(\*\{\{(StarWarsGalaxyMap|TheStarWarsGalaxy}})}})\n", "*{{StarWarsGalaxyMap}} {{MapPoint}}\n", before)
 
     while re.search(r"\[\[Category:[^\n|\]_]+_", before):
         before = re.sub(r"(\[\[Category:[^\n|\]_]+)_", "\\1 ", before)
@@ -219,11 +228,11 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     return before, infobox, original
 
 
-PAGE_NUMBER_REGEX = "[,;: (]*?(pa?ge?\.?|p?p\.|[Cc]hapters?|ch\.) ?(([0-9-]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)|(,|&.dash;|–|—|and) ?)+(?!])[),. ']*</ref>"
+PAGE_NUMBER_REGEX = r"[,;: (]*?(pa?ge?\.?|p?p\.|[Cc]hapters?|ch\.) ?(([0-9-]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)|(,|&.dash;|–|—|and) ?)+(?!])[),. ']*</ref>"
 
 
 def clear_page_numbers(before, in_src=None):
-    rp = "(['\"]*[\[{]+[^\n\[{]*?[}\]]+['\"]*)" + PAGE_NUMBER_REGEX
+    rp = r"(['\"]*[\[{]+[^\n\[{]*?[}\]]+['\"]*)" + PAGE_NUMBER_REGEX
     if "{{PageNumber}}" in before:
         if in_src:
             x = re.findall(r"((<ref name=\".*?\">'')(.*?)'')", before)

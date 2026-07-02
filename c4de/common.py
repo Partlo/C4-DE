@@ -200,11 +200,11 @@ def fix_disambigs(r, t, text):
         tx = t.replace(' (disambiguation)', '')
         if lowercase:
             tx = tx[0].lower() + tx[1:]
-        text = re.sub(r"(\{\{[Oo]theruses(.*?)\|)title=" + prepare_title(r) + "((\|.*?)?}})",
+        text = re.sub(r"(\{\{[Oo]theruses(.*?)\|)title=" + prepare_title(r) + r"((\|.*?)?}})",
                       f"\\1 {tx}\\3", text)
         text = re.sub(r"(\{\{[Oo]theruses(.*?)\|) ", "\\1", text)
-        text = re.sub(r"(\{\{[Oo]theruses(.*?)\|)\[\[" + prepare_title(r) + "((\|.*?)?]].*?}})", f"\\1[[{t}\\3", text)
-        text = re.sub(r"(\{\{[Yy]oumay\|.*?)\[\[" + prepare_title(r) + "(\|.*?)?]](.*?}})", f"\\1[[{t}\\2]]\\3", text)
+        text = re.sub(r"(\{\{[Oo]theruses(.*?)\|)\[\[" + prepare_title(r) + r"((\|.*?)?]].*?}})", f"\\1[[{t}\\3", text)
+        text = re.sub(r"(\{\{[Yy]oumay\|.*?)\[\[" + prepare_title(r) + r"(\|.*?)?]](.*?}})", f"\\1[[{t}\\2]]\\3", text)
     elif f"[[{r}" in text or f"|{r}|" in text or f"|{r}}}}}" in text:
         log(f"Skipping disambiguation redirect {t}")
     return text
@@ -307,7 +307,7 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
         elif check_text(r.lower(), text.lower()):
             if r.lower() == t.lower() and not (check_text(r, text) or check_text(f"{r[0].lower()}{r[1:].lower()}", text)):
                 continue
-            if section_name:
+            if section_name and section_name != "Lister":
                 print(f"Fixing {section_name} redirect {r} to {t}")
             if section_name and "Appearances" in section_name and "Star Wars Galaxies" in r:
                 continue
@@ -322,27 +322,27 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
                     rep = f"[[{y[0].target}|{y[0].format_text}]]"
                 elif "(" in y[0].target:
                     rep = f"[[{y[0].target}|''{y[0].target.split(' (')[0]}'']]"
-                text = re.sub(r"'?'?\[\[" + x + "(\|.*?)?]]'?'?", rep, text)
+                text = re.sub(r"'?'?\[\[" + x + r"(\|.*?)?]]'?'?", rep, text)
             elif y and not y[0].template:
-                text = re.sub(r"'?'?\[\[" + x + "(\|.*?)?]]'?'?", y[0].original, text)
+                text = re.sub(r"'?'?\[\[" + x + r"(\|.*?)?]]'?'?", y[0].original, text)
             else:
                 if "Ltd" in r or "Limited" in r or " Inc" in r or " LLC" in r or " Co" in r:
                     if re.sub(r",? (Ltd|Limited|Inc|LLC)\.?", "", r) == t:
-                        text = re.sub(r"\[\[" + x + "(\|" + prepare_title(t) + ")?]]", f"[[{t}]]", text)
+                        text = re.sub(r"\[\[" + x + r"(\|" + prepare_title(t) + ")?]]", f"[[{t}]]", text)
 
                 if r == f"{t}s":
                     text = text.replace(f"[[{r}]]", f"[[{t}]]s")
 
-                text = re.sub(r"(''')?('')?\[\[" + x + "\|('')?(" + prepare_title(t) + ")('')?]](s)?(''')?('')?", f"\\1\\2\\3[[\\4]]\\6\\2\\3", text)
+                text = re.sub(r"(''')?('')?\[\[" + x + r"\|('')?(" + prepare_title(t) + ")('')?]](s)?(''')?('')?", f"\\1\\2\\3[[\\4]]\\6\\2\\3", text)
                 if r.startswith("File:"):
-                    text = re.sub(r"\[\[(" + x + ")(\|.*?)?]]", f"[[{t}\\2]]", text)
+                    text = re.sub(r"\[\[(" + x + r")(\|.*?)?]]", f"[[{t}\\2]]", text)
                 elif file or r.replace("Star Wars: Republic: ", "Star Wars: ") == t \
                         or r.startswith("File:") or (overwrite and "/Legends" not in t and "/Canon" not in t):
                     text = re.sub(r"\[\[(" + x + ")(s)?]]", f"[[{t}]]\\2", text)
-                    text = re.sub(r"\[\[" + x + "(\|.*?)]](s)?", f"[[{t}]]\\2", text)
+                    text = re.sub(r"\[\[" + x + r"(\|.*?)]](s)?", f"[[{t}]]\\2", text)
                 else:
-                    text = re.sub(r"(''')?('')?\[\[(" + x + ")]]([A-Za-z']*)", f"\\1[[{t}|\\2\\3\\4]]\\1", text)
-                    text = re.sub(r"\[\[" + x + "(\|.*?)]](s)?", f"[[{t}\\1\\2]]", text)
+                    text = re.sub(r"(''')?('')?\[\[(" + x + r")]]([A-Za-z']*)", f"\\1[[{t}|\\2\\3\\4]]\\1", text)
+                    text = re.sub(r"\[\[" + x + r"(\|.*?)]](s)?", f"[[{t}\\1\\2]]", text)
             if "/" not in r:
                 try:
                     text = re.sub(r"(\{\{(?!(WP|1stID))[A-Za-z0-9]+\|)" + x + "}}", "\\1    " + t + "}}", text).replace("    ", "")

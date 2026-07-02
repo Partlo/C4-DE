@@ -103,9 +103,9 @@ def build_template_types(site):
             m = re.search(r"\|series=([A-z0-9:()\-&/ ]+)[|\n]", txt)
             if m:
                 results["Magazine"][p.title(with_ns=False)] = m.group(1)
-                x = re.search("\|suffix(2)?=(.*?)[|\n]", txt)
+                x = re.search(r"\|suffix(2)?=(.*?)[|\n]", txt)
                 if x:
-                    y = re.search("\|threshold=([0-9]+)", txt)
+                    y = re.search(r"\|threshold=([0-9]+)", txt)
                     if y and x.group(1):
                         results["Suffix2"][p.title()] = (int(y.group(1)), x.group(2))
                     elif y:
@@ -118,6 +118,12 @@ def build_template_types(site):
             if p.title(with_ns=False).lower() in results:
                 print(f"ERROR: Duplicate template name: {p.title(with_ns=False).lower()}")
             results[k].append(p.title(with_ns=False).lower())
+
+    px = Page(site, "Module:BaseCitation").get()
+    departments = re.search(r"DEPARTMENTS = \{\"(.*?)\"}", px)
+    results["Suffix:Departments"] = (departments.group(1) if departments else "").split('", "')
+    encyclopedia = re.search(r"ENCYCLOPEDIA = \{\"(.*?)\"}", px)
+    results["Suffix:Encyclopedia"] = (encyclopedia.group(1) if encyclopedia else "").split('", "')
 
     duration = datetime.now() - now
     print(f"Loaded {len(results)} templates in {duration.seconds} seconds")
@@ -835,6 +841,7 @@ def parse_new_timeline(page: Page, types):
     index = 0
     unknown = None
     text = re.sub(r"(\| ?[A-Z]+ ?)\n\|", "\\1|", text).replace("|simple=1", "").replace("(comic)", "(comic story)")
+    text = re.sub(r"(\{\{MediaRow.*?}})\n ?\|\| *", "|entry=", text)
     for line in text.splitlines():
         if "==Unknown placement==" in line:
             unknown = {}
@@ -842,6 +849,9 @@ def parse_new_timeline(page: Page, types):
         line = re.sub(r"<!--.*?-->", "", line).replace("†", "").strip()
 
         m = re.search(r"^\|(data-sort-value=.*?\|)?(?P<date>.*?)\|(\|?style.*?\||\|- ?class.*?\|)?[ ]*?[A-Z]+[ ]*?\n?\|.*?\|+[* ]*?(?P<full>['\"]*[\[{]+.*?[]}]+['\"]*)( *?(†|‡|Ω|&dagger;))*?$", line)
+        if not m:
+            m = re.search(r"\|entry=(?P<full>.*?)$", line)
+
         if m:
             x = extract_item(m.group('full'), True, "Timeline", types, master=False)
             if x and x.target:
@@ -852,7 +862,7 @@ def parse_new_timeline(page: Page, types):
                 #     if dt:
                 #         timeline = dt.group(1)
                 t = f"{x.issue}-{x.target}" if x.target == "Galaxywide NewsNets" else x.target
-                results[t] = {"index": index, "date": m.group("date"), "timeline": timeline, "adaptation": is_adaptation}
+                results[t] = {"index": index, "date": m.group('date') if 'date' in m.groups() else None, "timeline": timeline, "adaptation": is_adaptation}
                 if unknown is not None:
                     unknown[t] = index
                 elif x.target not in unique:

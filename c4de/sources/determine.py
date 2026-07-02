@@ -548,6 +548,7 @@ TEMPLATE_SUFFIXES = {
     "EncyclopediaCite": ["reference book"],
     "StoryCite": ["short story"],
     "CWACite": ["comic story", "comic"],
+    "GOA": ["episode"],
     "GoC": ["episode", "Galaxy of Creatures"],
     "GalacticPals": ["episode", "Galactic Pals"],
     "InsiderCite": ["Star Wars Insider", "article"],

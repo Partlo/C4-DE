@@ -10,9 +10,14 @@ import requests
 import html
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
 from pywikibot import Site, Page, Category, User
 
 from c4de.common import error_log, log
+from c4de.protocols.edelweiss import build_driver
 
 ANNOUNCEMENTS = "announcements"
 ADMIN_REQUESTS = "automated-reports"
@@ -648,7 +653,13 @@ def check_audible(cache: Dict[str, List[str]]):
     print("Checking Audible")
     r = None
     try:
-        r = requests.get("https://www.audible.com/search?keywords=star+wars&sort=pubdate-desc-rank&pageSize=50&feature_six_browse-bin=18685580011&feature_twelve_browse-bin=18685552011", timeout=15).text
+        driver = build_driver(headless=False, firefox=True)
+        driver.get("https://www.audible.com/search?keywords=star+wars&sort=pubdate-desc-rank&pageSize=50&feature_six_browse-bin=18685580011&feature_twelve_browse-bin=18685552011")
+        time.sleep(10)
+
+        WebDriverWait(driver, 30).until(EC.visibility_of_element_located((By.CLASS_NAME, "productListItem")))
+        r = driver.page_source
+        driver.close()
     except Exception as e:
         error_log(type(e))
     if not r:
@@ -665,7 +676,8 @@ def check_audible(cache: Dict[str, List[str]]):
             link = h.find("a")
             if "Star Wars" not in link.text:
                 continue
-            if link['href'] in cache["Audible"]:
+            href = link['href'].split("?")[0]
+            if href in cache["Audible"]:
                 continue
 
             date = x.find(class_="releaseDateLabel")
@@ -676,7 +688,7 @@ def check_audible(cache: Dict[str, List[str]]):
                     continue
             except Exception as e:
                 print(f"Cannot parse date string {date_text}: {e}")
-            data[link['href']] = {"text": link.text, "date": date_text}
+            data[href] = {"text": link.text, "date": date_text}
 
     results = []
     for link, v in data.items():
