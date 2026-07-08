@@ -148,11 +148,16 @@ def check_url(x, archives, template, new_data, a):
     y = re.search(r"\|archiveurl=(.*?)(\|.*?)?}}", a)
     if not (y and y.group(1)):
         y = re.search(r"\|archivedate=(.*?)(\|.*?)?}}", a)
+    values = re.findall(r"\|archivefile[0-9]*=(File:.*?)[|}]", a)
+    if y and y.group(1):
+        values.insert(0, y.group(1))
+    full_value = "|".join(values)
 
     if not y and template == "Hyperspace":
         return
-    print("NEW:" if y is None else "Found:", template, x, a, y)
-    new_data[template][x] = {"value": y.group(1) if y and y.group(1) else None, "full": a}
+    print("NEW:" if not full_value else "Found:", template, x, a, full_value)
+
+    new_data[template][x] = {"value": full_value or None, "full": a}
 
 
 def handle_parameters(ux, a, param):

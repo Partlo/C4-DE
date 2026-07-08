@@ -118,7 +118,8 @@ def handle_entry(item: WebElement, sku_list, search_term):
     body = item.find_element(By.CSS_SELECTOR, "div[class^='productRowBody']")
     publisher_line = item.find_element(By.CSS_SELECTOR, "div[class^='itemHeader']")
     publisher = re.sub(r"^[0-9]+ \([0-9]+\)\.? (.*?)$", "\\1", publisher_line.text.strip().splitlines()[0])
-    no_image = bool(body.find_elements(By.CSS_SELECTOR, "div[class^='noJacketImage']"))
+    # no_image = bool(body.find_elements(By.CSS_SELECTOR, "div[class^='noJacketImage']"))
+    has_image = bool(body.find_elements(By.CSS_SELECTOR, "img"))
 
     info = body.find_element(By.CSS_SELECTOR, "div[class^='biblioOneAndTwo']")
     if not info:
@@ -166,7 +167,7 @@ def handle_entry(item: WebElement, sku_list, search_term):
         "title": title.replace("[", "(").replace("]", ")"),
         "subTitle": subtitle,
         "publicationDate": date.strip(),
-        "hasImage": not no_image,
+        "hasImage": has_image,
         "isbn": isbn.strip(),
         "sku": sku.strip(),
         "status": status,
@@ -450,6 +451,8 @@ def analyze_products(site, products: List[dict], search_terms):
                 results["newImages"].append((item['sku'], f"{title} - {url}{archive_sku(item['sku'])}"))
             elif any([d == item_date for d in page_dates]):
                 log(f"No date changes found for {page.title()}")
+            elif "Canceled" in date_strs and (item_date - datetime.now()).days > 3650:
+                log(f"Canceled product {page.title()} has placeholder date of {item['publicationDate']}")
             elif past and by_isbn:
                 log(f"Reprint {item['isbn']} already recorded on {page.title()}")
             elif by_isbn and different_isbn_and_already_listed(text, item['isbn']):

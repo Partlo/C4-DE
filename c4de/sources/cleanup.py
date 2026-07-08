@@ -83,7 +83,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
         for i in ["|", "}"]:
             before = before.replace(f"|title=''{z}''{i}", f"|italics=1{i}")
             if f"Otheruses|title={z}" in before:
-                before = re.sub(r"(\{\{Top.*?)\|title=" + z + "(\|.*?)?}}", "\\1\\2", before)
+                before = re.sub(r"(\{\{Top.*?)\|title=" + z + r"(\|.*?)?}}", "\\1\\2", before)
             else:
                 before = before.replace(f"|title={z}{i}", f"{i}")
     if y:

@@ -254,3 +254,5 @@
 **Handling DatapadCite
 **Handling separate subpages for LEGO and crossover material
 **Assorted fixes
+*'''4.6.10''': July 8, 2026
+**Handling archivefile recording for ArchiveAccess management
