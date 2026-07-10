@@ -151,7 +151,7 @@ def build_missing_and_new(page, types, archives, patterns, new_data, skip):
             if template in ["Twitter", "Bluesky", "Threads"]:
                 for i in re.findall(r"(\{\{" + template + r".*?\|/?((post|statuse?s?)/[^|\n}]+?)/*(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text):
                     zx.append((i[0], i[1]))
-            if template in ["ArtStation", "Blogspot", "Bluesky", "DeviantArt", "Facebook", "Instagram", "Tumblr", "Twitter"]:
+            if template in ["ArtStation", "Blogspot", "Bluesky", "DeviantArt", "Facebook", "Instagram", "Tumblr", "Twitter", "WordPress"]:
                 for i in re.findall(r"(\{\{" + template + r"(\|[^\n}]*?)?\|(subdomain|username)=/?([^|\n}]+?)/*(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text):
                     if "|url=" not in i[0]:
                         zx.append((i[0], i[3]))

@@ -256,3 +256,6 @@
 **Assorted fixes
 *'''4.6.10''': July 8, 2026
 **Handling archivefile recording for ArchiveAccess management
+*'''4.7.0''': July 10, 2026
+**Significant overhaul of the archive crawler, expanding its coverage to archivefile and social media templates
+**Fixed Fortnite handler and other minor bugs
