@@ -63,8 +63,8 @@ def analyze(*args):
             text = re.sub(r"\|archivedate=[0-9]+-[0-9]+-[0-9]+", "", text)
             text = re.sub(r"(\{\{.*?\|url=[^\n}]+?)\{\{C\|([^\n{]+?)}}(\|[^\n{]+?)?}}", "\\1<small>(\\2)</small>\\3}}", text)
 
-            text, archive_data = clean_archive_usages(page, text, archive_data)
-            text, archive_data = clean_archive_usages(page, text, archive_data)
+            text, archive_data = clean_archive_usages(page, text, archive_data, redo=redo)
+            text, archive_data = clean_archive_usages(page, text, archive_data, redo=redo)
             text = text.replace("|title=''{{PAGENAME}}''}}", "|italics=1}}").replace("|domain=com|", "|").replace("|}}", "}}")
             text = re.sub(r"(\|[a-z]+)=[0-9]=", "\\1=", text)
             text = re.sub(r"(?<!WP)\|(.*?)( \(.*?\))\|\1([|}])", "|\\1\\2\\3", text)

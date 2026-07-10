@@ -5,18 +5,18 @@ from c4de.sources.archive import *
 def task():
     site = Site()
     skip = []
-    archives = {}
+    archives, patterns = {}, {}
     types = load_template_types(site)
     data, done = {}, []
     # for c in [Category(site, "Social media citations with missing shared permanent archival links")]:
     for c in [Category(site, "Pages with missing shared permanent archival links"), *Category(site, "Unarchived URLs").subcategories()]:
         for p in c.articles():
-            if p.title() in done:
+            if p.title() in done or p.title() == "User:Editoronthewiki/Workbench":
                 continue
-            data = build_missing_and_new(p, types, archives, data, skip)
+            data = build_missing_and_new(p, types, archives, patterns, data, skip)
             done.append(p.title())
 
-    to_check = build_to_check(site, data)
+    to_check = build_to_check(site, data, patterns)
     to_check = {k: v for k, v in to_check.items() if v}
 
     current = sum(len(v) for k, v in to_check.items())
@@ -39,7 +39,7 @@ def task():
                             to_check[t].pop(k)
         current = sum(len(v) for k, v in to_check.items())
 
-    add_data_to_archive(site, data, archives, True)
+    add_data_to_archive(site, data, archives, False)
 
 
 if __name__ == "__main__":

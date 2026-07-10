@@ -182,7 +182,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     before = re.sub(r"\[\[(.*?) (.*?)\|('*\1'*)]] \[\[\1 \2\|\2]]", "[[\\1 \\2|\\3 \\2]]", before)
 
     # temp fixes
-    before = re.sub(r"'*\[\[Fortnite]]'* ?&[mn]dash; ?'*\[\[(.*?)(\|.*?)?]]'*", "{{Fortnite|\\2}}", before)
+    before = re.sub(r"'*\[\[Fortnite]]'* ?&[mn]dash; ?'*\[\[(.*?)(\|.*?)?]]'*", "{{Fortnite|\\1}}", before)
     before = re.sub(r"\|name=\[\[Friends of the Force(\|Friends of the Force|]]): A Star Wars Podcast]*\|", "|name=[[Friends of the Force]]|", before)
     before = re.sub(r"\{\{InsiderCite\|link=(.*?)(.*?)\|''\1''\2\|(.*?)}}", "{{StoryCite|book=\\1|story=\\3}}", before)
     before = re.sub(r"(\{\{([A-z _0-9]+)\|.*?}}) (\{\{1st[a-z]*)\|\{\{\2.*?}}( \{.*?)?\n", "\\1 \\3}}\\4\n", before)
