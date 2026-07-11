@@ -829,7 +829,7 @@ def match_by_url(o: Item, url: str, data: Dict[str, Item], urls: Dict[str, List[
 
     z = check_matches(o, ad, old_versions, new_versions, possible, partial_matches)
     if z:
-        print(f"URL fell through exact URL matching ({len(urls.get(url, []))}): {o.original}")
+        print(f"URL {url} fell through exact URL matching ({len(urls.get(url, []))}): {o.original}")
         return z
 
     for k, d in data.items():
@@ -842,8 +842,9 @@ def match_by_url(o: Item, url: str, data: Dict[str, Item], urls: Dict[str, List[
 
     z = check_matches(o, ad, old_versions, new_versions, possible, partial_matches)
     if z:
-        print(f"URL fell through second exact URL matching ({len(urls.get(url, []))}): {o.original}")
+        print(f"URL {url} fell through second exact URL matching ({len(urls.get(url, []))}): {o.original}")
         return z
+    return None
 
 
 def check_matches(o: Item, ad, old_versions, new_versions, possible, partial_matches):

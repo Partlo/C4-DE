@@ -513,9 +513,10 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
                         by_parent[x.parent] = []
                     by_parent[x.parent].append(x)
                 if x.url:
-                    if x.url not in urls:
-                        urls[x.url] = []
-                    urls[x.url].append(x)
+                    for u in {x.url, x.url.lower()}:
+                        if u not in urls:
+                            urls[u] = []
+                        urls[u].append(x)
                 if x.alternate_url:
                     if x.alternate_url not in urls:
                         urls[x.alternate_url] = []

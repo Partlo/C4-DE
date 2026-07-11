@@ -150,6 +150,8 @@ def is_external_link(d: ItemId, o: Item, unknown):
             o.publisher_listing = True
         unknown.append(o)
         return True
+    elif d and d.master.master_page and ("Web/2" in d.master.master_page or "Web/1" in d.master.master_page):
+        return False
     elif d and d.master.template and "ToyCite" in d.master.template:
         return False
     elif not d and o.original.replace("*", "").startswith("[http"):

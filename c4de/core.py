@@ -34,7 +34,8 @@ from c4de.protocols.edelweiss import run_edelweiss_protocol, calculate_isbns_for
 from c4de.protocols.rss import check_rss_feed, check_latest_url, check_wookieepedia_feeds, check_sw_news_page, \
     check_review_board_nominations, check_policy, check_consensus_duration, check_user_rights_nominations, \
     check_blog_list, check_ea_news, check_unlimited, check_ubisoft_news, compare_site_map, handle_site_map, \
-    check_target_url, compile_tracked_urls, check_title_formatting, check_hunters_news, check_ilm, check_audible
+    check_target_url, compile_tracked_urls, check_title_formatting, check_hunters_news, check_ilm, check_audible, \
+    check_marvel_page
 
 from c4de.sources.analysis import get_analysis_from_page
 from c4de.sources.archive import create_archive_categories
@@ -237,7 +238,8 @@ class C4DE_Bot(commands.Bot):
                 self.run_canon_legends_switch.start()
                 self.check_for_sources_rebuild.start()
                 self.load_isbns.start()
-                self.manage_archive.start()
+                # self.manage_archive.start()
+                self.check_marvel.start()
                 self.check_audible_listings.start()
                 await self.build_sources()
                 self.check_index_requests.start()
@@ -966,8 +968,8 @@ class C4DE_Bot(commands.Bot):
 
     @tasks.loop(minutes=30)
     async def check_for_sources_rebuild(self):
+        log("Checking for source changes")
         try:
-            log("Checking for source changes")
             if self.have_sources_changed():
                 await self.build_sources()
         except Exception as e:
@@ -1156,7 +1158,7 @@ class C4DE_Bot(commands.Bot):
             await message.add_reaction(EXCLAMATION)
             await message.channel.send("Encountered error while analyzing page")
 
-    @tasks.loop(minutes=5)
+    @tasks.loop(minutes=15)
     async def check_index_requests(self):
         for page in Category(self.site, "Index requests").articles():
             try:
@@ -1382,34 +1384,40 @@ class C4DE_Bot(commands.Bot):
     @tasks.loop(hours=4)
     async def check_senate_hall_threads(self):
         log("Archiving Senate Hall threads")
-        archive_stagnant_senate_hall_threads(self.site, self.timezone_offset)
+        try:
+            archive_stagnant_senate_hall_threads(self.site, self.timezone_offset)
 
-        r = requests.get("https://www.starwars.com/star-wars-galaxy-map")
-        # current = "https://cdnvideo.dolimg.com/cdn_assets/ff2066584bf86e5376fdfc3b26f0479b8795c403.pdf"
-        current = "https://cdnvideo.dolimg.com/cdn_assets/02834527f17e4165d39a069a88161e5e330cd883.pdf"
-        current_image = "https://lumiere-a.akamaihd.net/v1/images/star_wars_galaxy_map_4000x4000_20250625_ccff9272.jpeg"
-        current_image = "https://lumiere-a.akamaihd.net/v1/images/star_wars_galaxy_map_4000x4000_20251009_3c4d0e08.jpeg"
-        x = re.search(r"<a.*?href=\"(.*?)\".*?title=\"Appendix of Star Systems", r.text)
-        if x and x.group(1) != current:
-            await self.text_channel(UPDATES).send(f"[New version of the Galaxy Map Appendix detected!]({x.group(1)})")
-            await self.text_channel("astrography").send(f"[New version of the Galaxy Map Appendix detected!]({x.group(1)})")
+            r = requests.get("https://www.starwars.com/star-wars-galaxy-map")
+            # current = "https://cdnvideo.dolimg.com/cdn_assets/ff2066584bf86e5376fdfc3b26f0479b8795c403.pdf"
+            current = "https://cdnvideo.dolimg.com/cdn_assets/02834527f17e4165d39a069a88161e5e330cd883.pdf"
+            current_image = "https://lumiere-a.akamaihd.net/v1/images/star_wars_galaxy_map_4000x4000_20250625_ccff9272.jpeg"
+            current_image = "https://lumiere-a.akamaihd.net/v1/images/star_wars_galaxy_map_4000x4000_20251009_3c4d0e08.jpeg"
+            x = re.search(r"<a.*?href=\"(.*?)\".*?title=\"Appendix of Star Systems", r.text)
+            if x and x.group(1) != current:
+                await self.text_channel(UPDATES).send(f"[New version of the Galaxy Map Appendix detected!]({x.group(1)})")
+                await self.text_channel("astrography").send(f"[New version of the Galaxy Map Appendix detected!]({x.group(1)})")
+        except Exception as e:
+            error_log(type(e), e.args)
 
     @tasks.loop(hours=1)
     async def check_spoiler_templates_and_cleanup(self):
         if datetime.now().hour != 6:
             return
         log("Scheduled Operation: Updating unused files and double redirects")
-        self.update_unused_files()
-        self.fix_double_redirects()
+        try:
+            self.update_unused_files()
+            self.fix_double_redirects()
 
-        log("Scheduled Operation: Checking {{Spoiler}} templates")
-        for page in Category(self.site, "Articles with expired spoiler notices").articles(namespaces=0):
-            try:
-                tv_dates, default_show = self.extract_tv_spoiler_data()
-                remove_spoiler_tags_from_page(self.site, page, tv_dates, default_show, offset=self.timezone_offset)
-            except Exception as e:
-                error_log(f"Encountered {type(e)} while removing spoiler template from {page.title()}", e)
-                await self.text_channel(COMMANDS).send(f"Encountered {type(e)} while removing expired spoiler template from {page.title()}. Please check template usage for anomalies.")
+            log("Scheduled Operation: Checking {{Spoiler}} templates")
+            for page in Category(self.site, "Articles with expired spoiler notices").articles(namespaces=0):
+                try:
+                    tv_dates, default_show = self.extract_tv_spoiler_data()
+                    remove_spoiler_tags_from_page(self.site, page, tv_dates, default_show, offset=self.timezone_offset)
+                except Exception as e:
+                    error_log(f"Encountered {type(e)} while removing spoiler template from {page.title()}", e)
+                    await self.text_channel(COMMANDS).send(f"Encountered {type(e)} while removing expired spoiler template from {page.title()}. Please check template usage for anomalies.")
+        except Exception as e:
+            error_log(type(e), e.args)
 
     def extract_tv_spoiler_data(self):
         data = re.findall(r"\| ([A-z]+) ([0-9]+[AB]?) = .*?\|([0-9]+-[0-9]+-[0-9]+)\|",
@@ -1424,24 +1432,27 @@ class C4DE_Bot(commands.Bot):
 
     @tasks.loop(hours=1)
     async def load_isbns(self):
-        if datetime.now().hour != 7:
-            if not self.maintenance_cats:
-                self.reload_maintenance_categories()
-                log(f"{len(self.maintenance_cats)} maintenance categories")
-            return
-        page = Page(self.site, "Template:ISBN/data")
-        last_revision = next(r for r in page.revisions(reverse=True, total=10) if r["user"] == "JocastaBot")
-        time_since_last_edit = (datetime.now() + timedelta(hours=self.timezone_offset)) - last_revision['timestamp']
-        if time_since_last_edit.total_seconds() < (60 * 60 * 6):
-            log(f"Skipping ISBN reload, last edit was {last_revision['timestamp']}")
-            return
-        log("Scheduled Operation: Calculating ISBNs")
-        calculate_isbns_for_all_pages(self.site)
-        self.reload_infoboxes()
-        self.reload_auto_categories()
-        self.reload_maintenance_categories()
-        self.reload_templates()
-        log(f"{len(self.maintenance_cats)} maintenance categories")
+        try:
+            if datetime.now().hour != 7:
+                if not self.maintenance_cats:
+                    self.reload_maintenance_categories()
+                    log(f"{len(self.maintenance_cats)} maintenance categories")
+                return
+            page = Page(self.site, "Template:ISBN/data")
+            last_revision = next(r for r in page.revisions(reverse=True, total=10) if r["user"] == "JocastaBot")
+            time_since_last_edit = (datetime.now() + timedelta(hours=self.timezone_offset)) - last_revision['timestamp']
+            if time_since_last_edit.total_seconds() < (60 * 60 * 6):
+                log(f"Skipping ISBN reload, last edit was {last_revision['timestamp']}")
+                return
+            log("Scheduled Operation: Calculating ISBNs")
+            calculate_isbns_for_all_pages(self.site)
+            self.reload_infoboxes()
+            self.reload_auto_categories()
+            self.reload_maintenance_categories()
+            self.reload_templates()
+            log(f"{len(self.maintenance_cats)} maintenance categories")
+        except Exception as e:
+            error_log(type(e), e.args)
 
     @tasks.loop(hours=1)
     async def check_edelweiss(self):
@@ -1453,18 +1464,21 @@ class C4DE_Bot(commands.Bot):
             self.run_edelweiss = True
             return
         log("Scheduled Operation: Checking Edelweiss")
-        messages, reprints = run_edelweiss_protocol(self.site, self.edelweiss_cache, True)
-        if reprints:
-            messages.append("Errors encountered while adding reprint ISBNs to pages:")
-            messages += reprints
-        with open(EDELWEISS_CACHE, "w") as f:
-            f.writelines(json.dumps(self.edelweiss_cache))
-        for m in messages:
-            try:
-                await self.text_channel(UPDATES).send(m)
-            except Exception as e:
-                print(m)
-                print(e)
+        try:
+            messages, reprints = run_edelweiss_protocol(self.site, self.edelweiss_cache, True)
+            if reprints:
+                messages.append("Errors encountered while adding reprint ISBNs to pages:")
+                messages += reprints
+            with open(EDELWEISS_CACHE, "w") as f:
+                f.writelines(json.dumps(self.edelweiss_cache))
+            for m in messages:
+                try:
+                    await self.text_channel(UPDATES).send(m)
+                except Exception as e:
+                    print(m)
+                    print(e)
+        except Exception as e:
+            error_log(type(e), e.args)
 
     def prepare_link(self, link):
         return parse.quote_from_bytes(link.replace(' ', '_').encode(self.site.encoding()), safe='').replace('%3A', ':')
@@ -1472,6 +1486,7 @@ class C4DE_Bot(commands.Bot):
     @tasks.loop(minutes=30)
     async def check_policy(self):
         if self.refresh == 2:
+            log("Reloading site")
             self.reload_site()
             self.refresh = 0
         else:
@@ -1496,96 +1511,105 @@ class C4DE_Bot(commands.Bot):
     @tasks.loop(minutes=15)
     async def check_membership_nominations(self):
         log("Checking board membership nominations")
-        current_nominations, interested = check_review_board_nominations(self.site)
-        messages = []
-        for board, noms in current_nominations.items():
-            for user in noms:
-                if user not in self.board_nominations["Nominations"][board]:
-                    username = self.prepare_link(user)
-                    emote = self.emoji_by_name(BOARD_EMOTES[board])
-                    messages.append((True, board, f"{emote} **{user} has been [nominated for membership in the {board}!](<{SITE_URL}/Wookieepedia:Review_board_membership_nominations#{username}>)**"))
+        try:
+            current_nominations, interested = check_review_board_nominations(self.site)
+            messages = []
+            for board, noms in current_nominations.items():
+                for user in noms:
+                    if user not in self.board_nominations["Nominations"][board]:
+                        username = self.prepare_link(user)
+                        emote = self.emoji_by_name(BOARD_EMOTES[board])
+                        messages.append((True, board, f"{emote} **{user} has been [nominated for membership in the {board}!](<{SITE_URL}/Wookieepedia:Review_board_membership_nominations#{username}>)**"))
 
-        for board, noms in interested.items():
-            for user in list(noms.keys()):
-                if user not in self.board_nominations["Interested"][board]:
-                    emote = self.emoji_by_name("grogu")
-                    messages.append((False, board, f"{emote} **{user} has [expressed interest in joining the {board}!](<{SITE_URL}/Wookieepedia:Review_board_recruitment>)**"))
-                else:
-                    noms[user] = self.board_nominations["Interested"][board][user]
-                    if datetime.now().hour == 12 and datetime.now().minute <= 15:
-                        last_checked = self.board_nominations["Interested"][board][user]
-                        as_date = datetime.strptime(last_checked, "%Y-%m-%d")
-                        diff = (datetime.now() - as_date).days
-                        if diff > 0 and diff % 30 == 0:
-                            emote = self.emoji_by_name("grogu")
-                            messages.append((False, board, f"{emote} {diff} days have passed since **{user}** expressed interest in joining the {board}; please provide feedback if this has not already been done"))
+            for board, noms in interested.items():
+                for user in list(noms.keys()):
+                    if user not in self.board_nominations["Interested"][board]:
+                        emote = self.emoji_by_name("grogu")
+                        messages.append((False, board, f"{emote} **{user} has [expressed interest in joining the {board}!](<{SITE_URL}/Wookieepedia:Review_board_recruitment>)**"))
+                    else:
+                        noms[user] = self.board_nominations["Interested"][board][user]
+                        if datetime.now().hour == 12 and datetime.now().minute <= 15:
+                            last_checked = self.board_nominations["Interested"][board][user]
+                            as_date = datetime.strptime(last_checked, "%Y-%m-%d")
+                            diff = (datetime.now() - as_date).days
+                            if diff > 0 and diff % 30 == 0:
+                                emote = self.emoji_by_name("grogu")
+                                messages.append((False, board, f"{emote} {diff} days have passed since **{user}** expressed interest in joining the {board}; please provide feedback if this has not already been done"))
 
-        for (announce, board, message) in messages:
-            try:
-                if announce:
-                    await self.text_channel(ANNOUNCEMENTS).send(message)
-                await self.text_channel(board.lower()).send(message)
-            except Exception as e:
-                error_log(f"Encountered {type(e)} while checking board nominations", e)
+            for (announce, board, message) in messages:
+                try:
+                    if announce:
+                        await self.text_channel(ANNOUNCEMENTS).send(message)
+                    await self.text_channel(board.lower()).send(message)
+                except Exception as e:
+                    error_log(f"Encountered {type(e)} while checking board nominations", e)
 
-        self.board_nominations = {"Nominations": current_nominations, "Interested": interested}
+            self.board_nominations = {"Nominations": current_nominations, "Interested": interested}
 
-        with open(BOARD_CACHE, "w") as f:
-            f.writelines(json.dumps(self.board_nominations, indent=4))
+            with open(BOARD_CACHE, "w") as f:
+                f.writelines(json.dumps(self.board_nominations, indent=4))
+        except Exception as e:
+            error_log(type(e), e.args)
 
     @tasks.loop(minutes=15)
     async def check_rights_nominations(self):
         log("Checking user rights nominations")
-        current_nominations = check_user_rights_nominations(self.site)
-        messages = []
-        for right, noms in current_nominations.items():
-            for user in noms:
-                if user not in self.rights_cache[right]:
-                    username = self.prepare_link(user)
-                    if right == "Removal":
-                        messages.append(f"📢 **{user} has been nominated for removal of their user rights. Please weigh in [here](<{SITE_URL}/Wookieepedia:Requests_for_removal_of_user_rights/{username}>)**")
-                    else:
-                        messages.append(f"📢 **{user} has been nominated for {right} rights! Cast your vote [here!](<{SITE_URL}/Wookieepedia:Requests_for_user_rights/{right}/{username}>)**")
+        try:
+            current_nominations = check_user_rights_nominations(self.site)
+            messages = []
+            for right, noms in current_nominations.items():
+                for user in noms:
+                    if user not in self.rights_cache[right]:
+                        username = self.prepare_link(user)
+                        if right == "Removal":
+                            messages.append(f"📢 **{user} has been nominated for removal of their user rights. Please weigh in [here](<{SITE_URL}/Wookieepedia:Requests_for_removal_of_user_rights/{username}>)**")
+                        else:
+                            messages.append(f"📢 **{user} has been nominated for {right} rights! Cast your vote [here!](<{SITE_URL}/Wookieepedia:Requests_for_user_rights/{right}/{username}>)**")
 
-        for message in messages:
-            await self.text_channel(ANNOUNCEMENTS).send(message)
+            for message in messages:
+                await self.text_channel(ANNOUNCEMENTS).send(message)
 
-        self.rights_cache = current_nominations
+            self.rights_cache = current_nominations
 
-        with open(RIGHTS_CACHE, "w") as f:
-            f.writelines(json.dumps(self.rights_cache, indent=4))
+            with open(RIGHTS_CACHE, "w") as f:
+                f.writelines(json.dumps(self.rights_cache, indent=4))
+        except Exception as e:
+            error_log(type(e), e.args)
 
     @tasks.loop(minutes=30)
     async def check_consensus_statuses(self):
         log("Checking status of active Consensus Track and Trash Compactor votes")
-        cts_and_tcs = check_consensus_duration(self.site, self.timezone_offset)
-        overdue = []
-        for page, duration in cts_and_tcs.items():
-            if page in self.overdue_cts or duration.days >= 14:
-                overdue.append(page)
+        try:
+            cts_and_tcs = check_consensus_duration(self.site, self.timezone_offset)
+            overdue = []
+            for page, duration in cts_and_tcs.items():
+                if page in self.overdue_cts or duration.days >= 14:
+                    overdue.append(page)
 
-        remove = []
-        skip = []
-        for m, x in self.admin_messages.items():
-            if x.startswith("Forum:CT:"):
-                if x in overdue:
-                    skip.append(x)
-                else:
-                    remove.append(m)
+            remove = []
+            skip = []
+            for m, x in self.admin_messages.items():
+                if x.startswith("Forum:CT:"):
+                    if x in overdue:
+                        skip.append(x)
+                    else:
+                        remove.append(m)
 
-        for page in overdue:
-            if page in self.overdue_cts or page in skip:
-                continue
-            link = self.prepare_link(page)
-            message = f"**{page}** has been open for 14 days and can now be archived\n<{SITE_URL}/{link}>"
-            msg = await self.text_channel(ADMIN_REQUESTS).send(message)
-            self.admin_messages[msg.id] = page
-        self.overdue_cts = overdue
-        for i in remove:
-            self.admin_messages.pop(i)
+            for page in overdue:
+                if page in self.overdue_cts or page in skip:
+                    continue
+                link = self.prepare_link(page)
+                message = f"**{page}** has been open for 14 days and can now be archived\n<{SITE_URL}/{link}>"
+                msg = await self.text_channel(ADMIN_REQUESTS).send(message)
+                self.admin_messages[msg.id] = page
+            self.overdue_cts = overdue
+            for i in remove:
+                self.admin_messages.pop(i)
 
-        with open(ADMIN_CACHE, "w") as f:
-            f.writelines(json.dumps(self.admin_messages, indent=4))
+            with open(ADMIN_CACHE, "w") as f:
+                f.writelines(json.dumps(self.admin_messages, indent=4))
+        except Exception as e:
+            error_log(type(e), e.args)
 
     CHANNEL_FILTERS = {
         "the-high-republic": ["high republic"],
@@ -1651,12 +1675,13 @@ class C4DE_Bot(commands.Bot):
     @tasks.loop(minutes=15)
     async def check_deleted_pages(self):
         log("Checking deleted pages")
-
         try:
             update = []
+            exists = {}
             for message_id, title in self.admin_messages.items():
-                p = Page(self.site, title)
-                if not p.exists():
+                if title not in exists:
+                    exists[title] = Page(self.site, title).exists()
+                if not exists[title]:
                     update.append(message_id)
             if not update:
                 return
@@ -1692,7 +1717,6 @@ class C4DE_Bot(commands.Bot):
     @tasks.loop(minutes=15)
     async def check_files_to_be_renamed(self):
         log("Checking FTBR")
-
         try:
             files = [p for p in Category(self.site, "Files to be renamed").articles()]
             new_files = []
@@ -1716,25 +1740,27 @@ class C4DE_Bot(commands.Bot):
     @tasks.loop(minutes=5)
     async def check_internal_rss(self, _=None):
         log("Checking internal RSS feeds")
-
         try:
-            messages_to_post, to_delete = check_wookieepedia_feeds(self.site, self.internal_rss_cache)
-        except Exception as e:
-            await self.report_error(f"Encountered {type(e)} while checking internal RSS", e)
-            return
-
-        for channel, message, d_page in messages_to_post:
             try:
-                m = await self.text_channel(channel).send(message[:4000])
-                if d_page:
-                    self.admin_messages[m.id] = d_page
+                messages_to_post, to_delete = check_wookieepedia_feeds(self.site, self.internal_rss_cache)
             except Exception as e:
-                await self.report_error(f"RSS: {message}", type(e), e)
+                await self.report_error(f"Encountered {type(e)} while checking internal RSS", e)
+                return
 
-        with open(ADMIN_CACHE, "w") as f:
-            f.writelines(json.dumps(self.admin_messages, indent=4))
-        with open(INTERNAL_RSS_CACHE, "w") as f:
-            f.writelines(json.dumps({k: v[-50:] for k, v in self.internal_rss_cache.items()}, indent=4))
+            for channel, message, d_page in messages_to_post:
+                try:
+                    m = await self.text_channel(channel).send(message[:4000])
+                    if d_page:
+                        self.admin_messages[m.id] = d_page
+                except Exception as e:
+                    await self.report_error(f"RSS: {message}", type(e), e)
+
+            with open(ADMIN_CACHE, "w") as f:
+                f.writelines(json.dumps(self.admin_messages, indent=4))
+            with open(INTERNAL_RSS_CACHE, "w") as f:
+                f.writelines(json.dumps({k: v[-50:] for k, v in self.internal_rss_cache.items()}, indent=4))
+        except Exception as e:
+            error_log(type(e), e.args)
 
     async def handle_target_url_check(self, message: Message, command: dict):
         if "starwars.com" not in command['url']:
@@ -1940,52 +1966,83 @@ class C4DE_Bot(commands.Bot):
         return db
 
     @tasks.loop(hours=1)
-    async def check_audible_listings(self):
-        if datetime.now().hour != 13:
+    async def check_marvel(self):
+        if datetime.now().hour != 15:
             return
-        log("Scheduled Operation: Checking Audible")
-        messages = check_audible(self.external_rss_cache["sites"])
-        with open(EXTERNAL_RSS_CACHE, "w") as f:
-            f.writelines(json.dumps({k: {i: c[-250:] for i, c in v.items()} for k, v in self.external_rss_cache.items()}, indent=4))
-        for m in messages:
-            try:
-                await self.text_channel(UPDATES).send(m)
-            except Exception as e:
-                print(m)
-                print(e)
-
-    @tasks.loop(minutes=10)
-    async def check_external_rss(self):
-        log("Checking external RSS feeds")
-
-        messages_to_post = []
-        templates = []
-
-        db_archive = self.parse_archive("Databank")
-        new_db_entries = []
-        updated_db_entries = {}
-        for site, site_data in self.rss_data["sites"].items():
-            try:
-                updated_db_entries = await self.check_sites(site, site_data, messages_to_post, db_archive, templates, new_db_entries)
-                if updated_db_entries:
-                    break
-            except Exception as e:
-                error_log(f"Encountered {type(e)} while checking RSS for {site}", e)
-
-        for site, site_data in self.rss_data["YouTube"].items():
+        log("Scheduled Operation: Checking Marvel")
+        try:
+            site_data = self.rss_data["sites"]["Marvel.com"]
+            messages_to_post, templates = [], []
             archive = self.parse_archive(site_data["template"])
-            messages = check_rss_feed(
-                f"https://www.youtube.com/feeds/videos.xml?channel_id={site_data['channelId']}",
-                self.external_rss_cache["YouTube"], site, "<h1 class=\"title.*?><.*?>(.*?)</.*?></h1>", site_data.get("nonSW", False))
+            messages = check_marvel_page(self.external_rss_cache["sites"])
+            with open(EXTERNAL_RSS_CACHE, "w") as f:
+                f.writelines(json.dumps({k: {i: c[-250:] for i, c in v.items()} for k, v in self.external_rss_cache.items()}, indent=4))
             for m in reversed(messages):
                 try:
-                    msg, d, template = await self.prepare_new_rss_message(m, "https://www.youtube.com", site_data, True, archive)
+                    msg, d, template = await self.prepare_new_rss_message(m, "https://www.marvel.com", site_data, True,
+                                                                          archive)
                     messages_to_post += msg
                     templates.append((d, template))
                 except Exception as e:
                     error_log(type(e), e.args)
+            await self.report_rss_results(messages, templates, {}, [])
+        except Exception as e:
+            error_log(type(e), e.args)
 
-        await self.report_rss_results(messages_to_post, templates, updated_db_entries, new_db_entries)
+    @tasks.loop(hours=1)
+    async def check_audible_listings(self):
+        if datetime.now().hour != 13:
+            return
+        log("Scheduled Operation: Checking Audible")
+        try:
+            messages = check_audible(self.external_rss_cache["sites"])
+            with open(EXTERNAL_RSS_CACHE, "w") as f:
+                f.writelines(json.dumps({k: {i: c[-250:] for i, c in v.items()} for k, v in self.external_rss_cache.items()}, indent=4))
+            for m in messages:
+                try:
+                    await self.text_channel(UPDATES).send(m)
+                except Exception as e:
+                    print(m)
+                    print(e)
+        except Exception as e:
+            error_log(type(e), e.args)
+
+    @tasks.loop(minutes=10)
+    async def check_external_rss(self):
+        log("Checking external RSS feeds")
+        try:
+            messages_to_post = []
+            templates = []
+
+            db_archive = self.parse_archive("Databank")
+            new_db_entries = []
+            updated_db_entries = {}
+            for site, site_data in self.rss_data["sites"].items():
+                if site == "Marvel.com":
+                    continue
+                try:
+                    updated_db_entries = await self.check_sites(site, site_data, messages_to_post, db_archive, templates, new_db_entries)
+                    if updated_db_entries:
+                        break
+                except Exception as e:
+                    error_log(f"Encountered {type(e)} while checking RSS for {site}", e)
+
+            for site, site_data in self.rss_data["YouTube"].items():
+                archive = self.parse_archive(site_data["template"])
+                messages = check_rss_feed(
+                    f"https://www.youtube.com/feeds/videos.xml?channel_id={site_data['channelId']}",
+                    self.external_rss_cache["YouTube"], site, "<h1 class=\"title.*?><.*?>(.*?)</.*?></h1>", site_data.get("nonSW", False))
+                for m in reversed(messages):
+                    try:
+                        msg, d, template = await self.prepare_new_rss_message(m, "https://www.youtube.com", site_data, True, archive)
+                        messages_to_post += msg
+                        templates.append((d, template))
+                    except Exception as e:
+                        error_log(type(e), e.args)
+
+            await self.report_rss_results(messages_to_post, templates, updated_db_entries, new_db_entries)
+        except Exception as e:
+            error_log(type(e), e.args)
 
     async def report_rss_results(self, messages_to_post, templates, updated_db_entries, new_db_entries):
         for channel, message in messages_to_post:

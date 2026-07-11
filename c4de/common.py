@@ -73,6 +73,8 @@ def prepare_title(t):
 def is_redirect(page, title=None):
     if title and "w:c:" in title.lower():
         return False
+    elif "wikipedia" in page.title().lower():
+        return False
     try:
         return page.exists() and page.full_url() and page.isRedirectPage()
     except JSONDecodeError:
@@ -167,7 +169,7 @@ def build_redirects(page: Page, manual: str = None):
         pages.append(r)
         pagenames.append(r.title())
     if manual and isinstance(manual, str):
-        for _, x, _ in re.findall(r"\[\[(?!(Category:))(.*?)(\|.*?)?]]", manual):
+        for _, x, _ in re.findall(r"\[\[(?!([Cc]ategory:|[Ww]ikipedia:))(.*?)(\|.*?)?]]", manual):
             if x not in pagenames:
                 pages.append(Page(page.site, x))
                 pagenames.append(x)

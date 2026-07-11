@@ -140,6 +140,9 @@ def parse_history_rss_feed(feed_url, cache: Dict[str, List[str]], feed_type):
 def check_wookieepedia_feeds(site: Site, cache: Dict[str, List[str]]):
     messages = []
 
+    if not site.logged_in():
+        site.login(user="C4-DE Bot")
+
     to_delete = []
     for p in Category(site, "Candidates for speedy deletion").articles():
         if p.title() not in cache["CSD"]:
@@ -161,12 +164,12 @@ def check_wookieepedia_feeds(site: Site, cache: Dict[str, List[str]]):
     except Exception as e:
         error_log(type(e), e.args)
 
-    try:
-        entries = check_new_pages(Site(fam='community'), cache, namespace=500)
-        for cm in entries:
-            messages.append(cm)
-    except Exception as e:
-        error_log(type(e), e.args)
+    # try:
+    #     entries = check_new_pages(Site(fam='community'), cache, namespace=500)
+    #     for cm in entries:
+    #         messages.append(cm)
+    # except Exception as e:
+    #     error_log(type(e), e.args)
 
     entries = parse_history_rss_feed("https://starwars.fandom.com/wiki/Wookieepedia:Bot_requests?action=history&feed=rss", cache, "Bot Requests")
     for e in entries:
@@ -601,7 +604,7 @@ def check_ea_news(site, url, feed_url, cache: Dict[str, List[str]]):
         d = article['eyebrow-secondary-text']
         try:
             d = datetime.strptime(d, "%b %d, %Y").strftime("%Y-%m-%d")
-        except Exception:
+        except Exception as e:
             pass
 
         results.append({"site": site, "title": article['title-text'], "url": u, "content": "", "date": d})
@@ -610,12 +613,19 @@ def check_ea_news(site, url, feed_url, cache: Dict[str, List[str]]):
     return results
 
 
-def check_marvel_page(cache: dict, site):
+def check_marvel_page(cache: dict):
     r = None
+    site = "Marvel.com"
     try:
-        r = requests.get("https://www.marvel.com", timeout=15).text
+        driver = build_driver(headless=False, firefox=True)
+        driver.get("https://www.marvel.com")
+        time.sleep(10)
+
+        WebDriverWait(driver, 30).until(EC.visibility_of_element_located((By.CLASS_NAME, "FeedCard__Meta__Headline")))
+        r = driver.page_source
+        driver.close()
     except Exception as e:
-        error_log("https://www.marvel.com", type(e))
+        error_log(type(e))
     if not r:
         return []
 
@@ -625,8 +635,8 @@ def check_marvel_page(cache: dict, site):
         link = x.find("a")
         if not link:
             continue
-        # if "Star Wars" not in link.text:
-        #     continue
+        if "Star Wars" not in link.text:
+            continue
         u = "https://www.marvel.com/" + link.get('href')
         if site not in cache:
             cache[site] = []

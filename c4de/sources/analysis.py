@@ -1058,7 +1058,7 @@ def build_card_block(o: ItemId, d: str, section: SectionItemIds, sl: str, final_
             if parent.count("{{1stID") > 1:
                 parent = re.sub(r"\{\{1stID\|(.*)}}(.*) \{\{1stID\|(.*?)}}", "{{1stID|\\1 and \\3}}\\2", parent)
 
-        block.insert(0, f"{d}{{{{SourceContents-start|{up}{parent}}}")
+        block.insert(0, f"{d}{{{{SourceContents-start|{up}{parent}}}}}")
         # if o.master.is_card_or_mini() or o.master.template == FC or o.master.target == "Star Wars: Force Collection":
         #     block.insert(0, f"{d}{{{{CardGameSet|set={up}{parent}|cards=")
         # else:
