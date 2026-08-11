@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from pywikibot import Page
 from typing import List, Tuple, Union, Dict, Optional
 
-from c4de.common import is_redirect
+from c4de.common import is_redirect, log_time
 from c4de.dates import convert_date_str
 from c4de.sources.determine import determine_id_for_item
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, AnalysisResults, \
@@ -286,7 +286,7 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
     both_continuities = appearances.both_continuities.union(sources.both_continuities)
     # dates = []
     unknown_apps, unknown_src = [], []
-    # now = datetime.now()
+    now = datetime.now()
     new_src = build_item_ids_for_section(
         target, results.real, results.media, "Sources", results.src.items, sources, appearances, None, remap,
         unknown_src, results.canon, results.infobox, [], collapse_audiobooks, log)
@@ -302,7 +302,7 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
     new_col = build_item_ids_for_section(
         target, results.real, results.media, "Collections", results.collections.items, sources, appearances, None, remap,
         unknown_src, results.canon, results.infobox, [], collapse_audiobooks, log)
-    # print(f"item IDs: {(datetime.now() - now).microseconds / 1000} microseconds")
+    log_time("item IDs", now)
 
     handle_non_canon_items(results, new_apps, new_nca, new_src, new_ncs, log)
 
@@ -319,14 +319,13 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
     if new_ncs.found and not (new_src.found or new_src.group_ids or new_src.group_items):
         new_src.keep_empty = True
 
-    # now = datetime.now()
+    now = datetime.now()
     abridged = augment_appearances(new_apps, appearances, collapse_audiobooks, index=index)
-
-    # print(f"prep: {(datetime.now() - now).microseconds / 1000} microseconds")
+    log_time("prep", now)
 
     mismatch = []
     unknown_final = []
-    # now = datetime.now()
+    now = datetime.now()
     targets = [t.current.target for t in [
         *new_apps.found, *new_src.found, *(new_nca.found if new_nca else []), *(new_ncs.found if new_ncs else [])
     ] if t.current.target and not t.master.is_reprint]
@@ -350,7 +349,7 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
     analysis = AnalysisResults(final_apps, final_nca, final_sources, final_ncs, results.canon, abridged, mismatch, reprints)
     components = NewComponents(new_apps, new_nca, new_src, new_ncs, new_links, new_col, results.get_navs())
     unknown = UnknownItems(unknown_apps, unknown_src, unknown_final, unknown_links)
-    # print(f"build: {(datetime.now() - now).microseconds / 1000} microseconds")
+    log_time("build", now)
     return components, unknown, analysis
 
 

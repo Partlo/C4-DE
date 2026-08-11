@@ -1,10 +1,11 @@
 import re
 import traceback
+from datetime import datetime
 
 from pywikibot import Page
 from typing import List, Tuple, Dict, Set
 
-from c4de.common import build_redirects, fix_redirects, fix_disambigs, prepare_title
+from c4de.common import build_redirects, fix_redirects, fix_disambigs, prepare_title, log_time
 from c4de.sources.cleanup import initial_cleanup, EXTRA
 from c4de.sources.determine import determine_id_for_item
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, SectionComponents, SectionLeaf
@@ -83,14 +84,15 @@ def fix_template_redirects(target: Page, manual: str = None):
 
 def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_cats: list, manual: str = None,
                              keep_page_numbers=False, redirects: dict = None) -> Tuple[str, Dict, PageComponents]:
-    # now = datetime.now()
+    now = datetime.now()
     if not redirects:
         manual = manual or target.get(force=True)
         manual, redirects = fix_template_redirects(target, manual)
+        log_time("template-redirects", now)
 
     before, infobox, original = initial_cleanup(target, all_infoboxes, before=manual)
 
-    # print(f"cleanup: {(datetime.now() - now).microseconds / 1000} microseconds")
+    log_time("cleanup", now)
     if "{{otheruses" in before.lower() or "{{youmay" in before.lower():
         for r, t in redirects.items():
             if t in disambigs or "(disambiguation)" in t:
@@ -308,7 +310,9 @@ BTS_FLAG_TEMPLATE = "{{SectionFlag|bts}}"
 def build_page_sections(target: Page, text: str, results: PageComponents, redirects: dict, disambigs: list, types: dict,
                         appearances: FullListData, sources: FullListData, remap: dict, log: bool,
                         extra=None):
+    now = datetime.now()
     text = analyze_body(target, text, types, appearances, sources, remap, disambigs, redirects, results, log)
+    log_time("body-analyze", now)
     unknown = []
     final = ""
     rest = []

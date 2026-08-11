@@ -18,6 +18,9 @@ def build_alternate(i: ItemId):
     elif "livestream=" in i.master.original:
         o = "{{" + i.master.template + "|" + i.master.special + "|" + i.master.text + " (Livestream)}}"
         template, mode = i.master.template, i.master.mode
+    elif "dub_url=" in i.master.original:
+        o = "{{" + i.master.template + "|" + i.master.special + "|" + i.master.text + " (English Dub)}}"
+        template, mode = i.master.template, i.master.mode
     else:
         o = "{{SW|url=" + i.master.special + "|text=" + i.master.text + "}}"
         template, mode = "SW", "Web"

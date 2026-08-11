@@ -5,7 +5,7 @@ from datetime import datetime
 from pywikibot import Page, Category, showDiff
 
 from c4de.common import error_log, fix_redirects, do_final_replacements, sort_top_template, to_duration, \
-    report_duration, MULTIPLE_ISSUE_CONVERSION
+    report_duration, MULTIPLE_ISSUE_CONVERSION, log_time
 from c4de.data.filenames import PROJECT_DIR
 from c4de.sources.archive import clean_archive_usages
 from c4de.sources.analysis import analyze_section_results
@@ -442,7 +442,11 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
     if results.canon and not results.real and "/Legends" in new_txt:
         new_txt = handle_legends_links(new_txt, page.title())
     new_txt, _ = clean_archive_usages(page, new_txt, sources.archive_data, redo)
-    # print(f"archive: {(datetime.now() - now).total_seconds()} seconds")
+    if "|archive" in new_txt:
+        new_txt, _ = clean_archive_usages(page, new_txt, sources.archive_data, redo)
+    if "|archive" in new_txt:
+        new_txt, _ = clean_archive_usages(page, new_txt, sources.archive_data, redo)
+    # log_time("archive", now)
 
     # if not keep_page_numbers:
     #     # cx = [a.original if a.template else a.target for b in [results.apps, results.nca, results.src, results.ncs] for a in b.items if a.target]
@@ -467,7 +471,7 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
         if x:
             new_txt = new_txt.replace(x.group(0), "{{" + MULTIPLE_ISSUE_CONVERSION.get(x.group(1), x.group(1).capitalize()) + "}}")
 
-    # print(f"regex: {(datetime.now() - now).total_seconds()} seconds")
+    # log_time("regex", now)
     replace = True
     if redirects:
         new_txt = fix_redirects(redirects, new_txt, "Final Body", remap, disambigs)
@@ -480,7 +484,7 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
     # now = datetime.now()
     is_status = any(c.title() in STATUS for c in page.categories())
     t = do_final_replacements(new_txt, replace, is_status)
-    # print(f"replace: {(datetime.now() - now).total_seconds()} seconds")
+    # log_time("replace", now)
     return t
 
 
@@ -614,6 +618,7 @@ def analyze_target_page(target: Page, infoboxes: dict, types: dict, disambigs: l
         subpage.put(subpage_text, "Source Engine analysis of Appearances, Sources and references", botflag=match, force=True)
 
     results = []
+    now = datetime.now().strftime('%Y-%m-%d')
     with codecs.open(f"{PROJECT_DIR}/c4de/protocols/unknown.txt", mode="a",
                      encoding="utf-8") as f:
         if len(analysis.abridged) == 1:

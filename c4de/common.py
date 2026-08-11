@@ -42,6 +42,14 @@ def error_log(text, *args, tb=True):
         traceback.print_exc()
 
 
+TIMER_ENABLED = False
+
+
+def log_time(val, now):
+    if TIMER_ENABLED:
+        log(f"{val}: {(datetime.now() - now).total_seconds()} seconds")
+
+
 def to_duration(now):
     return (datetime.now() - now).total_seconds()
 

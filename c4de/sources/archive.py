@@ -92,6 +92,7 @@ def prepare_text(k, v):
 def decide_archive_template(template, types: dict, skip: list, archives: dict, patterns: dict, site):
     youtube = "YouTube" in template or types.get(template.lower()) == "YT"
     archive_template = "YouTube" if youtube else template
+    youtube = youtube or template == "Twitch"
     archive_template = "SideshowCite" if template in ["HotToysCite", "IronStudiosCite"] else archive_template
     if archive_template not in archives:
         if types.get(template.lower()) not in ["Web", "YT", "DB", "Publisher", "Commercial", "External", "Social",
@@ -147,11 +148,11 @@ def build_missing_and_new(page, types, archives, patterns, new_data, skip):
         elif template == "Databank":
             zx = [(i[0], i[2]) for i in re.findall(r"(\{\{Databank\|(url=)?([^|\n}]+?)(\|.*?)(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
         else:
-            zx = [(i[0], i[3]) for i in re.findall(r"(\{\{" + template + r"(\|[^\n}]*?)?\|(url|link|altlink)==?/?([^|\n}]+?(\{\{=}})?[^|\n}]*?)/*(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
-            if template in ["Twitter", "Bluesky", "Threads"]:
-                for i in re.findall(r"(\{\{" + template + r".*?\|/?((post|statuse?s?)/[^|\n}]+?)/*(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text):
+            zx = [(i[0], i[3]) for i in re.findall(r"(\{\{" + template + r"(\|[^\n}]*?)?\|(url|link|altlink)==?/?([^|\n}]+?(\{\{=}})?[^|\n}]*?)/* *(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
+            if template in ["Bluesky", "Threads", "TikTok", "Twitter"]:
+                for i in re.findall(r"(\{\{" + template + r".*?\|/?((post|statuse?s?|video|playlist)/[^|\n}]+?)/*(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text):
                     zx.append((i[0], i[1]))
-            if template in ["ArtStation", "Blogspot", "Bluesky", "DeviantArt", "Facebook", "Instagram", "Tumblr", "Twitter", "WordPress"]:
+            if template in ["ArtStation", "Blogspot", "Bluesky", "Cara", "DeviantArt", "Facebook", "Instagram", "LinkedIn", "Threads", "TikTok", "Tumblr", "Twitter", "WordPress"]:
                 for i in re.findall(r"(\{\{" + template + r"(\|[^\n}]*?)?\|(subdomain|username)=/?([^|\n}]+?)/*(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text):
                     if "|url=" not in i[0]:
                         zx.append((i[0], i[3]))
@@ -462,16 +463,26 @@ def is_old_or_not_in_archive(original, x, archive):
     return True
 
 
+def determine_templates(text):
+    templates_to_check = set()
+    for x in re.findall(r"\{\{([^\n|{}]+?)\|[^\n{}]+?\|archive(url|date|file)=.*?}}", text):
+        if x[0] != "WebCite":
+            templates_to_check.add(x[0])
+    return templates_to_check
+
+
 def clean_archive_usages(page: Page, text, archive_data: dict, redo=False):
     templates_to_check = set()
     if redo:
-        for x in re.findall(r"\{\{([^\n|{}]+?)\|[^\n{}]+?\|archive(url|date|file)=.*?}}", text):
-            if x[0] != "WebCite":
-                templates_to_check.add(x[0])
+        templates_to_check = determine_templates(text)
     else:
         for c in page.categories():
             if c.title().endswith("same archivedate value") or c.title().endswith("with custom archivedate"):
                 templates_to_check.add(re.search(r"^(.*?) usages with.*?$", c.title(with_ns=False)).group(1))
+            elif c.title().endswith("Internet citations with custom archivedate and nolive flag"):
+                redo = True
+    if redo:
+        templates_to_check = determine_templates(text)
     if not templates_to_check:
         return text, archive_data
 
@@ -524,49 +535,49 @@ def clean_archive_usages(page: Page, text, archive_data: dict, redo=False):
                         continue
                     text = text.replace(o3, "")
             elif archive and "YouTube" in t:
-                for x in re.findall(r"(\{\{.*?\|video=([^\n{}|]*?)/?(&t=[0-9]+s)?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                for x in re.findall(r"(\{\{.*?\|video=([^\n{}|]*?)/?(&t=[0-9]+s)?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
                     if is_old_or_not_in_archive(x[0], x[1], archive):
                         continue
                     if x[2] and x[1].lower() in archive and f"{x[1]}{x[2]}".lower() not in archive:
                         text = text.replace(x[2], "")
                     text = text.replace(x[4], "")
-                for x in re.findall(r"(\{\{.*?YouTube\|(channel=)([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                for x in re.findall(r"(\{\{.*?YouTube\|(channel=)([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
                     if is_old_or_not_in_archive(x[0], x[2], archive) or "video=" in x[0]:
                         continue
                     text = text.replace(x[4], "")
-                for x in re.findall(r"(\{\{(.*?YouTube|ThisWeek|StarWarsShow|HighRepublicShow)\|(video=)?([^\n{}|]*?)/?(&t=[0-9]+s)?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                for x in re.findall(r"(\{\{(.*?YouTube|ThisWeek|StarWarsShow|HighRepublicShow)\|(video=)?([^\n{}|]*?)/?(&t=[0-9]+s)?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
                     if is_old_or_not_in_archive(x[0], x[3], archive):
                         continue
                     if x[4] and x[3].lower() in archive and f"{x[3]}{x[4]}".lower() not in archive:
                         text = text.replace(x[4], "")
                     text = text.replace(x[6], "")
             elif archive and t == "SWE":
-                for x in re.findall(r"(\{\{" + t + r"\|(url=)?([^\n{}|]*?)/?\|([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file)=([^\n{}|]*?) ?)(\|[^\n{}]*?)? ?}})", c):
+                for x in re.findall(r"(\{\{" + t + r"\|(url=)?([^\n{}|]*?)/?\|([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]*?) ?)(\|[^\n{}]*?)? ?}})", c):
                     z = f"{x[2]}/{x[3]}"
                     if is_old_or_not_in_archive(x[0], z, archive):
                         continue
                     text = text.replace(x[5], "")
             elif archive and t == "Databank":
-                for x in re.findall(r"(\{\{" + t + r"\|(url=)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file)=([^\n{}|]*?) ?)(\|[^\n{}]*?)? ?}})", c):
+                for x in re.findall(r"(\{\{" + t + r"\|(url=)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]*?) ?)(\|[^\n{}]*?)? ?}})", c):
                     if is_old_or_not_in_archive(x[0], x[2], archive):
                         continue
                     text = text.replace(x[4], "")
             elif archive:
-                for x in re.findall(r"(\{\{" + t + r"\|(subdomain=|username=)([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                for x in re.findall(r"(\{\{" + t + r"\|(subdomain=|username=)([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
                     if is_old_or_not_in_archive(x[0], x[2], archive) or "|url=" in x[0]:
                         continue
                     text = text.replace(x[4], "")
-                for x in re.findall(r"(\{\{" + t + r"\|(.*?\|)?(url|id|a?l?t?link)=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                for x in re.findall(r"(\{\{" + t + r"\|(.*?\|)?(url|id|a?l?t?link)=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
                     if is_old_or_not_in_archive(x[0], x[3], archive) or x[3].lower() in YEARLY:
                         continue
                     text = text.replace(x[5], "")
                 if t in ["Bluesky", "Twitter", "Threads"]:
-                    for x in re.findall(r"(\{\{" + t + r"\|[^\n{}|]*?\|((post|statuse?s?)/[^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+?)? ?\|archive(url|date|file)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    for x in re.findall(r"(\{\{" + t + r"\|[^\n{}|]*?\|((post|statuse?s?)/[^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+?)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
                         if is_old_or_not_in_archive(x[0], x[1], archive) or x[1].lower() in YEARLY:
                             continue
                         text = text.replace(x[4], "")
                 else:
-                    for x in re.findall(r"(\{\{" + t + r"\|((?!(url|id|a?l?t?link)=)[^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+?)? ?\|archive(url|date|file)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
+                    for x in re.findall(r"(\{\{" + t + r"\|((?!(url|id|a?l?t?link)=)[^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+?)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
                         if is_old_or_not_in_archive(x[0], x[1], archive) or x[1].lower() in YEARLY:
                             continue
                         text = text.replace(x[4], "")

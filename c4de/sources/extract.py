@@ -430,8 +430,8 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         if not m:
             m = re.search(r"{{[^|\[}\n]+\|(([a-z_]+)=.*?\|)?(?P<video>.*?)(&.*?)?\|(text=)?(?P<text>.*?)(\|.*?)?}}", s)
         if m:
-            u = re.search(r"\|((sw|site)_url|livestream|original)=(.*?)(\|.*?)?}}", s)
-            alt = u.group(3) if u and u.group(1) in ["livestream", "original"] else None
+            u = re.search(r"\|((sw|site|dub)_url|livestream|original)=(.*?)(\|.*?)?}}", s)
+            alt = u.group(3) if u and u.group(1) in ["livestream", "original", "dub_url"] else None
             t = m.groupdict().get('text')
             if 'text' not in m.groupdict():
                 txt = re.search(r"\|text=(.*?)(\|.*?)?}}", s)
@@ -444,7 +444,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
             return Item(z, mode, a, target=i.group(1) if i else None, template=template, url=m.group('video'), text=t,
                         special=u.group(3) if u else None, alternate_url=alt)
     elif template == "Databank":
-        m = re.search(r"{{Databank\|(url=|entry=)?(.*?)\|(title=)?(.*?)(\|.*?)?}}", s)
+        m = re.search(r"{{Databank\|(url=|entry=)?(.*?)\|(title=|text=)?(.*?)(\|.*?)?}}", s)
         if m and m.group(1):
             return Item(z, mode, a, target=None, template=template, url=m.group(2), text=m.group(4))
         elif m:

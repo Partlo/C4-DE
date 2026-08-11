@@ -4,6 +4,7 @@ import time
 import traceback
 from datetime import datetime, timedelta
 
+from c4de.common import log_time
 from pywikibot import Page
 
 from c4de.sources.infoboxer import handle_infobox_on_page
@@ -23,6 +24,7 @@ REPLACEMENTS = [
     ("{{App|characters=", "{{App\n|characters="), ("PenguinRandomHouse|old=1", "RandomHouseOld"),
     ("<onlyinclude>\n{{Incomplete_app}}", "{{IncompleteApp}}\n<onlyinclude>"),
     ("<onlyinclude>\n{{IncompleteApp}}", "{{IncompleteApp}}\n<onlyinclude>"),
+    ("set=Twilight of the Republic (Star Wars: Unlimited)", "set=Twilight of the Republic"),
 
     ("|work=[[Entertainment Weekly Books|''Entertainment Weekly'']]", ""),
     ("|work=''[[Wikipedia:Entertainment Weekly|Entertainment Weekly]]''", ""),
@@ -58,7 +60,7 @@ def clean_references(before):
 
 
 def initial_cleanup(target: Page, all_infoboxes, before: str=None):
-    # now = datetime.now()
+    now = datetime.now()
     if not before:
         before = target.get(force=True)
     # priority fixes
@@ -73,7 +75,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     before = re.sub(r"([A-z'0-9\]]+)  +([A-z'0-9\[]+)", "\\1 \\2", before)
     before = re.sub(r"\n[ ]+\n", "\n\n", before)
 
-    # print(f"retrieval: {(datetime.now() - now).microseconds / 1000} microseconds")
+    log_time("retrieval", now)
     if "]]{{" in before or "}}{{" in before:
         before = re.sub(r"(]]|}})(" + EXTRA + ")","\\1 \\2", before)
 
@@ -93,6 +95,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
         elif f"|title2={y}" in before:
             before = before.replace(f"|title2={y}", "")
 
+    now = datetime.now()
     for (x, y) in REPLACEMENTS:
         before = before.replace(x, y)
 
@@ -117,17 +120,21 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     # fixing same-line infobox fields
     while re.search(r"(\n\*+\[\[[^\n\]}]+?]])(\|[a-z _]+=)", before):
         before = re.sub(r"(\n\*+\[\[[^\n\]}]+?]])(\|[a-z _]+=)", "\\1\n\\2", before)
+    log_time("regex-0", now)
 
-    # now = datetime.now()
+    now = datetime.now()
     infobox, original = None, None
     if all_infoboxes and not target.title().startswith("User:") and not target.title().startswith("File:"):
         before, infobox, original = handle_infobox_on_page(before, target, all_infoboxes, add=False)
-    # print(f"infobox: {(datetime.now() - now).microseconds / 1000} microseconds")
+    log_time("infobox", now)
 
+    now = datetime.now()
     # fixing bad references
     before = clean_references(before)
+    log_time("references", now)
 
     # section header issues
+    now = datetime.now()
     before = re.sub(r"\n=([A-z ]+)==", "\n==\\1==", before)
     before = re.sub(r"==((?!Notes and references).)*?==(\n\{.*?}})?\n\{\{[Rr]eflist}}", "==Notes and references==\\2\n{{Reflist}}", before)
     before = re.sub(r"=+ ?([Rr]eferences?|[Nn]otes? (and )?[Rr]ef.*?) ?=+", "==Notes and references==", before)
@@ -138,7 +145,6 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     if "<references" in before.lower():
         before = re.sub(r"<[Rr]efe?rences ?/ ?>", "{{Reflist}}", before)
 
-    # now = datetime.now()
     while re.search(r"\[\[(?!File:)([^\[\]{}\n]+?)&[mn]dash;([^\[\]{}\n]+?)]]", before):
         before = re.sub(r"\[\[(?!File:)([^\[\]{}\n]+?)&ndash;([^\[\]{}\n]+?)]]", "[[\\1–\\2]]", before)
         before = re.sub(r"\[\[(?!File:)([^\[\]{}\n]+?)&mdash;([^\[\]{}\n]+?)]]", "[[\\1—\\2]]", before)
@@ -151,6 +157,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     before = re.sub(r"<small>\((.*?)\)</small>", "{{C|\\1}}", before)
 
     before = re.sub(r"(\{\{[A-z]+YouTube\|[^\n[\]{}]*?\|[^\n[\]{}]*?) \| ([^\n[\]{}]*?(\|[a-z]+=.*?)?}})", "\\1 &#124; \\2", before)
+    before = re.sub(r"(\{\{Databank[^}\n]*?)\|title=", "\\1|text=", before)
 
     # removing work= parameters and prioritizing
     before = re.sub(r"(\{\{((?!([wW]ebCite|OfficialSite))[^{}\n])*?\|[^{}\n]+?)\|work=(\[\[[^]]+\|.*?]])?.*?(\|.*?)?}}", "\\1\\4}}", before)
@@ -209,11 +216,11 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
 
     while re.search(r"\[\[Category:[^\n|\]_]+_", before):
         before = re.sub(r"(\[\[Category:[^\n|\]_]+)_", "\\1 ", before)
-    # print(f"regex-1: {(datetime.now() - now).microseconds / 1000} microseconds")
+    log_time("regex-1", now)
 
-    # now = datetime.now()
+    now = datetime.now()
     before = regex_cleanup(before)
-    # print(f"regex-2: {(datetime.now() - now).microseconds / 1000} microseconds")
+    log_time("regex-2", now)
 
     while "== " in before or " ==" in before:
         before = before.replace(r"== ", "==").replace(" ==", "==")

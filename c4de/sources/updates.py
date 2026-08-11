@@ -604,7 +604,7 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
                     section = "Abridged"
                     lines.append("\n==Abridged==")
             elif key == "Audiobooks" and "StoryCite" in txt:
-                if not section:
+                if section != "Stories":
                     section = "Stories"
                     lines.append("\n==Stories==")
             elif d.startswith("1") or d.startswith("2"):
