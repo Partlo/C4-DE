@@ -142,20 +142,24 @@ class CanonLegendsSwitcher:
         return page
 
     def check_page(self, page: Page, master_replacements, ghost=False, moved: dict=None):
-        if page.isRedirectPage():
-            target = page.getRedirectTarget()
-            if "/Canon" in target.title():
-                page.set_redirect_target(target_page=target.title().replace('/Canon', ''))
-            else:
-                page.set_redirect_target(target_page=target.title() + "/Legends")
+        try:
+            if page.isRedirectPage():
+                target = page.getRedirectTarget()
+                if "/Canon" in target.title():
+                    page.set_redirect_target(target_page=target.title().replace('/Canon', ''))
+                else:
+                    page.set_redirect_target(target_page=target.title() + "/Legends")
+                return True
+            elif not page.exists():
+                if page.title() in moved:
+                    page = Page(page.site, moved[page.title()])
+                elif page.title(with_ns=False) in moved:
+                    page = Page(page.site, page.title().replace(page.title(with_ns=False), moved[page.title(with_ns=False)]))
+                if not page.exists():
+                    page = page.moved_target()
+        except Exception as e:
+            print(f"Encountered {type(e)} while trying to move page {page.title()}")
             return True
-        elif not page.exists():
-            if page.title() in moved:
-                page = Page(page.site, moved[page.title()])
-            elif page.title(with_ns=False) in moved:
-                page = Page(page.site, page.title().replace(page.title(with_ns=False), moved[page.title(with_ns=False)]))
-            if not page.exists():
-                page = page.moved_target()
 
         try:
             old_text = page.get()
@@ -524,7 +528,7 @@ def handle_references(*, site, fixer: CanonLegendsSwitcher, replacements: dict, 
     fixer.accept_all = True
 
     for ref in references:
-        if ref.title(with_ns=False) in moved:
+        if ref.title(with_ns=False) in moved and ref.namespace() in [0, 1, 120]:
             ref = Page(site, ref.title().replace(ref.title(with_ns=False), moved[ref.title(with_ns=False)]))
         result = fixer.check_page(ref, replacements, False, moved)
         if not result:

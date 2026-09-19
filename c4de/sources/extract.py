@@ -362,6 +362,10 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         m = re.search(r"\{\{CelebrationTrailer\|['\[]*(?P<m>.*?)(\|.*?)?['\]]*\|(?P<c>.*?)}}", s)
         if m:
             return Item(z, mode, a, target=m.groupdict()['c'], issue=m.groupdict()['m'])
+    elif template == "ExclusiveTrailerCite":
+        m = re.search(r"\{\{ExclusiveTrailerCite\|['\[]*(?P<m>.*?)(\|.*?)?['\]]*\|(?P<c>.*?)}}", s)
+        if m:
+            return Item(z, mode, a, target=m.groupdict()['c'], issue=m.groupdict()['m'])
     elif template == "HBCite":
         m = re.search(r"\{\{HBCite\|([0-9]+)", s)
         if m:

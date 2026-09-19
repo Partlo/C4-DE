@@ -1071,8 +1071,8 @@ def build_card_block(o: ItemId, d: str, section: SectionItemIds, sl: str, final_
 
 
 def is_extra(o: ItemId, ex):
-    return o.master.from_extra and "{{co}}" not in ex.lower() and "cover only" not in ex.lower() and \
-        "{{ad}}" not in ex.lower() and o.current.template != "HomeVideoCite"
+    return o.master.from_extra and "{{co}}" not in ex.lower() and "{{vco}}" not in ex.lower() and \
+           "cover only" not in ex.lower() and "{{ad}}" not in ex.lower() and o.current.template != "HomeVideoCite"
 
 
 def build_flags(o: ItemId, sl, section_name, is_file=False):

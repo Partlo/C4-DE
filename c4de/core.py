@@ -238,11 +238,11 @@ class C4DE_Bot(commands.Bot):
                 self.run_canon_legends_switch.start()
                 self.check_for_sources_rebuild.start()
                 self.load_isbns.start()
-                # self.manage_archive.start()
+                self.manage_archive.start()
                 self.check_marvel.start()
                 self.check_audible_listings.start()
                 await self.build_sources()
-                self.check_index_requests.start()
+                # self.check_index_requests.start()
             log("Startup process completed.")
             self.ready = True
 
@@ -1952,6 +1952,9 @@ class C4DE_Bot(commands.Bot):
         archive = self.parse_archive(site_data["template"])
         for m in reversed(messages):
             try:
+                if m['site'] == "Lucasfilm" and m.get('url') in self.tracked_urls:
+                    continue
+
                 msg, d, template = await self.prepare_new_rss_message(
                     m, site_data["baseUrl"], site_data, False, db_archive if m['site'] == "Databank" else archive)
                 messages_to_post += msg
@@ -2027,18 +2030,19 @@ class C4DE_Bot(commands.Bot):
                 except Exception as e:
                     error_log(f"Encountered {type(e)} while checking RSS for {site}", e)
 
-            for site, site_data in self.rss_data["YouTube"].items():
-                archive = self.parse_archive(site_data["template"])
-                messages = check_rss_feed(
-                    f"https://www.youtube.com/feeds/videos.xml?channel_id={site_data['channelId']}",
-                    self.external_rss_cache["YouTube"], site, "<h1 class=\"title.*?><.*?>(.*?)</.*?></h1>", site_data.get("nonSW", False))
-                for m in reversed(messages):
-                    try:
-                        msg, d, template = await self.prepare_new_rss_message(m, "https://www.youtube.com", site_data, True, archive)
-                        messages_to_post += msg
-                        templates.append((d, template))
-                    except Exception as e:
-                        error_log(type(e), e.args)
+            if not updated_db_entries:
+                for site, site_data in self.rss_data["YouTube"].items():
+                    archive = self.parse_archive(site_data["template"])
+                    messages = check_rss_feed(
+                        f"https://www.youtube.com/feeds/videos.xml?channel_id={site_data['channelId']}",
+                        self.external_rss_cache["YouTube"], site, "<h1 class=\"title.*?><.*?>(.*?)</.*?></h1>", site_data.get("nonSW", False))
+                    for m in reversed(messages):
+                        try:
+                            msg, d, template = await self.prepare_new_rss_message(m, "https://www.youtube.com", site_data, True, archive)
+                            messages_to_post += msg
+                            templates.append((d, template))
+                        except Exception as e:
+                            error_log(type(e), e.args)
 
             await self.report_rss_results(messages_to_post, templates, updated_db_entries, new_db_entries)
         except Exception as e:
@@ -2064,6 +2068,8 @@ class C4DE_Bot(commands.Bot):
             await self.update_web_sources(templates)
         if new_db_entries:
             await self.update_databank(new_db_entries)
+        if new_db_entries or templates or updated_db_entries or messages_to_post:
+            self.tracked_urls = compile_tracked_urls(self.site)
         log("Completed external RSS check")
 
     async def update_web_sources(self, templates: list):

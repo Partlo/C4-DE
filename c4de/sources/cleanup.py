@@ -208,10 +208,12 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     before = re.sub(r"'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \1'*]]'*", "\"[[\\1]]\"", before)
     before = before.replace("{{Rebels|Siege of Lothal}}", "{{Rebels|The Siege of Lothal}}")
     before = before.replace("{{EncyclopediaCite|Padmé Amidala Naberrie}}", "{{EncyclopediaCite|Padmé Amidala}}")
+
+    before = re.sub(r"(\{\{Getty.*?)\|author=\[\[The Walt.*?]](\|[a-z]+=.*?)}}", "\\1\\2}}", before)
+    before = re.sub(r"(\{\{Getty.*?)\[\[Wikipedia:Getty.*?]]", "\\1", before)
+
     before = re.sub(r">\[\[Star Wars Galaxy Map \(poster\)\|[^\n\]\[]+]]<", ">{{GalaxyMapPoster}}<", before)
-
     before = re.sub(r">The \[\[Star Wars Galaxy Map \(poster\)\|[^\n\]\[]+]]", ">The {{GalaxyMapPoster}}", before)
-
     before = re.sub(r"(\*\{\{(StarWarsGalaxyMap|TheStarWarsGalaxy}})}})\n", "*{{StarWarsGalaxyMap}} {{MapPoint}}\n", before)
 
     while re.search(r"\[\[Category:[^\n|\]_]+_", before):

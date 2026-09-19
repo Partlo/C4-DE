@@ -137,6 +137,10 @@ def parse_history_rss_feed(feed_url, cache: Dict[str, List[str]], feed_type):
     return entries_to_report
 
 
+def articles_and_subcategories(c: Category):
+    return [*c.articles(), *c.subcategories()]
+
+
 def check_wookieepedia_feeds(site: Site, cache: Dict[str, List[str]]):
     messages = []
 
@@ -144,7 +148,7 @@ def check_wookieepedia_feeds(site: Site, cache: Dict[str, List[str]]):
         site.login(user="C4-DE Bot")
 
     to_delete = []
-    for p in Category(site, "Candidates for speedy deletion").articles():
+    for p in articles_and_subcategories(Category(site, "Candidates for speedy deletion")):
         if p.title() not in cache["CSD"]:
             messages.append((ADMIN_REQUESTS, f"❗ [**{p.title()}**](<{p.full_url()}>) has been flagged for speedy deletion", p.title()))
         to_delete.append(p.title())
@@ -687,7 +691,8 @@ def check_audible(cache: Dict[str, List[str]]):
             if "Star Wars" not in link.text:
                 continue
             href = link['href'].split("?")[0]
-            if href in cache["Audible"]:
+            book_id = re.sub("/pd(/.*?)?([A-Z0-9]+)$", "\\2", href)
+            if book_id in cache["Audible"]:
                 continue
             if re.sub("pd/.*?/(.*?)$", "pd/\\1", href) in cache["Audible"]:
                 continue
@@ -700,15 +705,15 @@ def check_audible(cache: Dict[str, List[str]]):
                     continue
             except Exception as e:
                 print(f"Cannot parse date string {date_text}: {e}")
-            data[href] = {"text": link.text, "date": date_text}
+            data[book_id] = {"link": href, "text": link.text, "date": date_text}
 
     results = []
-    for link, v in data.items():
+    for book_id, v in data.items():
         fixed = v['text'].replace("Star Wars: ", "").replace(": Star Wars Legends", "").replace(
             "Star Wars Audio Adventures: ", "")
         f1, _, f2 = fixed.replace(")", "").partition(" (")
-        results.append(f"**New Audible Listing**:    {fixed}\n-<https://www.audible.com{link}>\n-Release Date: {v['date']}")
-        cache["Audible"].append(link)
+        results.append(f"**New Audible Listing**:    {fixed}\n-<https://www.audible.com{v['link']}>\n-Release Date: {v['date']}")
+        cache["Audible"].append(book_id)
 
     return results
 
@@ -1165,7 +1170,7 @@ def handle_site_map(sitemap: set, urls, skip, updated_db_entries, guides):
             r = requests.get(u)
             if r.url != u:
                 continue
-            elif '<section class="module image_gallery' in r.text and x not in guides:
+            elif '<section class="module image_gallery' in r.text and x not in guides and not u.endswith("databank/aat"):
                 print(u, "gallery")
                 continue
             title = re.search(r"<title>(.*?)</title>", r.text)

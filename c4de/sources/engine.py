@@ -351,7 +351,7 @@ def load_remap(site) -> dict:
         x = re.search(r"\[\[(.*?)(\|.*?)?]].*?[\[{]+(.*?)(\|.*?)?[]}]+", line)
         if x:
             results[x.group(1)] = "Star Wars Galaxies" if x.group(3) == "GalaxiesNGE" else x.group(3)
-    print(f"Loaded {len(results)} remap names")
+    _log(f"Loaded {len(results)} remap names")
     return results
 
 

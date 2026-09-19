@@ -158,7 +158,7 @@ def handle_entry(item: WebElement, sku_list, search_term):
         return None
     elif "BACKLIST" in status:
         return None
-    elif "Thomas Kinkade Studios" in title:
+    elif "Thomas Kinkade Studios" in title or "Star Wars Crochet" in title:
         return None
     elif "Non-Classifiable" in categories:
         return None
@@ -187,7 +187,7 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
         # wait for "Not Yet Published" button
         log("Waiting for Not Yet Published button")
 
-        WebDriverWait(driver, 30).until(EC.visibility_of_element_located((By.CLASS_NAME, "ListView__filterButton")))
+        WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.CLASS_NAME, "ListView__filterButton")))
         button = driver.find_element(By.CLASS_NAME, "ListView__filterButton")
         try:
             button.click()
@@ -201,7 +201,7 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
         found = None
         for x in driver.find_elements(By.CLASS_NAME, "MuiListItem-root"):
             b = x.find_element(By.CSS_SELECTOR, "button.MuiButtonBase-root")
-            if b and b.get_attribute('aria-label') == "Expand Publishing Status":
+            if b and (b.get_attribute('aria-label') == "Expand Publishing Status" or b.text == "Publishing Status"):
                 found = x
                 b.click()
                 time.sleep(1)
@@ -369,6 +369,8 @@ def analyze_products(site, products: List[dict], search_terms):
         try:
             url = f"<https://www.edelweiss.plus/#sku={item['sku']}>"
             page, by_isbn = determine_page(site, item["title"], item, pages_by_isbn)
+            if page.isRedirectPage():
+                page = page.getRedirectTarget()
             if not item["hasImage"]:
                 new_missing_images.append(item["sku"])
 
