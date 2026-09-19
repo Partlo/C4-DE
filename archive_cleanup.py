@@ -75,7 +75,7 @@ def analyze(*args):
             text = text.replace("|title=''{{PAGENAME}}''}}", "|italics=1}}").replace("|domain=com|", "|").replace("|}}", "}}")
             text = re.sub(r"(\|[a-z]+)=[0-9]=", "\\1=", text)
             text = re.sub(r"(?<!WP)\|(.*?)( \(.*?\))\|\1([|}])", "|\\1\\2\\3", text)
-            text = re.sub(r"((Armada|CCG|Destiny|FFGTCG|FFGXW|FFGXW2|ForceCollection|JKTCG|Legion|Merlin|MetallicImpressions|SWCT|SWGTCG|SWIA|SWMB|SWMiniCite|SWOR|SWPM|SWR|SWU|Shatterpoint|Smith's|TCG|TopTrumps|Topps|YJCCG)\|set=[^|\n{}]*?)(\|s?text=.*?)(\|.*?)?}}", "\\1\\4}}", text)
+            text = re.sub(r"((Armada|CCG|Destiny|FFGTCG|FFGXW|FFGXW2|ForceCollection|JKTCG|Legion|Merlin|MetallicImpressions|SWCT|SWGTCG|SWIA|SWMB|SWMiniCite|SWOR|SWPM|SWR|SWU|Shatterpoint|Smith's|TCG|TopTrumps|PocketModel|Topps|YJCCG)\|set=[^|\n{}]*?)(\|s?text=.*?)(\|.*?)?}}", "\\1\\4}}", text)
             text = re.sub(r"(\|url=[^|{}\n]+?)/\|", "\\1|", text)
             text = re.sub(r"\|oldversion=1(\|.*?)?\|archivedate=", "\\1|oldversion=", text)
             text = re.sub(r"\|archivedate=(.*?)(\|.*?)?\|oldversion=1", "|oldversion=\\1\\2", text)

@@ -398,7 +398,15 @@ def store_data(x: Item, i: dict, old: str, extra: str, parenthetical: str, alter
     x.extra = extra or ''
     x.parenthetical = parenthetical
     x.is_reprint = is_reprint
-    x.alternate_url = x.alternate_url or alternate
+    if alternate:
+        if "{{" in alternate:
+            alternates = [i for i in re.split(r"}}.*?{{C\|1?=?(original|alternate): ", alternate) if i != "original" and i != "alternate"]
+        else:
+            alternates = [alternate]
+        if len(alternates) == 1 and not x.alternate_url:
+            x.alternate_url = alternates[0]
+        else:
+            x.alternate_urls = alternates
     if "Unlicensed" in i['page'] or "{{c|unlicensed" in old.lower() or "{{un}}" in old.lower():
         x.unlicensed = True
         x.non_canon = "MyComyc" not in old and "Star Wars: The Power of the Force" not in old
@@ -517,10 +525,11 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
                         if u not in urls:
                             urls[u] = []
                         urls[u].append(x)
-                if x.alternate_url:
-                    if x.alternate_url not in urls:
-                        urls[x.alternate_url] = []
-                    urls[x.alternate_url].append(x)
+                for y in [x.alternate_url, *x.alternate_urls]:
+                    if y:
+                        if y not in urls:
+                            urls[y] = []
+                        urls[y].append(x)
 
                 if x.target in set_formatting:
                     x.set_format_text = set_formatting[x.target]
@@ -665,10 +674,11 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                     if x.url not in urls:
                         urls[x.url] = []
                     urls[x.url].append(x)
-                if x.alternate_url:
-                    if x.alternate_url not in urls:
-                        urls[x.alternate_url] = []
-                    urls[x.alternate_url].append(x)
+                for y in [x.alternate_url, *x.alternate_urls]:
+                    if y:
+                        if y not in urls:
+                            urls[y] = []
+                        urls[y].append(x)
                 if "Crossover" in i['page'] or "LEGO" in i['page']:
                     x.non_canon = True
                     x.both_continuities = True

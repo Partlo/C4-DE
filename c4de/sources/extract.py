@@ -126,6 +126,7 @@ PREFIXES = {
     "Tales": "Star Wars Tales <x>",
     "IDWAdventuresCite-2017": "Star Wars Adventures (2017) <x>",
     "IDWAdventuresCite-2020": "Star Wars Adventures (2020) <x>",
+    "MandoAdventures": "Star Wars: The Mandalorian Adventures - ",
 }
 
 GAME_TEMPLATES = {
@@ -141,7 +142,7 @@ CORE_SETS = {
     "Legion": "Star Wars: Legion Core Set",
     "Shatterpoint": "Star Wars: Shatterpoint Core Set",
     "SWIA": "Star Wars: Imperial Assault Core Set",
-    "SWPM": "Star Wars PocketModel TCG: Base Set",
+    "PocketModel": "Star Wars PocketModel TCG: Base Set",
 }
 
 

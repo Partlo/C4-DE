@@ -66,7 +66,7 @@ def determine_id_for_item(
             return m
     if o.template in GAME_TEMPLATES and o.card:
         return ItemId(o, o, True, False)
-    elif o.template == "SWU" and "|promo=1" in o.original:
+    elif o.template == "SWU" and ("|promo=1" in o.original or " Promo" in o.original):
         o.override = True
         return ItemId(o, o, True, False)
 
@@ -675,6 +675,7 @@ def match_news_format(d, u):
 def do_urls_match(url, template, d: Item, replace_page, log=False):
     d_url = prep_url(d.url)
     alternate_url = prep_url(d.alternate_url)
+    other_urls = [prep_url(u) for u in d.alternate_urls]
     if d.mode == "YT" and d.special and not d.alternate_url:
         alternate_url = prep_url(d.special)
 
@@ -684,6 +685,8 @@ def do_urls_match(url, template, d: Item, replace_page, log=False):
     if d_url and d_url.lower() == url.lower():
         return 2
     elif alternate_url and alternate_url.lower() == url.lower():
+        return 2
+    elif other_urls and any(u.lower() == url.lower() for u in other_urls):
         return 2
     elif d_url and clean_language_prefix(d_url) == clean_language_prefix(url):
         return 2

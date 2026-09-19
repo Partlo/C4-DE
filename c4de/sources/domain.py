@@ -44,6 +44,7 @@ class Item:
         self.url = self.strip(url)
         self.full_url = self.strip(full_url)
         self.alternate_url = self.strip(alternate_url)
+        self.alternate_urls = []
         self.special = self.strip(special)
         self.subset = self.strip(subset)
         self.collapsed = collapsed

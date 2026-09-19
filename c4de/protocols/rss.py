@@ -689,6 +689,8 @@ def check_audible(cache: Dict[str, List[str]]):
             href = link['href'].split("?")[0]
             if href in cache["Audible"]:
                 continue
+            if re.sub("pd/.*?/(.*?)$", "pd/\\1", href) in cache["Audible"]:
+                continue
 
             date = x.find(class_="releaseDateLabel")
             date_text = date.text.split("Release date:")[-1].strip()

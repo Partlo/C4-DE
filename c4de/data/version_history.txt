@@ -259,3 +259,8 @@
 *'''4.7.0''': July 10, 2026
 **Significant overhaul of the archive crawler, expanding its coverage to archivefile and social media templates
 **Fixed Fortnite handler and other minor bugs
+*'''4.7.1''': August 11, 2026
+**Dub parameter support
+**Archive crawler support for remaining social media templates
+*'''4.7.2''': September 19, 2026
+**Handling multiple alternate URLs
