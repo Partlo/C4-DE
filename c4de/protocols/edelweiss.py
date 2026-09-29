@@ -114,7 +114,7 @@ def load_false_positives(site):
     return []
 
 
-def handle_entry(item: WebElement, sku_list, search_term):
+def handle_entry(item: WebElement, sku_list, search_term, future_only=True):
     body = item.find_element(By.CSS_SELECTOR, "div[class^='productRowBody']")
     publisher_line = item.find_element(By.CSS_SELECTOR, "div[class^='itemHeader']")
     publisher = re.sub(r"^[0-9]+ \([0-9]+\)\.? (.*?)$", "\\1", publisher_line.text.strip().splitlines()[0])
@@ -156,7 +156,7 @@ def handle_entry(item: WebElement, sku_list, search_term):
     if "CANCELED" in status or "CANCELLED" in status:
         print(f"Skipping canceled product: {title}")
         return None
-    elif "BACKLIST" in status:
+    elif future_only and "BACKLIST" in status:
         return None
     elif "Thomas Kinkade Studios" in title or "Star Wars Crochet" in title:
         return None
@@ -177,7 +177,7 @@ def handle_entry(item: WebElement, sku_list, search_term):
     }
 
 
-def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[str]) -> List[dict]:
+def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[str], future_only=True) -> List[dict]:
     """ Loads the product listings from the Edelweiss website, using Selenium to traverse and parse the webpage. """
 
     driver.get(f"https://www.edelweiss.plus/#keywordSearch&q={search_term.replace(' ', '+')}")
@@ -189,35 +189,37 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
 
         WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.CLASS_NAME, "ListView__filterButton")))
         button = driver.find_element(By.CLASS_NAME, "ListView__filterButton")
-        try:
-            button.click()
-        except WebDriverException:
-            driver.execute_script("arguments[0].scrollIntoView()", button)
-            button.click()
 
-        WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.ID, "filterDrawerId")))
-        WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.CLASS_NAME, "MuiListItem-root")))
+        if future_only:
+            try:
+                button.click()
+            except WebDriverException:
+                driver.execute_script("arguments[0].scrollIntoView()", button)
+                button.click()
 
-        found = None
-        for x in driver.find_elements(By.CLASS_NAME, "MuiListItem-root"):
-            b = x.find_element(By.CSS_SELECTOR, "button.MuiButtonBase-root")
-            if b and (b.get_attribute('aria-label') == "Expand Publishing Status" or b.text == "Publishing Status"):
-                found = x
-                b.click()
-                time.sleep(1)
-                for s in x.find_elements(By.CSS_SELECTOR, "span.MuiFormControlLabel-label"):
-                    if "Forthcoming" in s.text:
-                        s.click()
+            WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.ID, "filterDrawerId")))
+            WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.CLASS_NAME, "MuiListItem-root")))
 
-        if not found:
-            raise Exception
+            found = None
+            for x in driver.find_elements(By.CLASS_NAME, "MuiListItem-root"):
+                b = x.find_element(By.CSS_SELECTOR, "button.MuiButtonBase-root")
+                if b and (b.get_attribute('aria-label') == "Expand Publishing Status" or b.text == "Publishing Status"):
+                    found = x
+                    b.click()
+                    time.sleep(1)
+                    for s in x.find_elements(By.CSS_SELECTOR, "span.MuiFormControlLabel-label"):
+                        if "Forthcoming" in s.text:
+                            s.click()
 
-        close = driver.find_element(By.CSS_SELECTOR, "#filterDrawerId button[aria-label='Close Modal']")
-        try:
-            close.click()
-        except WebDriverException:
-            driver.execute_script("arguments[0].scrollIntoView()", button)
-            close.click()
+            if not found:
+                raise Exception
+
+            close = driver.find_element(By.CSS_SELECTOR, "#filterDrawerId button[aria-label='Close Modal']")
+            try:
+                close.click()
+            except WebDriverException:
+                driver.execute_script("arguments[0].scrollIntoView()", button)
+                close.click()
 
     except Exception as e:
         print(f"Encountered {type(e)} while looking for Not Yet Published button")
@@ -250,7 +252,8 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
 
         for item in driver.find_elements(By.CSS_SELECTOR, "div[class^='productRow_']"):
             try:
-                ix = handle_entry(item, sku_list, search_term)
+                ix = handle_entry(item, sku_list, search_term, future_only)
+                print(j, i, ix)
                 if ix:
                     results.append(ix)
             except Exception as e:
@@ -262,7 +265,7 @@ def extract_items_from_edelweiss(driver: WebDriver, search_term, sku_list: List[
         for b in buttons:
             if b.text.lower() == "next page":
                 b.click()
-                time.sleep(3)
+                time.sleep(3 if future_only else 10)
 
     return results
 

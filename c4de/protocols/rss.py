@@ -691,10 +691,10 @@ def check_audible(cache: Dict[str, List[str]]):
             if "Star Wars" not in link.text:
                 continue
             href = link['href'].split("?")[0]
-            book_id = re.sub("/pd(/.*?)?([A-Z0-9]+)$", "\\2", href)
+            book_id = re.sub("/pd(/.*?)?/([A-Z0-9]+)$", "\\2", href)
             if book_id in cache["Audible"]:
                 continue
-            if re.sub("pd/.*?/(.*?)$", "pd/\\1", href) in cache["Audible"]:
+            if re.sub("pd/.*?/(.*?)$", "\\1", href) in cache["Audible"]:
                 continue
 
             date = x.find(class_="releaseDateLabel")

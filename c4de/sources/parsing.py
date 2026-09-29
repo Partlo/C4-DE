@@ -254,7 +254,7 @@ def parse_data(results: PageComponents, lines: list, master_header, redirects, d
             elif f"[[{i}]]" not in section_text:
                 section_text += f"\n*''[[{i}]]'' {{{{MapPoint}}}}"
 
-    section_text = fix_redirects(redirects, section_text, f"Parsing-{master_header}", disambigs, remap)
+    section_text = fix_redirects(redirects, section_text, f"Parsing-{master_header}", disambigs, remap, canon=results.canon)
     results.redirects_fixed.add(master_header)
     result = parse_section(section_text, types, "Appearances" in master_header, unknown, after, log, master_header)
     if log:
@@ -517,9 +517,11 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
     succession_box = False
     scroll_box = False
     cs = 0
+    # TODO: remove after sweep
     section = re.sub(r"({{CardGameSet\|set=.*?)\n\|cards=", "\\1|cards=\n", section)
     section = re.sub(r"({{SourceContents\|issue=.*?)\n\|contents=", "\\1|contents=\n", section)
     section = re.sub(r"(?<!Hamm) \((as .*?)\)", " {{C|\\1}}", section)
+    section = re.sub(r"\n\*(<!--.*?)?'*\[\[(.*?)(\|.*?)?]]'* - '*\[\[(.*?)(\|.*?)?]]'*", "\n*\\1{{StoryCite|book=\\2|story=\\4}}", section)
     section = section.replace("]]{{Mediacat", "]]\n{{Mediacat")
     for s in section.splitlines():
         if succession_box:
@@ -527,6 +529,7 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
             continue
         elif "{{SourcesPage" in s:
             continue
+        # TODO: remove after sweep
         if "CardGameSet" in s:
             s = re.sub(r"^.*?{{CardGameSet\|(set=)?(\{\{.*?)}}( \{\{.*?}}.*?)\|cards=", "*\\2|parent=1}}\\3", s)
             s = re.sub(r"^.*?{{CardGameSet\|(set=)?(.*?)\|cards=", "", s)
@@ -536,9 +539,13 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
         if "SourceContents-start" in s:
             s = re.sub(r"^.*?{{SourceContents-start\|(set=|parent=|issue=)?(\{\{.*?)}}( \{\{.*?}}.*?)}}", "*\\2|parent=1}}\\3", s)
             s = re.sub(r"^.*?{{SourceContents-start\|(set=|parent=|issue=)?('*\[\[.*?]]'*)( \{\{.*?}}.*?)}}", "*\\2}}\\3", s)
-            s = re.sub(r"^.*?{{SourceContents-start\|(set=|parent=|issue=)?(.*?)\n", "", s)
+            s = re.sub(r"^.*?{{SourceContents-start\|(set=|parent=|issue=)?(.*?)$", "", s)
             s = re.sub(r"\|parent=1(.*?)\|parent=1", "|parent=1\\1", s)
             cs += 1
+        elif "SourceContents-end" in s:
+            if cs > 0:
+                cs -= 1
+            continue
         elif "SourceContents|" in s:
             s = re.sub(r"^.*?{{SourceContents\|(parent=|issue=)?(\{\{.*?)}}( \{\{.*?}}.*?)\|contents=", "*\\2|parent=1}}\\3", s)
             s = re.sub(r"^.*?{{SourceContents\|(parent=|issue=)?('*\[\[.*?]]'*)( \{\{.*?}}.*?)\|contents=", "*\\2}}\\3", s)
@@ -673,10 +680,12 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
     if y:
         zs = [f"{{{{WebCite|url={y.group(1)}|text={y.group(2)}|work={y.group(5)}}}}}"]
 
-    found = False
+    found, invalid = False, False
     for y in zs:
         t = extract_item(convert_issue_to_template(y), is_appearances, name, types)
-        if t and not t.invalid:
+        if t and t.invalid:
+            invalid = True
+        elif t:
             if is_official_link(t):
                 t.mode = "Official"
             t.external = name == "Links"
@@ -701,6 +710,9 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
     if not found:
         if not data and s.count("[") == 0 and s.count("]") == 0:
             pass
+        elif invalid:
+            unknown.append(s)
+            other2.append(re.sub(r"^(\*(<!--.*?-->)?)?(.*?)$", "\\1{{UnknownListing}} \\3", s))
         elif "audiobook" not in s and not attempt:
             unknown.append(s)
             other2.append(s)
@@ -812,10 +824,10 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                 if o and not o.use_original_text and o.replace_references:
                     found.append(o)
                     if o.master.template and not x.template and x.target and not re.search(r"^['\"]*\[\[" + prepare_title(x.target) + "(\|.*?)?]][,'\"]*$", new_ref):
-                        if o.master.template != "Film" and f'"[[{x.target}]]"' not in new_ref:
+                        if o.master.template != "Film" and re.sub(r"\[\[(.*?)( \(.*?\))]]", "[[\\1\\2|\\1]]", f'"[[{x.target}]]') not in new_ref:
                             print(f"Skipping {link[0]} due to extraneous text")
                     elif link[0].startswith('"') and link[0].endswith('"') and (len(ref) - len(link[0])) > 5:
-                        if o.master.template != "StoryCite":
+                        if o.master.template != "StoryCite" and o.master.template != "InsiderCite":
                             print(f"Skipping quote-enclosed link {link[0]} (likely an episode name)")
                     elif "{{" in o.master.original and len(templates) > 0:
                         print(f"Skipping {link[0]} due to presence of other templates in ref note")
@@ -847,7 +859,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
 
         new_templates = []
         for t in templates:
-            if "bypass=1" in t or t == "{{'s}}" or any(t.lower().startswith("{{" + i.lower()) for i in [*TEMPLATE_SKIPS, *types["Dates"]]):
+            if "bypass=1" in t or t == "{{'}}" or t == "{{'s}}" or any(t.lower().startswith("{{" + i.lower()) for i in [*TEMPLATE_SKIPS, *types["Dates"]]):
                 continue
             x = extract_item(t, False, "reference", types)
             if x:
@@ -890,7 +902,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
             if page.title() != ni.master.target or ni.current.card:
                 new_ref = re.sub(r"\|parent=1(?!}}( is set| \{\{C\|))", "", new_ref)
 
-        new_ref = fix_redirects(redirects, new_ref, "Reference", disambigs, remap)
+        new_ref = fix_redirects(redirects, new_ref, "Reference", disambigs, remap, canon=canon)
         if not media and new_ref.count('[') == 0 and new_ref.count("]") == 0 and new_ref.count("{") == 0:
             new_ref = "{{UnlinkedRef}} " + new_ref
         # if not media and re.search(PAGE_NUMBER_REGEX.replace("</ref>", ""), new_ref):

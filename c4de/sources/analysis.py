@@ -278,6 +278,14 @@ def handle_non_canon_items(results: PageComponents, new_apps: SectionItemIds, ne
         for x in new_ncs.wrong:
             (new_nca if x.master.non_canon else new_apps).found.append(x)
 
+    if results.non_canon:
+        new_apps.merge(new_nca)
+        new_apps.found += new_apps.non_canon
+        new_apps.non_canon = []
+        new_src.merge(new_ncs)
+        new_src.found += new_src.non_canon
+        new_src.non_canon = []
+
 
 def analyze_section_results(target: Page, results: PageComponents, appearances: FullListData,
                             sources: FullListData, remap: dict, use_index: bool, include_date: bool,
@@ -1134,13 +1142,17 @@ def build_item_text(o: ItemId, d: str, sl: str, final_without_extra: list, final
             print(f"Skipping duplicate {zn}")
         return None
     else:
-        e = re.sub(r"<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", o.current.extra).strip()
+        e = " " + re.sub(r"<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", o.current.extra).strip()
         if not collapse_audiobooks:
             e = e.replace("|audiobook=1", "")
-        elif o.master.ab:
-            e = f"{o.master.ab} {e}".strip()
         if o.master.repr:
+            e = e.replace(" " + o.master.repr, "")
             e = f"{o.master.repr} {e}".strip()
+        if o.master.ab:
+            e = e.replace(" " + o.master.ab, "")
+            e = f"{o.master.ab} {e}".strip()
+        if "{{Reprint|" in e and "{{Ab|" in e:
+            e = re.sub(r"(\{\{Reprint\|.*?}}) (\{\{Ab\|.*?}})$", "\\2 \\1", e)
         if o.master.crp and "{{crp}}" not in e.lower() and "{{crp}}" not in zn.lower():
             e = "{{Crp}} " + e
         if section_name.startswith("Non-canon"):
@@ -1153,6 +1165,7 @@ def build_item_text(o: ItemId, d: str, sl: str, final_without_extra: list, final
                 e = e.replace("{{Mo}}", "")
         if o.master.unlicensed and not unlicensed and "{{Un}}" not in e and "{{un}}" not in e:
             e += " {{Un}}"
+        e = e.strip()
         z = swap_parameters(f"{zn} {e}").strip()
         if not is_file and o.master.date and o.master.date.startswith("Cancel") and "{{c|cancel" not in z.lower():
             z += " {{C|canceled}}"

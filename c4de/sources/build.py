@@ -435,7 +435,7 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
                 break
 
     if results.final:
-        pieces.append(build_final(results.final, media_cat, redirects))
+        pieces.append(build_final(results.final, media_cat, redirects, results.canon))
 
     # now = datetime.now()
     new_txt = sort_categories(pieces, page.namespace().id, results.flag)
@@ -474,7 +474,7 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
     # log_time("regex", now)
     replace = True
     if redirects:
-        new_txt = fix_redirects(redirects, new_txt, "Final Body", remap, disambigs)
+        new_txt = fix_redirects(redirects, new_txt, "Final Body", remap, disambigs, canon=results.canon)
     if "{{WP}}" in new_txt:
         new_txt = new_txt.replace("{{WP}}", f"{{{{WP|{page.title()}}}}}")
     elif "{{WP|{{PAGENAME}}" in new_txt:
@@ -504,10 +504,10 @@ def handle_legends_links(text, title):
     return f"{body}{header}{bts}"
 
 
-def build_final(final, media_cat, redirects):
+def build_final(final, media_cat, redirects, canon):
     templates = {k: v for k, v in redirects.items() if k.startswith("Template:")}
     if templates:
-        final = fix_redirects(templates, final, "Ending Text", {}, {})
+        final = fix_redirects(templates, final, "Ending Text", {}, {}, canon=canon)
 
     if "==\n" in final and media_cat:
         z = final.split("==\n", 1)

@@ -505,7 +505,7 @@ class C4DE_Bot(commands.Bot):
 
         if "isbn" in message.content.lower():
             page = Page(self.site, "Template:ISBN/data")
-            last_revision = next(r for r in page.revisions(reverse=True, total=10) if r["user"] == "JocastaBot")
+            last_revision = next(r for r in page.revisions(reverse=True, total=10) if r["user"] == "C4-DE Bot")
             time_since_last_edit = (datetime.now() + timedelta(hours=self.timezone_offset)) - last_revision['timestamp']
             if time_since_last_edit.total_seconds() < (60 * 60 * 6):
                 print(time_since_last_edit.total_seconds(), 60 * 60 * 6)

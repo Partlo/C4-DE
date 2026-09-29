@@ -17,9 +17,13 @@ SORT_MODES = {
 class Item:
     """
     :type date: str
+    :type template: str
     :type target: str
     :type text: str
+    :type alternate_url: str
+    :type alternate_urls: list[str]
     """
+
     def __init__(self, original: str, mode: str, is_app: bool, *, invalid=False, target: str = None, text: str = None,
                  parent: str = None, template: str = None, url: str = None, issue: str = None, subset: str = None,
                  card: str = None, special=None, collapsed=False, format_text: str = None, no_issue=False, ref_magazine=False,
@@ -52,13 +56,11 @@ class Item:
 
         # media-type flags
         self.is_appearance = is_app
-        self.is_true_appearance = False
         self.ref_magazine = ref_magazine
         self.tv = mode == "TV"
         self.is_abridged = False
         self.is_audiobook = False
         self.german_ad = False
-        self.is_adaptation = False
         self.is_reprint = False
         self.external = False
         self.unlicensed = False
@@ -67,6 +69,7 @@ class Item:
         self.collection_type = None
 
         if self.card:
+            # noinspection PyTypeChecker
             self.text = None
 
         self.format_text = format_text
@@ -136,6 +139,9 @@ class Item:
             print(f"no card? {self.card}, {self.original}")
             return self.original.replace("''", "").replace('"', '')
 
+    def is_true_appearance(self):
+        return self.master_page and (self.master_page == "Appearances/Legends" or self.master_page == "Appearances/Canon")
+
     def is_internal_mode(self):
         return self.mode == "Web" or self.mode == "YT" or self.mode == "Toys" or self.mode == "Cards"
 
@@ -193,7 +199,7 @@ REF_MAGAZINE_ORDERING = {
     "BuildR2Cite": ["Building the Galaxy", "Droid Directory", "Understanding Robotics", "Build R2-D2"],
     "BuildXWingCite": ["Creating a Starship Fleet", "Starfighter Aces", "Rocket Science", "Build the X-Wing"],
     "BustCollectionCite": ["Character", "Star Wars Universe", "Behind the Cameras"],
-    "DarthVaderCite": ["The Dark Side", "Planets (department)", "Villains of the Galaxy"],
+    "DarthVaderCite": ["The Dark Side", "Galactic Villains", "Planets (department)", "Starships and Equipment"],
     "FalconCite": ["Starship Fact File", "Secrets of Spaceflight", "Build the Falcon"],
     "FigurineCite": ["Heroes and Villains", "A Galaxy Far, Far Away", "Concepts", "Spaceships and Vehicles", "Droids",
                      "Species and Beings", "The Phenomenon"],

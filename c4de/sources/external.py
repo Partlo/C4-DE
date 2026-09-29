@@ -171,6 +171,8 @@ def is_external_link(d: ItemId, o: Item, unknown):
     elif o.template == "YouTube" and re.search(r"YouTube\|channel(name)?=[^|}\n]+\|channel(name)?=[^|}\n]+}}", o.original) and "video=" not in o.original:
         o.mode = "Profile"
         return True
+    elif o.template == "Marvel" and o.url.startswith("articles/"):
+        return False
     elif d and d.master.external:
         o.mode = "Found-External"
         return True

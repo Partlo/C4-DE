@@ -59,6 +59,7 @@ def prepare_text_for_cleanup(text):
     text = re.sub(r"((/>|</ref>)[^\n]+)<ref>", "\\1\n</ref", text)
     text = re.sub(r"(\{\{Quote[^\n]+?\|)<ref", "\\1\n<ref", text)
     text = re.sub(r"(\{\{YouTube\|.*?)\|name=\[\[Wikipedia:(.*?)\|.*?]]", "\\1|wplink=\\2", text)
+    # text = re.sub(r"(\{\{[^\n{\}]+?)\{\{C\|[^\n{}]+?}}", "\\1", text)
     return re.sub(r"\|(archiveurl|archivedate|url)=\n?(.*?)\n?}}", "|\\1=\\2}}", text)
 
 
@@ -113,6 +114,30 @@ def decide_archive_template(template, types: dict, skip: list, archives: dict, p
     return archive_template, youtube, target
 
 
+def extract_urls(text, template, youtube):
+    if youtube:
+        zx = [(i[0], i[4]) for i in re.findall(r"(\{\{" + template + r"\|((subdomain|channel|username|name|text|wplink|link|series|parameter)=.*?\|)*?(video=)?([^|\n}=]+?)([&?].*?)?(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
+        for i in re.findall(r"(\{\{" + template + r"\|(.*?\|)?channel=([^|\n}=]+?)(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text):
+            if "video=" not in i[0]:
+                zx.append((i[0], i[2]))
+        if not zx:
+            for z in re.findall(r"\{\{YouTube\|.*?}}", text):
+                print(z)
+    elif template == "Databank":
+        zx = [(i[0], i[2]) for i in re.findall(r"(\{\{Databank\|(url=)?([^|\n}]+?)(\|.*?)(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
+    else:
+        zx = [(i[0], i[3]) for i in re.findall(r"(\{\{" + template + r"(\|[^\n}]*?)?\|(url|link|altlink)==?([^|\n}]+?(\{\{=}})?[^|\n}]*?)[/ ]*\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
+        if template in ["Bluesky", "Threads", "TikTok", "Twitter"]:
+            for i in re.findall(r"(\{\{" + template + r".*?\|/?((post|statuse?s?|video|playlist)/[^|\n}]+?)[/ ]*(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text):
+                zx.append((i[0], i[1]))
+        if template in ["ArtStation", "Blogspot", "Bluesky", "Cara", "DeviantArt", "Facebook", "Instagram", "LinkedIn",
+                        "Threads", "TikTok", "Tumblr", "Twitter", "WordPress"]:
+            for i in re.findall(r"(\{\{" + template + r"(\|[^\n}]*?)?\|(subdomain|username)=/?([^|\n}]+?)[/ ]*(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text):
+                if "|url=" not in i[0]:
+                    zx.append((i[0], i[3]))
+    return zx
+
+
 def build_missing_and_new(page, types, archives, patterns, new_data, skip):
     if not new_data:
         new_data = {}
@@ -137,26 +162,7 @@ def build_missing_and_new(page, types, archives, patterns, new_data, skip):
         if not archive_template:
             continue
 
-        if youtube:
-            zx = [(i[0], i[4]) for i in re.findall(r"(\{\{" + template + r"\|((subdomain|channel|username|name|text|wplink|link|series|parameter)=.*?\|)*?(video=)?([^|\n}=]+?)([&?].*?)?(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
-            for i in re.findall(r"(\{\{" + template + r"\|(.*?\|)?channel=([^|\n}=]+?)(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text):
-                if "video=" not in i[0]:
-                    zx.append((i[0], i[2]))
-            if not zx:
-                for z in re.findall(r"\{\{YouTube\|.*?}}", text):
-                    print(z)
-        elif template == "Databank":
-            zx = [(i[0], i[2]) for i in re.findall(r"(\{\{Databank\|(url=)?([^|\n}]+?)(\|.*?)(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
-        else:
-            zx = [(i[0], i[3]) for i in re.findall(r"(\{\{" + template + r"(\|[^\n}]*?)?\|(url|link|altlink)==?/?([^|\n}]+?(\{\{=}})?[^|\n}]*?)/* *(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
-            if template in ["Bluesky", "Threads", "TikTok", "Twitter"]:
-                for i in re.findall(r"(\{\{" + template + r".*?\|/?((post|statuse?s?|video|playlist)/[^|\n}]+?)/*(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text):
-                    zx.append((i[0], i[1]))
-            if template in ["ArtStation", "Blogspot", "Bluesky", "Cara", "DeviantArt", "Facebook", "Instagram", "LinkedIn", "Threads", "TikTok", "Tumblr", "Twitter", "WordPress"]:
-                for i in re.findall(r"(\{\{" + template + r"(\|[^\n}]*?)?\|(subdomain|username)=/?([^|\n}]+?)/*(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text):
-                    if "|url=" not in i[0]:
-                        zx.append((i[0], i[3]))
-        for a, x in zx:
+        for a, x in extract_urls(text, template, youtube):
             if "na=video file" in a or "oldversion" in a or "nobackup=1" in a:
                 continue
             x = clean_target_key(x)

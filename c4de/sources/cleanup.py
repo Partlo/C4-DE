@@ -12,11 +12,13 @@ from c4de.sources.infoboxer import handle_infobox_on_page
 
 REPLACEMENTS = [
     ("==Work==", "==Works=="), ("Apearance", "Appearance"), ("Appearence", "Appearance"), ("&#40;&#63;&#41;", "(?)"),
+    ("===Non-canonical appearances===\n*", "===Non-canon appearances===\n*"),
+    ("==Traits and personality==", "==Personality and traits=="),
     ("{{mO}}", "{{Mo}}"), ("*{{Indexpage", "{{Indexpage"), ("<br>", "<br />"), ("{{InvalidCategory}}", ""),
     ("Youtube", "YouTube"), ("{{Scrollbox", "{{ScrollBox"), ("referneces", "references"), ("{{MO}}", "{{Mo}}"),
     ("{{C|variant cover only}}", "{{Vco}}"), ("{{C|Variant cover only}}", "{{Vco}}"),
     ("{{scrollbox", "{{ScrollBox"), ("</reF>", "</ref>"), ("\n</ref>", "</ref>"), ("†", "&dagger:"),
-    ("{{Visions|focus=1", "{{VisionsFocus"), ("{{Visions|focus=4", "{{VisionsFocus"), ("{{Visions|focus=8", "{{VisionsFocus"),
+    ("<nowiki>|</nowiki>", "&#124;"), ("||text=", "|text="), ("|Parent=1", "|parent=1"),
     ("[[:category:", "[[:Category:"), ("[[category:", "[[Category:"), ("[[Image:", "[[File:"),
     ("{{IntroMissingTitle}} ", ""), ("{{IntroMissingTitle}}\n", ""),
     ("==Media==\n*{{ISBN|", "==Media==\n===Editions===\n*{{ISBN|"),
@@ -24,12 +26,15 @@ REPLACEMENTS = [
     ("{{App|characters=", "{{App\n|characters="), ("PenguinRandomHouse|old=1", "RandomHouseOld"),
     ("<onlyinclude>\n{{Incomplete_app}}", "{{IncompleteApp}}\n<onlyinclude>"),
     ("<onlyinclude>\n{{IncompleteApp}}", "{{IncompleteApp}}\n<onlyinclude>"),
-    ("set=Twilight of the Republic (Star Wars: Unlimited)", "set=Twilight of the Republic"),
+    ("{{C|non-canon|reprint=1}}", ""), ("[[Category: ", "[[Category:"),
 
+    ("{{AhsokaSeriesDate}}", "{{AhsokaDate|1}}"), ("{{AhsokaDate}}", "{{AhsokaDate|1}}"),
+    ("{{EncyclopediaCite|Padmé Amidala Naberrie}}", "{{EncyclopediaCite|Padmé Amidala}}"),
+    ("{{Rebels|Siege of Lothal}}", "{{Rebels|The Siege of Lothal}}"),
+    ("set=Twilight of the Republic (Star Wars: Unlimited)", "set=Twilight of the Republic"),
     ("|work=[[Entertainment Weekly Books|''Entertainment Weekly'']]", ""),
     ("|work=''[[Wikipedia:Entertainment Weekly|Entertainment Weekly]]''", ""),
     ("|work=[[Wikipedia:Entertainment Weekly|''Entertainment Weekly'']]", ""),
-    ("{{SWKidsYouTube|0eKgIHtzphA|Fett's Flying Lesson &#124; LEGO Star Wars &#124; @StarWarsKids}}", "{{CelebrateTheSeason|Fett's Flying Lesson}}"),
     ("{{SideshowCite|set=Sixth Scale Figures|pack=Boba Fett|link=collectibles/star-wars-boba-fett-deluxe-version-hot-toys-907747?var=907834}}",
      "{{HotToysCite|set=Television Masterpiece Series|packtype=Sixth Scale Figure|pack=#033: Boba Fett (Deluxe Version)|link=collectibles/star-wars-boba-fett-deluxe-version-hot-toys-907747}}"),
     ("{{SideshowCite|set=Sixth Scale Figures|pack=Anakin Skywalker and STAP|link=collectibles/star-wars-anakin-skywalker-and-stap-hot-toys-906795?var=906795}}",
@@ -68,6 +73,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     before = re.sub(r"(\{\{WebCite[^\n}]*?)\|title=(.*?}})", "\\1|text=\\2", before)
     before = before.replace(r"\n}}</ref>", "}}</ref>")
     before = re.sub(r"(\{\{(SWGcite|TORcite).*?)\|type=", "\\1|TORTYPE=", before)
+    before = re.sub(r"((\{\{Top(\|.*?)?}})(\n.*?)*?)\n\{\{Top}}", "\\1", before)
 
     # whitespace/spacing issues
     before = re.sub(r"\* +([A-z0-9'\[{])", "*\\1", before)
@@ -96,6 +102,8 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
             before = before.replace(f"|title2={y}", "")
 
     now = datetime.now()
+    while "== " in before or " ==" in before:
+        before = before.replace(r"== ", "==").replace(" ==", "==")
     for (x, y) in REPLACEMENTS:
         before = before.replace(x, y)
 
@@ -116,6 +124,12 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     before = re.sub(r"(\{\{1st[A-z]*)\|\n}}", "\\1}}", before)
     before = re.sub(r"(\{\{1st[A-z]*\|[^|}\n]*?)\n}}", "\\1}}", before)
     before = re.sub(r"(\{\{[A-z0-9-]+[^{}\n]+?) *\n *}}", "\\1}}", before)
+    before = re.sub(r"^([^\[\]\n]+\[\[[^\[\]\n]+)]]]+('*)", "\\1]]\\1", before)
+    before = re.sub(r"\[\[(.*?)\|''\1'']]([ .,<])", "''[[\\1]]''\\2", before)
+    before = before.replace(">'>{{", ">{{")
+    # missing newline between listings or templates
+    before = re.sub(r"(\n\*[^\n]*?[\[{]+[^\n]*?[]}]+[^\n]*?)(\*[^\n]*?[\[{]+[^\n]*?[]}]+[^\n]*?\n)", "\\1\n\\2", before)
+    before = re.sub(r"(\{\{Quote\|[^\n{}]+?(\{\{[^\n{}]+?}})?[^\n{}]+?}})(?!\n)", "\\1\n", before)
 
     # fixing same-line infobox fields
     while re.search(r"(\n\*+\[\[[^\n\]}]+?]])(\|[a-z _]+=)", before):
@@ -150,9 +164,6 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
         before = re.sub(r"\[\[(?!File:)([^\[\]{}\n]+?)&mdash;([^\[\]{}\n]+?)]]", "[[\\1—\\2]]", before)
 
     before = re.sub(r"(\{\{(Unknown|Series)Listing.*?}})\{\{", "\\1 {{", before)
-    before = before.replace(r"||text=", "|text=").replace("|Parent=1", "|parent=1")
-    before = before.replace(r"{{C|non-canon|reprint=1}}", "")
-    before = before.replace(r"<nowiki>|</nowiki>", "&#124;")
     before = re.sub(r"({{[Ss]croll[_ ]?[Bb]ox\|)\*", "{{ScrollBox|\n*", before)
     before = re.sub(r"<small>\((.*?)\)</small>", "{{C|\\1}}", before)
 
@@ -162,7 +173,6 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     # removing work= parameters and prioritizing
     before = re.sub(r"(\{\{((?!([wW]ebCite|OfficialSite))[^{}\n])*?\|[^{}\n]+?)\|work=(\[\[[^]]+\|.*?]])?.*?(\|.*?)?}}", "\\1\\4}}", before)
     before = re.sub(r"(\{\{[A-z]+)(\|url=[^\n{}]+?)(\|(subdomain|uk|lang)=[^\n{}]+?)(\|[^\n{}]*?)?}}", "\\1\\3\\2\\5}}", before)
-    before = re.sub(r"(\{\{Quote\|[^\n{}]+?(\{\{[^\n{}]+?}})?[^\n{}]+?}})(?!\n)", "\\1\n", before)
 
     b1, b2, b3 = before.partition(r"{{App\n")
     b3 = re.sub(r"\n?(\|(c-|l-)?(characters|organisms|droids|events|locations|organizations|species|vehicles|technology|miscellanea)=)\*", "\n\\1\n*", b3)
@@ -173,11 +183,9 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     # weird multi-link listings, legacy formatting from the 2000s
     before = re.sub(r"\*('*?)\[\[([^\n\]|{]*?)]]('*?) '*?\[\[(\2\([^\n\]{]*?)\|(.*?)]]'*", "*[[\\4|\\1\\2\\3 \\5]]", before)
     before = re.sub(r"\*'*?\[\[([^\n\]{]*?)(\|[^\n\]{]*?)]]'*? '*?\[\[(\1 \([^\n\]{]*?)\|(.*?)]]'*", "*[[\\3|\\2 \\4]]", before)
-    before = re.sub(r"(\n\*[^\n]*?[\[{]+[^\n]*?[]}]+[^\n]*?)(\*[^\n]*?[\[{]+[^\n]*?[]}]+[^\n]*?\n)", "\\1\n\\2", before)
-
-    before = re.sub(r"(\|set=(.*?))\|sformatted=''\2''", "\\1", before)
 
     before = re.sub(r"\|story=\[\[(.*?)(\|.*?)?]]", "|story=\\1", before)
+    before = re.sub(r"(\|set=(.*?))\|sformatted=''\2''", "\\1", before)
     before = re.sub(r"(\|set=.*?)(\|subset=.*?)(\|stext=.*?)(\|.*?)?}}", "\\1\\3\\2\\4}}", before)
     before = re.sub(r"(\{\{([A-z_ ]+)\|(set=)?[^|=\n}]+?)(\|link=[^|\n}]+?)(\|cardname=[^|\n}]+?)(\|[^\n}]*?)?}}", "\\1\\5\\4\\6}}", before)
 
@@ -193,24 +201,36 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     before = re.sub(r"\|name=\[\[Friends of the Force(\|Friends of the Force|]]): A Star Wars Podcast]*\|", "|name=[[Friends of the Force]]|", before)
     before = re.sub(r"\{\{InsiderCite\|link=(.*?)(.*?)\|''\1''\2\|(.*?)}}", "{{StoryCite|book=\\1|story=\\3}}", before)
     before = re.sub(r"(\{\{([A-z _0-9]+)\|.*?}}) (\{\{1st[a-z]*)\|\{\{\2.*?}}( \{.*?)?\n", "\\1 \\3}}\\4\n", before)
-    before = re.sub(r"\[\[K-Zone\|'*K-Zone'* (Volume [0-9]+, Number [0-9]+)]]", "[[K-Zone \\1|''K-Zone'' \\1]]", before)
     before = re.sub(r"'*\[(https?://[w.]*?archive.org/.*?) (.*?)]'* (on|at)( the)? ('*\[https?://[w.]*archive\.org/? )?Internet Archive]?'*",
                     "{{WebCite|url=\\1|text=\\2}}", before)
     before = re.sub(r"(\{\{GalaxyMapAppendix}})( |&.dash;)*[Bb]ased on (corresponding )?(info(rmation)?|data) for (the )?(\[\[((?! and ).)*?]]).?</ref>", "\\1 &mdash; Based on corresponding data for the \\7</ref>", before)
-    before = re.sub(r"''\[\[(The Acolyte|The Mandalorian|The Book of Boba Fett)]]''", "''[[Star Wars: \\1]]''", before)
-    before = re.sub(r"'?'?\[\[(Andor|Ahsoka|Obi-Wan Kenobi) \(television series\)\|'?'?\1'?'?]]'?'?", "''[[Star Wars: \\1]]''", before)
-    before = re.sub(r"\*(\{\{SeriesListing.*?}} )?\[\[Star Wars Rebels \(webcomic\)\|.*?{{C\|Appears through imagination}}\n", "", before)
+
     before = re.sub(r"(\{\{EncyclopediaCite\|.*?) \(reference book\)}}", "\\1}}", before)
-    before = before.replace(">'>{{", ">{{")
+    before = re.sub(r"(\{\{Twitter\|.*?username=)@", "\\1", before.replace("{{Twitter|@", "{{Twitter|"))
+    before = re.sub(r"(\{\{ToppsNow\|series=Star Wars)( Visions\|episode=(Aau|Journey|In the Stars|I Am Your|The Spy|The Bandits|The Pit|Sith|Screecher))", "\\1:\\2", before)
+
     before = re.sub(r">'*\[\[Star Wars Rebels: (Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)]]'*", ">{{Rebels|\\1}}", before)
     before = re.sub(r">'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \1'*]]'*", ">{{Rebels|\\1}}", before)
     before = re.sub(r"'*\[\[Star Wars Rebels: (Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)]]'*", "\"[[\\1]]\"", before)
     before = re.sub(r"'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \1'*]]'*", "\"[[\\1]]\"", before)
-    before = before.replace("{{Rebels|Siege of Lothal}}", "{{Rebels|The Siege of Lothal}}")
-    before = before.replace("{{EncyclopediaCite|Padmé Amidala Naberrie}}", "{{EncyclopediaCite|Padmé Amidala}}")
+
+    before = re.sub(r"\{\{GameSpot\|subdomain=(.*?)\|url=(.*?)\|text=(.*?)(\|.*?)?}}", "{{WebCite|url=https://\\1.gamespot.com/\\2|text=\\3\\4}}", before)
+    before = re.sub(r"\{\{GameSpot\|url=(.*?)\|text=(.*?)(\|.*?)?}}", "{{WebCite|url=https://www.gamespot.com/\\1|text=\\2\\3}}", before)
+    before = re.sub(r"\[\[Category:Articles with /LEGO.*?\n", "", before)
+    before = re.sub(r"\n\[\[Category:Articles with /LEGO.*?]](\{\{.*?}})?$", "", before)
+
+    before = re.sub(r"(\{\{SliceRegion\|.*?}}}})}}</ref>", "\\1</ref>", before)
 
     before = re.sub(r"(\{\{Getty.*?)\|author=\[\[The Walt.*?]](\|[a-z]+=.*?)}}", "\\1\\2}}", before)
     before = re.sub(r"(\{\{Getty.*?)\[\[Wikipedia:Getty.*?]]", "\\1", before)
+    before = re.sub(r"\{\{Getty.*?\|url=.*?shhvmqrz3tm66g4gs4xn8znz.*?}}", "{{ProductionBrief/Acolyte}}", before)
+    before = re.sub(r"\{\{Getty.*?\|url=.*?shhvmqrz3tm66g4gs4xn8znz.*?}}", "{{ProductionBrief/Ahsoka1}}", before)
+    before = re.sub(r"\{\{Getty.*?\|url=.*?gppr5wpqgb4t74974f8s.*?}}", "{{ProductionBrief/Andor1}}", before)
+    before = re.sub(r"\{\{Getty.*?\|url=.*?wx798hgmr96bk3wxrt9vpw.*?}}", "{{ProductionBrief/Andor1}}", before)
+    before = re.sub(r"\{\{Getty.*?\|url=.*?9rcqp87xgvc64ts3kgchk48.*?}}", "{{ProductionBrief/Andor2}}", before)
+    before = re.sub(r"\{\{Getty.*?\|url=.*?b66vps8kq5ts777tc8bbbp.*?}}", "{{ProductionBrief/Visions3}}", before)
+    before = re.sub(r"\{\{Getty.*?\|url=.*?s75j56ckkw879rfqfnxr49s.*?}}", "{{ProductionBrief/Visions3}}", before)
+    before = re.sub(r"\{\{Getty.*?\|url=.*?897ccq7kqscjfxffcg3v8z5t.*?}}", "{{ProductionBrief/SkeletonCrew}}", before)
 
     before = re.sub(r">\[\[Star Wars Galaxy Map \(poster\)\|[^\n\]\[]+]]<", ">{{GalaxyMapPoster}}<", before)
     before = re.sub(r">The \[\[Star Wars Galaxy Map \(poster\)\|[^\n\]\[]+]]", ">The {{GalaxyMapPoster}}", before)
@@ -223,9 +243,6 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     now = datetime.now()
     before = regex_cleanup(before)
     log_time("regex-2", now)
-
-    while "== " in before or " ==" in before:
-        before = before.replace(r"== ", "==").replace(" ==", "==")
     if "{{C|unlicensed}}" in before:
         before = re.sub(r"( {{[Cc]\|[Uu]nlicensed}})+", "", before)
     if "{{Mentioned" in before or "{{mentioned" in before:

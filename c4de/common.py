@@ -182,7 +182,7 @@ def build_redirects(page: Page, manual: str = None):
                 pages.append(Page(page.site, x))
                 pagenames.append(x)
         for _, x in re.findall(r"\{\{([Tt]emplate)?:?([^\n|{}[\]]+)", manual):
-            if f"Template:{x}" not in pagenames:
+            if f"Template:{x}" not in pagenames and not x.startswith("#"):
                 pages.append(Page(page.site, f"Template:{x}"))
                 pagenames.append(x)
         # for _, x, _ in re.findall(r"\|(title=|set=)(.*?)(\|.*?)?}}", manual):
@@ -195,12 +195,15 @@ def build_redirects(page: Page, manual: str = None):
         #         pagenames.append(x)
 
     for i, r in enumerate(pages):
-        if is_redirect(r, pagenames[i]):
-            t = r.getRedirectTarget().title()
-            if t.startswith("File:"):
-                results[r.title().replace(" ", "_")] = t.replace(" ", "_")
-            elif not t.startswith("Category:"):
-                results[r.title()] = f":{t}" if t.startswith("Category:") else t
+        try:
+            if is_redirect(r, pagenames[i]):
+                t = r.getRedirectTarget().title()
+                if t.startswith("File:"):
+                    results[r.title().replace(" ", "_")] = t.replace(" ", "_")
+                elif not t.startswith("Category:"):
+                    results[r.title()] = f":{t}" if t.startswith("Category:") else t
+        except Exception as e:
+            error_log(f"Encountered {type(e)} while checking [{r}] for redirect")
     return results
 
 
@@ -293,6 +296,8 @@ def handle_multiple_issues(text: Union[List[str], str]):
 def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, remap, file=False, overwrite=False,
                   appearances: Dict[str, List[Item]] = None, sources: Dict[str, List[Item]] = None, canon=False) -> str:
     for r, t in redirects.items():
+        if r == "TIE pilot" and canon:
+            t = "Imperial Starfighter Pilot"
         if t in disambigs or "(disambiguation)" in t:
             fix_disambigs(r, t, text)
             continue
@@ -342,6 +347,7 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
 
                 if r == f"{t}s":
                     text = text.replace(f"[[{r}]]", f"[[{t}]]s")
+                text = text.replace(f"[[{r}|{t[0].lower()}{t[1:]}]]", f"[[{t[0].lower()}{t[1:]}]]")
 
                 text = re.sub(r"(''')?('')?\[\[" + x + r"\|('')?(" + prepare_title(t) + ")('')?]](s)?(''')?('')?", f"\\1\\2\\3[[\\4]]\\6\\2\\3", text)
                 if r.startswith("File:"):
@@ -413,6 +419,7 @@ def do_final_replacements(new_txt, replace, is_status):
                           re.sub(r"(\[\[(?!File:)[^\[\]|\n]+)&mdash;", "\\1—", new_txt))
         new_txt2 = re.sub(r"(\[\[(?!File:)[^\[\]|\r\n]+–[^\[\]|\r\n]+\|[^\[\]|\r\n]+)&ndash;", "\\1–",
                           re.sub(r"(\[\[(?!File:)[^\[\]|\n]+—[^\[\]|\r\n]+\|[^\[\]|\r1\n]+)&mdash;", "\\1—", new_txt2))
+        new_txt2 = re.sub(r"\[\[([A-Z])(.*?)\|([a-z])\2(s)?]]", "[[\\3\\2]]\\4", new_txt2)
         # new_txt2 = re.sub(r"\[\[(.*?)\|\1((?!(Bestoon)[^\n \[\]}{])*?)]]", "[[\\1]]\\2", new_txt2)
         new_txt2 = re.sub(r"(\|set=(.*?) \(.*?\))\|(s?text|sformatt?e?d?)=\2([|}])", "\\1\\4", new_txt2)
         new_txt2 = handle_repeated_references(new_txt2, is_status)

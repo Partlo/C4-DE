@@ -217,7 +217,7 @@ def load_appearances(site, log, canon_only=False, legends_only=False):
                     i += 1
                     data.append({"index": i, "page": f"Appearances/{sp}", "date": x.group(1), "item": x.group(4),
                                  "canon": "Canon" in sp, "extra": sp in other, "audiobook": "Audiobook" in sp,
-                                 "collectionType": collection_type, "master": sp == "Legends" or sp == "Canon"})
+                                 "collectionType": collection_type})
                 else:
                     print(f"{p.title()}: Cannot parse line: {line}")
         if log:
@@ -329,7 +329,7 @@ def load_source_lists(site, log, include_web=True):
         p = Page(site, f"Wookieepedia:Sources/Web/{template}")
         i = 0
         for line in p.get().splitlines():
-            if "/Header}}" in line or not line.strip():
+            if "/Header}}" in line or not line.strip() or line.startswith("----"):
                 continue
             x = re.search(r"\*((?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? )?(?P<t>{{.*?)( {{C\|1?=?(original|alternate): (?P<a>.*?)}})?$", line)
             if x:
@@ -659,7 +659,6 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 x.is_abridged = "abridged audiobook" in x.original and "unabridged" not in x.original
                 x.is_audiobook = not ab and ("audiobook)" in x.original or x.target in AUDIOBOOK_MAPPING.values() or i['audiobook'])
                 x.german_ad = x.target and "German audio drama" in x.target
-                x.is_true_appearance = i["master"]
                 x.index = i['index']
                 if x.template == "SchAdv" or x.template == "EpIAdv":
                     x.original = f"''[[{x.target}]]''"
@@ -684,7 +683,6 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                     x.both_continuities = True
 
                 if x.target:
-                    x.is_adaptation = (lx.get(x.target, {}) or cx.get(x.target, {})).get("adaptation", False)
                     c, l = determine_index(x, f"{x.issue}-{x.target}" if x.target == "Galaxywide NewsNets" else x.target, i, canon, legends, c_unknown, l_unknown, log_match)
                     if c or l:
                         y = Page(site, x.target)
@@ -848,7 +846,6 @@ def parse_new_timeline(page: Page, types):
     text = fix_redirects(redirects, text, "Timeline", [], {})
     results = {}
     unique = {}
-    is_adaptation = False
     index = 0
     unknown = None
     text = re.sub(r"(\| ?[A-Z]+ ?)\n\|", "\\1|", text).replace("|simple=1", "").replace("(comic)", "(comic story)")
@@ -873,7 +870,7 @@ def parse_new_timeline(page: Page, types):
                 #     if dt:
                 #         timeline = dt.group(1)
                 t = f"{x.issue}-{x.target}" if x.target == "Galaxywide NewsNets" else x.target
-                results[t] = {"index": index, "date": m.group('date') if 'date' in m.groups() else None, "timeline": timeline, "adaptation": is_adaptation}
+                results[t] = {"index": index, "date": m.group('date') if 'date' in m.groups() else None, "timeline": timeline}
                 if unknown is not None:
                     unknown[t] = index
                 elif x.target not in unique:
@@ -882,8 +879,6 @@ def parse_new_timeline(page: Page, types):
         elif "Star Wars (LINE Webtoon)" not in unique and "Star Wars (LINE Webtoon)" in line:
             unique["Star Wars (LINE Webtoon)"] = index
             index += 1
-        elif re.match(r"^\|- ?class ?= ?\".*?\"[ \t]*$", line):
-            is_adaptation = "adaptation" in line
 
     return results, unique, unknown or {}
 
