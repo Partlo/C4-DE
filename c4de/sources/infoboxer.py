@@ -328,7 +328,7 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
     pre = handle_multiple_issues(pre)
 
     if not found or found not in all_infoboxes:
-        print(f"ERROR: no infobox found, or infobox below body text; cannot parse {page.title()}")
+        print(f"No infobox found, or infobox below body text; cannot parse {page.title()}")
         return text, None, original
     elif found.lower().startswith("year"):
         return text, found, original
@@ -339,7 +339,7 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
 
     infobox = all_infoboxes.get(found)
     if not infobox:
-        print(f"ERROR: no infobox found for {found} on {page.title()}")
+        print(f"No infobox found for {found} on {page.title()}")
         return text, None, None
     if "pronouns" not in data:
         r = re.search(r"Category:Individuals with (.*?) pronouns", text)

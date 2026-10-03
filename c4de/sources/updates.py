@@ -1,4 +1,5 @@
 import codecs
+from collections import defaultdict
 
 from c4de.data.filenames import PROJECT_DIR
 from c4de.sources.domain import Item
@@ -151,7 +152,7 @@ def parse_page(p: Page, types):
 
     unique = {}
     full = {}
-    target = {}
+    target = defaultdict(list)
     for i, line in enumerate(text.splitlines()):
         parse_line(line, i, p, types, full, unique, target)
 
@@ -199,8 +200,8 @@ def parse_line(line, i, p: Page, types, full, unique, target):
                 full[x.full_id()] = x
                 unique[x.unique_id()] = x
                 if x.target:
-                    if x.target not in target:
-                        target[x.target] = []
+                    # if x.target not in target:
+                    #     target[x.target] = []
                     target[x.target].append(x)
         else:
             print(f"Cannot parse line: {line}")
@@ -436,7 +437,8 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
         "Canon Sources": c_srcs, "Legends Sources": l_srcs, "Legends Appearances": l_apps, "Canon Appearances": c_apps,
         "LEGO Sources": lego_src, "LEGO Appearances": lego_apps, "Legends CardSets": l_sets, "Canon CardSets": c_sets}
 
-    new_items = {"Audiobooks": [], "Collections": collections, "Soundtracks": []}
+    new_items = defaultdict(list)
+    # new_items = {"Audiobooks": [], "Collections": collections, "Soundtracks": []}
     changed_dates = {}
 
     for i in results:
@@ -470,8 +472,8 @@ def handle_results(site, results: List[FutureProduct], collections: List[FutureP
             print(f"Unknown: {i.item_type}: {i.page.title()}")
             if z == "Sources|False" and (i.page.title() in master_data["Canon CardSets"].target or i.page.title() in master_data["Legends CardSets"].target):
                 continue
-            if z not in new_items:
-                new_items[z] = []
+            # if z not in new_items:
+            #     new_items[z] = []
             new_items[z].append(i)
             print(z, i.page.title())
 

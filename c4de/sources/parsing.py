@@ -246,7 +246,7 @@ def parse_data(results: PageComponents, lines: list, master_header, redirects, d
         if len(pieces2) == 3:
             section_text = pieces2[0]
             after = pieces2[1] + pieces2[2]
-    if master_header == "Sources" and extra and not results.real:
+    if master_header == "Sources" and extra and not results.real and results.infobox != "TradeRoute":
         for i in extra:
             if i == "Star Wars Galaxy Map (poster)":
                 if "{{GalaxyMapPoster}}" not in section_text:
@@ -791,26 +791,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
         new_ref = re.sub(r"<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", ref).replace("{{PageNumber}} ", "").replace("{{UnlinkedRef}} ", "")
         new_ref = re.sub(r"\|set=(.*?) \(.*?\)\|(sformatt?e?d?|stext)=.*?\|", "|set=\\1|", new_ref)
         new_ref = new_ref.replace(" {{Un}}", "")
-        page_num = ""
-        # if not media:
-        #     if new_ref.count('[') == 0 and new_ref.count("]") == 0 and new_ref.count("{") == 0:
-        #         x = re.search(r"^('*(.*?)'*)(" + PAGE_NUMBER_REGEX.replace("</ref>", "") + ")?$", new_ref)
-        #         if x and x.group(2):
-        #             tx = match_unlinked(x.group(2).replace("''", ""), appearances, sources)
-        #             if not tx and len(x.group(2)) < 100:
-        #                 px = Page(page.site, x.group(2).replace("''", ""))
-        #                 if px.exists() and px.isRedirectPage():
-        #                     tx = match_unlinked(px.getRedirectTarget().title(), appearances, sources)
-        #             if tx:
-        #                 new_ref = new_ref.replace(x.group(1), tx)
-        #
-        #     if "|url=" not in new_ref and "|TORTYPE=" not in new_ref:
-        #         x = re.search(PAGE_NUMBER_REGEX.replace("</ref>", ""), new_ref)
-        #         if x:
-        #             print(f"Found page/chapter numbers in reference: \"{x.group(0)}\" -> \"{new_ref}\"")
-        #             page_num = x.group(0)
         new_ref = convert_issue_to_template(new_ref).replace("{{=}}", "=")
-        # check_ref = new_ref.replace(page_num, "") if page_num else new_ref
         links = re.findall(r"(['\"]*\[\[(?!([Ww]:c:|[Ww]ikipedia:)).*?(\|.*?)?]]['\"]*)", new_ref)
         templates = re.findall(r"(\{\{[^{}\n]+}})", new_ref)
         templates += re.findall(r"(\{\{[^{}\n]+\{\{[^{}\n]+}}[^{}\n]+}})", new_ref)
@@ -842,13 +823,9 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                         print(f"Skipping exempt {link[0]}")
                     elif re.search(r"^['\"]*\[\[" + x.target.replace("(", "\(").replace(")", "\)") + "(\|.*?)?]]['\"]*", new_ref):
                         if link[0] != o.master.original.replace("|audiobook=1", "").split(" {{Ab|")[0]:
-                            # if page_num and o.master.template and new_ref.endswith(page_num):
-                            #     new_ref = re.sub(r",?(\")?" + re.escape(page_num), "", new_ref)
                             new_links.append((link[0], o.master.original.replace("|audiobook=1", "").split(" {{Ab|")[0]))
                     elif o.current.original_target and re.search(r"^['\"]*\[\[" + o.current.original_target.replace("(", "\(").replace(")", "\)") + "(\|.*?)?]]['\"]*", new_ref):
                         if link[0] != o.master.original.replace("|audiobook=1", "").split(" {{Ab|")[0]:
-                            # if page_num and o.master.template and new_ref.endswith(page_num):
-                            #     new_ref = re.sub(r",?(\")?" + re.escape(page_num), "", new_ref)
                             new_links.append((link[0], o.master.original.replace("|audiobook=1", "").split(" {{Ab|")[0]))
                 elif o:
                     found.append(o)

@@ -235,7 +235,8 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
 
     before = re.sub(r">\[\[Star Wars Galaxy Map \(poster\)\|[^\n\]\[]+]]<", ">{{GalaxyMapPoster}}<", before)
     before = re.sub(r">The \[\[Star Wars Galaxy Map \(poster\)\|[^\n\]\[]+]]", ">The {{GalaxyMapPoster}}", before)
-    before = re.sub(r"(\*\{\{(StarWarsGalaxyMap|TheStarWarsGalaxy}})}})\n", "*{{StarWarsGalaxyMap}} {{MapPoint}}\n", before)
+    if "{{TradeRoute" not in before:
+        before = re.sub(r"(\*\{\{(StarWarsGalaxyMap|TheStarWarsGalaxy}})}})\n", "*{{StarWarsGalaxyMap}} {{MapPoint}}\n", before)
 
     while re.search(r"\[\[Category:[^\n|\]_]+_", before):
         before = re.sub(r"(\[\[Category:[^\n|\]_]+)_", "\\1 ", before)

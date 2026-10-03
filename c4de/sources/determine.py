@@ -685,24 +685,28 @@ def do_urls_match(url, template, d: Item, replace_page, log=False):
 
     if any(x and x.lower() == url.lower() for x in [d_url, special_url, alternate_url, *other_urls]):
         return 2
-    elif d_url and clean_language_prefix(d_url) == clean_language_prefix(url):
+    elif not d_url:
+        return 0
+    elif clean_language_prefix(d_url) == clean_language_prefix(url):
         return 2
-    elif d_url and matches_up_to_string(d_url.lower(), url.lower(), "&month=", True):
+    elif template == "SW" and d.template == "Databank" and url.startswith("databank/"):
         return 2
-    elif d_url and matches_up_to_string(d_url.lower(), url.lower(), "?var=", False):
+    elif matches_up_to_string(d_url.lower(), url.lower(), "&month=", True):
         return 2
-    elif d_url and "index.html" in d_url and re.search(r"indexp[0-9]\.html", url):
+    elif matches_up_to_string(d_url.lower(), url.lower(), "?var=", False):
+        return 2
+    elif "index.html" in d_url and re.search(r"indexp[0-9]\.html", url):
         if replace_page and d_url == re.sub(r"indexp[0-9]+\.html", "index.html", url):
             return 2
         elif d_url == re.sub(r"indexp([0-9]+)\.html", "index.html?page=\\1", url):
             return 2
-    elif d_url and template == "SWArchive" and match_news_format(d_url, url):
+    elif template == "SWArchive" and match_news_format(d_url, url):
         return 2
-    elif d_url and matches_up_to_string(d_url.lower(), url.lower(), "/index.html", False):
+    elif matches_up_to_string(d_url.lower(), url.lower(), "/index.html", False):
         return 1
-    elif d_url and template == "SWArchive" and d_url.lower().replace(".html", "").startswith(url.lower().replace(".html", "")):
+    elif template == "SWArchive" and d_url.lower().replace(".html", "").startswith(url.lower().replace(".html", "")):
         return 2
-    elif d_url and not d_url.startswith("content.jsp?page=") and matches_up_to_string(d_url.lower(), url.lower(), "?page=", False):
+    elif not d_url.startswith("content.jsp?page=") and matches_up_to_string(d_url.lower(), url.lower(), "?page=", False):
         return 2
     elif template == "SonyCite" and d.template == "SonyCite" and (url.startswith("players/") or url.startswith("en_US/players/")):
         nu = url.replace("en_US/players/", "").replace("players/", "")
@@ -768,6 +772,8 @@ def evaluate_match(x: int, url, o: Item, d: Item, ad, is_old, check_sw, merge: s
         elif ad and is_old and ((o.mode == d.mode and o.mode != "Toys" and o.mode != "Cards") or (o.mode in valid and d.mode in valid)):
             possible.append(d)
         elif d.template == o.template and not ad and (o.target == d.target or ("series=" in d.original and "series=" not in o.original and d.url == o.url)):
+            return ItemId(o, d, False, False)
+        elif d.template == "Databank" and o.template == "SW" and url.startswith("databank/"):
             return ItemId(o, d, False, False)
         elif d.template == o.template:
             partial_matches.append(d)

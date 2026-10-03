@@ -1,6 +1,7 @@
 import json
 import re
 import traceback
+from collections import defaultdict
 from datetime import datetime
 from typing import Tuple, Optional, List, Dict
 
@@ -420,8 +421,8 @@ def store_data(x: Item, i: dict, old: str, extra: str, parenthetical: str, alter
 
 
 def check_for_both_continuities(x: Item, targets: ItemListDict, both_continuities: set):
-    if x.target not in targets:
-        targets[x.target] = []
+    # if x.target not in targets:
+    #     targets[x.target] = []
     targets[x.target].append(x)
     if len(targets[x.target]) > 1:
         d = set(i.canon for i in targets[x.target])
@@ -435,8 +436,8 @@ def record_reprints(reprints, x: Item):
     if x.target.replace(" (department)", "") in ISSUE_REPRINTS:
         if "Caroline" not in (x.format_text or ""):
             print(f"{x.parent} {x.target} -> {x.format_text} fell through logic")
-        if f"{x.target.replace(' (department)', '')}|{x.issue}" not in reprints:
-            reprints[f"{x.target.replace(' (department)', '')}|{x.issue}"] = []
+        # if f"{x.target.replace(' (department)', '')}|{x.issue}" not in reprints:
+        #     reprints[f"{x.target.replace(' (department)', '')}|{x.issue}"] = []
         reprints[f"{x.target.replace(' (department)', '')}|{x.issue}"].append(x)
     elif x.target and x.target not in reprints:
         reprints[x.target] = [x]
@@ -466,7 +467,7 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
     for z in re.findall(r"([ \t]+([A-z]+) = \{[ \t]*((\n.*?)+?)\n[ \t]+},)",  Page(site, "Module:CardGameCite/data").get()):
         if "noItalics" not in z[0]:
             italic_templates.append(z[1])
-    departments, all_departments, department_map = set(), {}, {}
+    departments, all_departments, department_map = set(), {}, defaultdict(list)
     for z in re.findall(r"\[\"(.*?)-([0-9]+)\"] = \{.*?issues ?= ?\{(.*?)}", Page(site, "Module:Reprint/data").get()):
         a = z[0].replace(" (department)", "")
         departments.add(z[0])
@@ -478,14 +479,14 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
     count = 0
     unique_sources = {}
     full_sources = {}
-    target_sources = {}
+    target_sources = defaultdict(list)
     both_continuities = set()
     today = datetime.now().strftime("%Y-%m-%d")
-    ff_data = {}
-    reprints = {}
+    ff_data = defaultdict(list)
+    reprints = defaultdict(list)
     card_suffixes = {}
-    by_parent = {}
-    urls = {}
+    by_parent = defaultdict(list)
+    urls = defaultdict(list)
     for i in sources:
         item = i['item']
         old = f"{i['item']}"
@@ -517,19 +518,18 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
                 x.extra_date = i.get('extraDate')
 
                 if x.parent:
-                    if x.parent not in by_parent:
-                        by_parent[x.parent] = []
+                    # if x.parent not in by_parent:
+                    #     by_parent[x.parent] = []
                     by_parent[x.parent].append(x)
-                if x.url:
-                    for u in {x.url, x.url.lower()}:
-                        if u not in urls:
-                            urls[u] = []
-                        urls[u].append(x)
-                for y in [x.alternate_url, *x.alternate_urls]:
+                for y in [x.url, x.special_url, x.alternate_url, *x.alternate_urls]:
                     if y:
-                        if y not in urls:
-                            urls[y] = []
+                        # if y not in urls:
+                        #     urls[y] = []
                         urls[y].append(x)
+                        if y != y.lower():
+                            # if y.lower() not in urls:
+                            #     urls[y.lower()] = [x]
+                            urls[y.lower()].append(x)
 
                 if x.target in set_formatting:
                     x.set_format_text = set_formatting[x.target]
@@ -550,17 +550,16 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
                     check_for_both_continuities(x, target_sources, both_continuities)
 
                 if x.ff_data:
-                    if x.issue not in ff_data:
-                        ff_data[x.issue] = []
+                    # if x.issue not in ff_data:
+                    #     ff_data[x.issue] = []
                     ff_data[x.issue].append(x)
 
                 if x.target and x.issue and f"{x.target.replace(' (department)', '')}|{x.issue}" in all_departments:
                     zx = x.target.replace(' (department)', '')
                     for v in all_departments[f"{zx}|{x.issue}"]:
-                        if f"{zx}|{v}" in department_map:
-                            department_map[f"{zx}|{v}"].append(x)
-                        else:
-                            department_map[f"{zx}|{v}"] = [x]
+                        # if f"{zx}|{v}" in department_map:
+                        #     department_map[f"{zx}|{v}"] = []
+                        department_map[f"{zx}|{v}"].append(x)
                 elif x.target and x.parent and is_reprint and f"{x.target.replace(' (department)', '')}|{x.parent}" in department_map:
                     zx = x.target.replace(' (department)', '')
                     targets = department_map[f"{zx}|{x.parent}"]
@@ -569,8 +568,8 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
                         targets = tx or targets
 
                     if targets:
-                        if f"{zx}|{targets[0].issue}" not in reprints:
-                            reprints[f"{zx}|{targets[0].issue}"] = []
+                        # if f"{zx}|{targets[0].issue}" not in reprints:
+                        #     reprints[f"{zx}|{targets[0].issue}"] = []
                         reprints[f"{zx}|{targets[0].issue}"].append(x)
                         x.original_printing = targets[0]
 
@@ -612,15 +611,15 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
     count = 0
     unique_appearances = {}
     full_appearances = {}
-    target_appearances = {}
+    target_appearances = defaultdict(list)
     parentheticals = set()
     both_continuities = set()
     today = datetime.now().strftime("%Y-%m-%d")
     no_canon_index = []
     no_legends_index = []
-    reprints = {}
-    by_parent = {}
-    urls = {}
+    reprints = defaultdict(list)
+    by_parent = defaultdict(list)
+    urls = defaultdict(list)
     for i in appearances:
         item = i['item']
         old = f"{i['item']}"
@@ -666,17 +665,13 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 full_appearances[x.full_id()] = x
                 unique_appearances[x.unique_id()] = x
                 if x.parent:
-                    if x.parent not in by_parent:
-                        by_parent[x.parent] = []
+                    # if x.parent not in by_parent:
+                    #     by_parent[x.parent] = []
                     by_parent[x.parent].append(x)
-                if x.url:
-                    if x.url not in urls:
-                        urls[x.url] = []
-                    urls[x.url].append(x)
-                for y in [x.alternate_url, *x.alternate_urls]:
+                for y in [x.url, x.special, x.alternate_url, *x.alternate_urls]:
                     if y:
-                        if y not in urls:
-                            urls[y] = []
+                        # if y not in urls:
+                        #     urls[y] = []
                         urls[y].append(x)
                 if "Crossover" in i['page'] or "LEGO" in i['page']:
                     x.non_canon = True

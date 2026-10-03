@@ -229,10 +229,12 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
 
     :rtype: Item
     """
-    z = z.replace("|1=", "|").replace("|s=y", "").replace("{{'s}}", "'s").replace("{{'}}", "'").replace("{{!}}", "|").replace("…", "&hellip;").replace("{{=}}", "=")
+    z = z.replace(" ", " ").replace("|1=", "|").replace("|s=y", "")\
+        .replace("{{'s}}", "'s").replace("{{'}}", "'").replace("{{!}}", "|")\
+        .replace("…", "&hellip;").replace("{{=}}", "=")
     if "SeriesListing" in z or "UnknownListing" in z:
         z = re.sub(r"\{\{(Series|Unknown)Listing.*?}} ?", "", z)
-    z = re.sub(r"{{([A-z]+)]]", "{{\\1}}", re.sub(r"\|[a-z ]+=\|", "|", z)).replace(" ", " ")
+    z = re.sub(r"{{([A-z]+)]]", "{{\\1}}", re.sub(r"\|[a-z ]+=\|", "|", z))
     while re.search(r"\[\[([^]|\n]+)_", z):
         z = re.sub(r"\[\[([^]|\n]+)_", "[[\\1 ", z)
     while "  " in z:
@@ -241,10 +243,9 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     s = re.sub(r"\|volume=([0-9])\|([0-9]+)\|", "|\\1.\\2|", z).replace("|}}", "}}")
     s = re.sub(r"<!--.*?-->", "", s)
     s = re.sub(r"^(.*?\[\[.*?[^ ])#(.*?)(\|.*?]].*?)$", "\\1\\3", s).replace("|d=y", "")
-    s = re.sub(r" ?\{\{Ab\|.*?}}", "", s)
-    s = re.sub(r" ?\{\{[Rr]eprint\|.*?}}", "", s)
+    s = re.sub(r" ?\{\{(Ab|[Rr]eprint)\|.*?}}", "", s)
     s = re.sub(r"^(Parent: )*", "", s)
-    s = re.sub(r"[ ]+(\|[a-z _]+=)", "\\1", s)
+    s = re.sub(r" +(\|[a-z _]+=)", "\\1", s)
     if s.count("{") == 2 and s.count("}") == 1:
         s += "}"
     for i, j in COLLAPSE.items():

@@ -452,16 +452,6 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
         new_txt, _ = clean_archive_usages(page, new_txt, sources.archive_data, redo)
     # log_time("archive", now)
 
-    # if not keep_page_numbers:
-    #     # cx = [a.original if a.template else a.target for b in [results.apps, results.nca, results.src, results.ncs] for a in b.items if a.target]
-    #     cx = []
-    #     new_txt = clear_page_numbers(new_txt, cx)
-    #
-    #     # replace = True
-    #     # while replace:
-    #     #     new_txt = clear_page_numbers(strip_page_number(new_txt), cx)
-    #     #     replace = new_txt != strip_page_number(new_txt)
-
     new_txt = re.sub(r"(\{\{DEFAULTSORT:.*?}})\n\n+\[\[[Cc]ategory", "\\1\n[[Category", new_txt)
     new_txt = re.sub(r"(?<![\n=}])\n==", "\n\n==", re.sub(r"\n\n+", "\n\n", new_txt)).strip()
     new_txt = re.sub(r"(stub|Endgame)}}\n==", "\\1}}\n\n==", new_txt)
@@ -573,6 +563,10 @@ def build_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appe
     return new_txt, subpage_text, analysis, unknown, unknown_items
 
 
+def remove_index_param(t):
+    return re.sub(r"(\{\{[FCG]Anom.*?)\|index=.*?(\|.*?)?}}", "\\1\\2}}", t)
+
+
 def build_new_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appearances: FullListData,
                    sources: FullListData, bad_cats: list, remap: dict, include_date: bool, checked: list, *, log=True,
                    use_index=True, collapse_audiobooks=True, manual: str = None, extra=None, keep_pages=False, redo=False):
@@ -582,10 +576,6 @@ def build_new_text(target: Page, infoboxes: dict, types: dict, disambigs: list, 
 
     record_local_unknown(unknown, unknown_items, target)
     return new_txt, subpage_text, unknown, unknown_items
-
-
-def remove_index_param(t):
-    return re.sub(r"(\{\{[FCG]Anom.*?)\|index=.*?(\|.*?)?}}", "\\1\\2}}", t)
 
 
 def analyze_target_page(target: Page, infoboxes: dict, types: dict, disambigs: list, appearances: FullListData,
@@ -600,16 +590,6 @@ def analyze_target_page(target: Page, infoboxes: dict, types: dict, disambigs: l
 
     with codecs.open(f"{PROJECT_DIR}/c4de/protocols/test_text.txt", mode="w", encoding="utf-8") as f:
         f.writelines(new_txt)
-
-    # if dates:
-    #     with codecs.open(f"{PROJECT_DIR}/c4de/protocols/new_dates.txt", mode="a", encoding="utf-8") as f:
-    #         date_txt = []
-    #         for d in dates:
-    #             if d[2] == d[3]:
-    #                 date_txt.append(f"{d[1].master.date} --> {d[0]}: #{d[2]}: -> {d[1].master.original}")
-    #             else:
-    #                 date_txt.append(f"{d[1].master.date} --> {d[0]}: #{d[2]} {d[3]}: -> {d[1].master.original}")
-    #         f.writelines("\n" + "\n".join(date_txt))
 
     if save and new_txt != old_text:
         if "�" in new_txt:

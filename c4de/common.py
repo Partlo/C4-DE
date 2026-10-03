@@ -78,10 +78,14 @@ def prepare_title(t):
     return "[" + t[0].capitalize() + t[0].lower() + "]" + t[1:]
 
 
+def should_skip_other_site(t):
+    return "wikipedia" in t or "memoryalpha" in t or "w:c:" in t
+
+
 def is_redirect(page, title=None):
-    if title and "w:c:" in title.lower():
+    if title and should_skip_other_site(title.lower()):
         return False
-    elif "wikipedia" in page.title().lower():
+    elif page.title() and should_skip_other_site(page.title().lower()):
         return False
     try:
         return page.exists() and page.full_url() and page.isRedirectPage()
@@ -203,7 +207,7 @@ def build_redirects(page: Page, manual: str = None):
                 elif not t.startswith("Category:"):
                     results[r.title()] = f":{t}" if t.startswith("Category:") else t
         except Exception as e:
-            error_log(f"Encountered {type(e)} while checking [{r}] for redirect")
+            error_log(f"Encountered {type(e)} while checking [{pagenames[i]}] for redirect")
     return results
 
 
@@ -361,7 +365,7 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
                     text = re.sub(r"\[\[" + x + r"(\|.*?)]](s)?", f"[[{t}\\1\\2]]", text)
             if "/" not in r:
                 try:
-                    text = re.sub(r"(\{\{(?!(WP|1stID))[A-Za-z0-9]+\|)" + x + "}}", "\\1    " + t + "}}", text).replace("    ", "")
+                    text = re.sub(r"(\{\{(?!(WP|1stID|Vision|EncyclopediaCite))[A-Za-z0-9]+\|)" + x + "}}", "\\1    " + t + "}}", text).replace("    ", "")
                 except Exception as e:
                     print(e, x, t)
             if r.split(" (")[0] != t.split(" (")[0]:
