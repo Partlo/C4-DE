@@ -7,8 +7,8 @@ from typing import List, Tuple, Union, Dict, Optional
 from c4de.common import is_redirect, log_time
 from c4de.dates import convert_date_str
 from c4de.sources.determine import determine_id_for_item
-from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, AnalysisResults, \
-    SectionItemIds, FinishedSection, NewComponents, UnknownItems
+from c4de.sources.domain import Item, ItemId, ItemIdListDict, ItemIdDict, FullListData, PageComponents, \
+    AnalysisResults, SectionItemIds, FinishedSection, NewComponents, UnknownItems
 from c4de.sources.engine import AUDIOBOOK_MAPPING, MANGA, LIST_AT_START, LIST_AT_END, EXPANSION
 from c4de.sources.external import is_external_link, prepare_basic_url, prepare_official_link, determine_link_order, \
     COMMERCIAL_TO_BE_REMOVED, is_official_product_page
@@ -107,7 +107,7 @@ def find_matching_audiobook(a: ItemId, existing: list, appearances: FullListData
         return []
 
     z = None
-    if a.master.target in appearances.parantheticals:
+    if a.master.target in appearances.parentheticals:
         z = a.master.target
     elif a.master.target.endswith(")") and not a.master.target.endswith("webcomic)"):
         z = a.master.target.rsplit("(", 1)[0].strip()
@@ -143,7 +143,7 @@ def find_matching_parent_audiobook(a: ItemId, existing: list, appearances: FullL
         return []
 
     z = None
-    if a.master.parent in appearances.parantheticals:
+    if a.master.parent in appearances.parentheticals:
         z = a.master.parent
     elif a.master.parent.endswith(")"):
         z = a.master.parent.rsplit("(", 1)[0].strip()
@@ -377,7 +377,7 @@ def prepare_reprints(appearances: FullListData, sources: FullListData, items: Li
     return reprints
 
 
-def _cards() -> Dict[str, List[ItemId]]:
+def _cards() -> ItemIdListDict:
     return {}
 
 
@@ -601,7 +601,7 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
     return SectionItemIds(name, found, wrong, non_canon, group_items, group_ids, links, len(any_expanded) > 0 or other_extra)
 
 
-def handle_groups(groups: Dict[str, List[ItemId]], data: FullListData, other: FullListData, found: List[ItemId],
+def handle_groups(groups: ItemIdListDict, data: FullListData, other: FullListData, found: List[ItemId],
                   group_ids: dict, extra: dict, unknown, canon: bool, src: SectionItemIds = None):
     unknown_sets = {}
     already_found = {}
@@ -662,8 +662,8 @@ def handle_groups(groups: Dict[str, List[ItemId]], data: FullListData, other: Fu
                 unknown.append(i.current)
 
 
-def handle_card_item(d: ItemId, o: Item, cards: Dict[str, List[ItemId]], found: List[ItemId], wrong: List[ItemId],
-                     extra: Dict[str, ItemId], name, log):
+def handle_card_item(d: ItemId, o: Item, cards: ItemIdListDict, found: List[ItemId], wrong: List[ItemId],
+                     extra: ItemIdDict, name, log):
     if d.current.card and d.current.card == d.master.card and d.master.has_date() and not d.master.is_card_or_mini():
         found.append(d)
         return

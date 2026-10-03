@@ -1,9 +1,8 @@
 import re
 from re import Match
-from typing import List, Dict, Optional
+from typing import Optional
 
-from pywikibot import Page
-from c4de.sources.domain import Item, ItemId
+from c4de.sources.domain import Item
 
 
 IGNORE_TEMPLATES = ["BookCite", "=", "Subtitles", "PAGENAME", "Planetnamia", "GalaxyMapHyperlanes", "LegendsSystemPlacement", "SliceRegion", "Battlenamia"]
