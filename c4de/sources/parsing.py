@@ -37,6 +37,9 @@ MASTER_STRUCTURE = {
     "Links": "==External links=="
 }
 
+DO_NOT_SPLIT = ["TFU", "ExclusiveTrailerCite", "CelebrationTrailer", "SliceRegion", "GalaxyMapHyperlanes"]
+TEMPLATE_SKIPS = ["Blogspot", "Cite", "PageNumber", "UnlinkedRef", "C|", "SWG", "TORcite", "TCWA", "SliceRegion", "GalaxyMapHyperlanes"]
+
 
 def is_number(d):
     return d and (d.startswith("1") or d.startswith("2"))
@@ -672,7 +675,7 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
     y = re.search(r"(?<!\|)(?P<p>[\"']*?\[\[.*?(\|.*?)?]][\"']*?) ?n?o?v?e?l? ?(and|\|) ?(?P<t>['\"]*\[\[.*?(\|.*?)?]]['\"]*?)", z)
     if not y and name.startswith("File:"):
         y = re.search(r"(?P<p>[\"']*?\[\[.*?(\|.*?)?]][\"']*?) via ?(?P<t>['\"]*\[\[(Star Wars Legends|Star Wars Omnibus).*?(\|.*?)?]]['\"]*?)", z)
-    if y and "{{TFU|" not in z:
+    if y and not any(f"{{{{{x}|" in z for x in DO_NOT_SPLIT):
         if log:
             print(f"Splitting multi-entry line: {s}")
         zs = [y.groupdict()['p'], y.groupdict()['t']]
@@ -695,16 +698,17 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
             t.ab = ab
             t.bold = bold
             t.is_exception = is_exception
-            ex = re.search(r"<!-- ?.*?(Exception|Override)?:? ?([0-9X-]+)?\?? ?-->", s)
-            if ex and ex.group(1):
-                t.override = ex.group(1)
-                t.override_date = ex.group(2)
-                t.original_date = ex.group(2)
-            elif ex:
-                t.original_date = ex.group(2)
             y = re.search(r"<!-- ((([Nn]on-?)?[Cc]anon|NCA|NCS) ([Ee]xception|[Oo]verride))(:.*?)? ?-->", s)
             if y:
                 t.canon_override = y.group(1)
+            else:
+                ex = re.search(r"<!-- ?.*?(Exception|Override)?:? ?([0-9X-]+)?\?? ?-->", s)
+                if ex and ex.group(1):
+                    t.override = ex.group(1)
+                    t.override_date = ex.group(2)
+                    t.original_date = ex.group(2)
+                elif ex:
+                    t.original_date = ex.group(2)
 
             unique_ids[t.unique_id()] = t
     if not found:
@@ -781,9 +785,6 @@ def match_unlinked(x, appearances, sources):
     return None
 
 
-TEMPLATE_SKIPS = ["Blogspot", "Cite", "PageNumber", "UnlinkedRef", "C|", "SWG", "TORcite", "TCWA"]
-
-
 def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearances: FullListData, sources: FullListData,
                      remap: dict, disambigs: dict, redirects, canon: bool, media: bool, log: bool):
     try:
@@ -810,7 +811,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
         #             page_num = x.group(0)
         new_ref = convert_issue_to_template(new_ref).replace("{{=}}", "=")
         # check_ref = new_ref.replace(page_num, "") if page_num else new_ref
-        links = re.findall(r"(['\"]*\[\[(?![Ww]:c:).*?(\|.*?)?]]['\"]*)", new_ref)
+        links = re.findall(r"(['\"]*\[\[(?!([Ww]:c:|[Ww]ikipedia:)).*?(\|.*?)?]]['\"]*)", new_ref)
         templates = re.findall(r"(\{\{[^{}\n]+}})", new_ref)
         templates += re.findall(r"(\{\{[^{}\n]+\{\{[^{}\n]+}}[^{}\n]+}})", new_ref)
         templates += re.findall(r"(\{\{[^{}\n]+\{\{[^{}\n]+}}[^{}\n]+\{\{[^{}\n]+}}[^{}\n]+}})", new_ref)

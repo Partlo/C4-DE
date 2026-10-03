@@ -24,21 +24,17 @@ COLLAPSE = {
     "GSAttr": "Star Wars: Galactic Starcruiser",  # "[[Star Wars: Galactic Starcruiser|''Star Wars'': Galactic Starcruiser]] (template)",
 }
 
-REFERENCE_MAGAZINE_ISSUES = {
-    "DarthVaderCite": 50
-}
-
 REFERENCE_MAGAZINES = {
-    "BuildFalconCite": "Star Wars: Build the Millennium Falcon <x>",
-    "BuildR2Cite": "Star Wars: Build Your Own R2-D2 <x>",
-    "BuildXWingCite": "Star Wars: Build Your Own X-Wing <x>",
-    "BustCollectionCite": "Star Wars Bust Collection <x>",
-    "DarthVaderCite": "Star Wars: Darth Vader <x> (magazine)",
-    "FalconCite": "Star Wars: Millennium Falcon <x>",
-    "FigurineCite": "Star Wars: The Official Figurine Collection <x>",
-    "HelmetCollectionCite": "Star Wars Helmet Collection <x>",
-    "ShipsandVehiclesCite": "Star Wars Starships & Vehicles <x>",
-    "StarshipsVehiclesCite": "Star Wars: The Official Starships & Vehicles Collection <x>",
+    "BuildFalconCite": ("Star Wars: Build the Millennium Falcon <x>", 0),
+    "BuildR2Cite": ("Star Wars: Build Your Own R2-D2 <x>", 0),
+    "BuildXWingCite": ("Star Wars: Build Your Own X-Wing <x>", 0),
+    "BustCollectionCite": ("Star Wars Bust Collection <x>", 0),
+    "DarthVaderCite": ("Star Wars: Darth Vader <x> (magazine)", 50),
+    "FalconCite": ("Star Wars: Millennium Falcon <x>", 0),
+    "FigurineCite": ("Star Wars: The Official Figurine Collection <x>", 0),
+    "HelmetCollectionCite": ("Star Wars Helmet Collection <x>", 0),
+    "ShipsandVehiclesCite": ("Star Wars Starships & Vehicles <x>", 0),
+    "StarshipsVehiclesCite": ("Star Wars: The Official Starships & Vehicles Collection <x>", 0),
 }
 
 TEMPLATE_MAPPING = {
@@ -299,14 +295,14 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         if x:
             return x
 
-    for i, k in REFERENCE_MAGAZINES.items():
+    for i, (k, ix) in REFERENCE_MAGAZINES.items():
         if i.split('\\', 1)[0].lower() in s.lower():
             m = re.search(r"\{\{" + i + r"\|([0-9]+)(\|(.*?))?(\|(.*?))?}}", s)
             mode = types.get(i, "General")
             zx = re.sub(r"'*?(\{\{(?!FactFile)[A-z0-9]+\|[0-9]+\|.*?)(\|.*?(\{\{'s?}})?.*?)?}}'*?", "\\1}}", s)
             if m:
                 target = k.replace("<x>", m.group(1))
-                if i in REFERENCE_MAGAZINE_ISSUES and m.group(1).isnumeric() and int(m.group(1)) > REFERENCE_MAGAZINE_ISSUES[i]:
+                if 0 < ix < int(m.group(1)) and m.group(1).isnumeric():
                     target = target.replace(" (magazine)", "")
                 if m.group(3) and "|parent=" in m.group(0):
                     return Item(zx, mode, a, target=target, template=i, issue=m.group(1), ref_magazine=True)
@@ -368,7 +364,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
                         t = zx.group(1) + " " + t
             i = re.search(r"\|int=(.*?)(\|.*?)?}}", s)
             return Item(z, mode, a, target=i.group(1) if i else None, template=template, url=m.group('video'), text=t,
-                        special=u.group(3) if u else None, alternate_url=alt)
+                        special_url=u.group(3) if u else None, alternate_url=alt)
 
     elif mode == "Cards" or mode == "Minis" or mode == "Toys" or "|card" in s:
         x = parse_card_line(s, z, template, mode, a)
@@ -466,7 +462,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         if "yt_video=" in s:
             y = re.search(r"\|yt_video=(.*?)(\|.*?)?}}", s)
             yt = y.group(1) if y else None
-        return Item(z, mode, a, template=template, url=m.group('url'), text=text.strip(), alternate_url=yt)
+        return Item(z, mode, a, template=template, url=m.group('url'), text=text.strip(), special_url=yt)
 
     # Web templates without named parameters
     if mode == "Web" or mode == "External" or mode == "Publisher" or mode == "Commercial":
@@ -524,7 +520,7 @@ def handle_special_template(template, s, z, mode, a, types):
     elif template == "ExclusiveTrailerCite" or template == "CelebrationTrailer":
         m = re.search(r"\{\{[A-z]+\|['\[]*(?P<m>.*?)(\|.*?)?['\]]*\|(?P<c>.*?)}}", s)
         if m:
-            return Item(z, mode, a, target=m.groupdict()['c'], issue=m.groupdict()['m'])
+            return Item(z, mode, a, parent=m.groupdict()['c'], issue=m.groupdict()['m'])
     elif template == "CalendarCite":
         m = re.search(r"\{\{CalendarCite\|([0-9]+)\|(.*?)}}", s)
         if m:

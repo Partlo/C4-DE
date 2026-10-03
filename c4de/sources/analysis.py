@@ -871,7 +871,7 @@ def build_new_external_links(page: Page, results: PageComponents, original: List
     # for a in finished:
     #     print(determine_link_order(a[0], a[1], a[2].replace("}}", "").replace("|", " |") if a[2] else a[2]), a[1].original)
 
-    return FinishedSection("==External links==", 0, "\n".join(f[2].strip() for f in finished)), unknown, wrong
+    return FinishedSection("==External links==", len(finished), "\n".join(f[2].strip() for f in finished)), unknown, wrong
 
 
 def should_remove_commercial(page: Page, results: PageComponents, data: FullListData, other: FullListData, has_publisher):

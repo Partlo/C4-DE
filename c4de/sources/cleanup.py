@@ -114,6 +114,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None):
     before = re.sub(r"(\|image=\[\[File:.*?)(\|alt=.*?)]]\n", "\\1]]\n\\2\\n", before)
 
     # multi-line templates, extra/wrong brackets, etc.
+    before = re.sub(r"\{\{C\|([^\[{}]+)(]]}})", "{{C|[[\\1\\2", before)
     before = re.sub(r"(?<!\[)\[((?!Original)[^\[\]\n]+)]]", "[[\\1]]", before)
     before = re.sub(r"([*#]\{\{[^}\n]+)\n([^{\n]+}})", "\\1\\2", before)
     before = re.sub(r"\{\{([^\n{}\[]+?)]]", "{{\\1}}", before)

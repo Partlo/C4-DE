@@ -245,7 +245,7 @@ MULTIPLE_ISSUE_CONVERSION = {
     "stayontarget": "StayOnTarget"
 }
 COMBINE = ["catneeded", "citation", "cleanup", "confirm", "contradict", "disputed", "expand", "imageReal",
-           "imagePerson", "image", "moresources", "oou", "plot", "redlink", "split", "stayontarget", "tense"]
+           "imagePerson", "image", "moresources", "oou", "plot", "redlink", "stayontarget", "tense"]
 
 
 def should_move_to_multiple_issues(x):

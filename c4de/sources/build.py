@@ -222,7 +222,7 @@ def add_parsed_section(pieces: list, component: SectionComponents, finished: Fin
 
 
 MAINTENANCE = ["catneeded", "citation", "cleanup", "cleanup-context", "confirm", "contradict", "disputed", "expand",
-               "image", "moresources", "oou", "plot", "redlink", "split", "stayontarget", "tense", "update"]
+               "image", "moresources", "oou", "plot", "redlink", "stayontarget", "tense", "update"]
 
 
 def format_update_contents(ln, page: Page, results: PageComponents, appearances: FullListData, sources: FullListData, types):
@@ -251,7 +251,9 @@ def build_iu_intro(page: Page, results: PageComponents, appearances: FullListDat
     update_content = None
     expand_content = None
     for ln in content:
-        if "{{update|" in ln.lower():
+        if "{{multipleissues|" in ln.lower():
+            maintenance_tags[ln] = ln.rsplit("}}", 1)[0].split("{{MultipleIssues|")[-1]
+        elif "{{update|" in ln.lower():
             update_content = format_update_contents(ln, page, results, appearances, sources, types)
             maintenance_tags[ln] = "updatecontent"
         elif "{{expand|" in ln.lower():
@@ -260,6 +262,8 @@ def build_iu_intro(page: Page, results: PageComponents, appearances: FullListDat
                 expand_content = x.group(1)
                 maintenance_tags[ln] = "expand"
             break
+        elif "{{split|" in ln.lower():
+            continue
         else:
             for x in MAINTENANCE:
                 if f"{{{{{x}|" in ln.lower() or f"{{{{{x}}}}}" in ln.lower():
@@ -498,6 +502,10 @@ def handle_legends_links(text, title):
                     x = re.findall(r"\[\[(.*?)/Legends\|", line)
                     for i in x:
                         if i != title:
+                            line = line.replace(f"[[{i}/Legends|{i}]]", f"[[{i}]]")
+                            line = line.replace(f"[[{i}/Legends|{i[0].lower()}{i[1:]}]]", f"[[{i[0].lower()}{i[1:]}]]")
+                            line = line.replace(f"[[{i}/Legends|{i}s]]", f"[[{i}]]s")
+                            line = line.replace(f"[[{i}/Legends|{i[0].lower()}{i[1:]}s]]", f"[[{i[0].lower()}{i[1:]}]]s")
                             line = line.replace(f"[[{i}/Legends", f"[[{i}")
             new_lines.append(line)
         body = "\n".join(new_lines)

@@ -264,3 +264,6 @@
 **Archive crawler support for remaining social media templates
 *'''4.7.2''': September 19, 2026
 **Handling multiple alternate URLs
+*'''4.7.3''': September 29, 2026
+**Cleanup of older unused logic
+**Variety of tweaks from the sweep

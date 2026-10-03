@@ -1,4 +1,4 @@
-from typing import List, Dict, Tuple
+from typing import List, Dict
 import re
 import copy
 
@@ -28,7 +28,7 @@ class Item:
                  parent: str = None, template: str = None, url: str = None, issue: str = None, subset: str = None,
                  card: str = None, special=None, collapsed=False, format_text: str = None, no_issue=False, ref_magazine=False,
                  full_url: str = None, publisher_listing=False, check_both=False, date="", archivedate="", issue2=None,
-                 alternate_url=None):
+                 alternate_url=None, special_url=None):
         self.master_page = None
         self.mode = "General" if mode == "TV" else mode
         self.sort_mode = SORT_MODES.get(self.mode, 5)
@@ -49,6 +49,7 @@ class Item:
         self.full_url = self.strip(full_url)
         self.alternate_url = self.strip(alternate_url)
         self.alternate_urls = []
+        self.special_url = self.strip(special_url)
         self.special = self.strip(special)
         self.subset = self.strip(subset)
         self.collapsed = collapsed
