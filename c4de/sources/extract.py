@@ -2,10 +2,11 @@ import re
 from re import Match
 from typing import Optional
 
+from c4de.common import re_if
 from c4de.sources.domain import Item
 
-
 IGNORE_TEMPLATES = ["BookCite", "=", "Subtitles", "PAGENAME", "Planetnamia", "GalaxyMapHyperlanes", "LegendsSystemPlacement", "SliceRegion", "Battlenamia"]
+IGNORED_MODES = ["Nav", "Dates", "Logic", "Skip"]
 
 
 COLLAPSE = {
@@ -15,13 +16,18 @@ COLLAPSE = {
     "StarWarsGalaxyMap": "Star Wars Galaxy Map",
     "GalaxiesAED": "Star Wars Galaxies: An Empire Divided",
     "GalaxiesNGE": "Star Wars Galaxies",
+}
+
+PROTECTED = {
     "FindtheForce": "Find the Force",
     "CSWECite": "The Complete Star Wars Encyclopedia",
     "TFU": "Star Wars: The Force Unleashed",
-    "TCWA": "Star Wars: Clone Wars Adventures (video game)",  # "[[Star Wars: Clone Wars Adventures (video game)|''Star Wars: Clone Wars Adventures'' video game]]",
-    "GEAttr": "Star Wars: Galaxy's Edge",  #"[[Star Wars: Galaxy's Edge|''Star Wars'': Galaxy's Edge]] (template)",
-    "GSAttr": "Star Wars: Galactic Starcruiser",  # "[[Star Wars: Galactic Starcruiser|''Star Wars'': Galactic Starcruiser]] (template)",
+    "SWMB": "Star Wars Miniatures Battles",
+    "Sphero": "Star Wars Droids App by Sphero|2017-08-31",
+    "TCWA": "Star Wars: Clone Wars Adventures (video game)",
+    "GEStaff": "Star Wars: Galaxy's Edge",
 }
+
 
 REFERENCE_MAGAZINES = {
     "BuildFalconCite": ("Star Wars: Build the Millennium Falcon <x>", 0),
@@ -140,87 +146,10 @@ CORE_SETS = {
 }
 
 
-def convert_issue_to_template(s):
-    m = re.search(r"(\[\[(.*?) ([0-9]+)(\|.*?)?]]'* ?{{C\|(.*?)}})", s)
-    if m:
-        for template, v in REFERENCE_MAGAZINES.items():
-            if m.group(2) == v[0]:
-                t = f"{{{{{template}|{m.group(3)}|{m.group(5)}}}}}"
-                return s.replace(m.group(1), t.replace("\\|", "|"))
-    return re.sub(r"<!--.*?-->", "", s)
-
-
-def swap_parameters(s: str):
-    return re.sub(r"(\|book=.*?)(\|story=.*?)(\|.*?)?}}", "\\2\\1\\3}}", s)
-
-
-def decide_ff_issue(y, i):
-    if y and i in ["1", "2", "3", "4", "5"]:
-        return f"Part {i} ({y})"
-    elif y == "2014":
-        return f"Part {i}"
-    else:
-        return i
-
-
-def re_if(m: re.Match, group, default=None) -> str:
-    return m.group(group) if m else default
-
-
-def extract_fact_file(z: str, s: str, a: bool):
-    s = s.replace("|y=2013", "2013").replace("|y=2014", "2014")
-    x = re.search(r"\{\{(FactFile(201[34])?)\|([0-9]+)\|?}}", s)
-    if x:
-        issue = decide_ff_issue(x.group(2), x.group(3))
-        return Item(z, "General", a, template=x.group(1), target=f"The Official Star Wars Fact File {issue}")
-
-    x = re.search(r"(FactFile(201[34])?)\|(?P<i>[0-9]+)\|(German Edition - )?(?P<p>(?P<a>[0-9]* ?[A-Z]+)[ -]?(?P<n>[0-9]+) ?(-|–|—|&mdash;|&ndash;)? ?\7?(?P<m>[0-9]*)?)(?P<s>[|,])? ?(?P<t>.*?)$", s)
-    if x:
-        issue = decide_ff_issue(x.group(2), x.group('i'))
-        page = x.group('p')
-        abbr = x.group('a').upper()
-        num1 = x.group('n')
-        num2 = x.group('m')
-        text = x.group('t') or ''
-        num3, num4 = None, None
-        y = re.search(r"<[A-Z]+ ([0-9]+)-([0-9]+)>", text or "")
-        if y:
-            num3, num4 = y.group(1), y.group(2)
-            text = text.replace(y.group(0), "")
-        item = Item(z, "General", a, target=f"The Official Star Wars Fact File {issue}", template=x.group(1),
-                    issue=issue, text=f"{abbr} {num1} {text.split('}')[0]}")
-        item.ff_data = {"page": page, "abbr": abbr, "num1": num1, "num2": num2, "num3": num3, "num4": num4, "text": text, "legacy": x.group('s') == ","}
-        return item
-
-    x = re.search(r"(FactFile(201[34])?)\|([0-9]+)\|'*(.*?)'*}}", s)
-    if x:
-        issue = decide_ff_issue(x.group(2), x.group(3))
-        item = Item(z, "General", a, target=f"The Official Star Wars Fact File {issue}", template=x.group(1),
-                    issue=issue, text=x.group(4))
-        item.ff_data = {"page": None, "abbr": None, "num1": None, "num2": None, "num3": None, "num4": None, "text": x.group(4), "legacy": True}
-        return item
-    return None
-
-
-def fix_insider_departments(name, template, types):
-    if template == "InsiderCite" and name in types.get("Suffix:Departments", []):
-        return f"{name} (department)"
-    return name
-
-
-def build_magazine_target(template, issue: str, types):
-    if template in types["Magazine"]:
-        target = f"{types['Magazine']} {issue}"
-        if issue.isnumeric():
-            if template in types["Suffix"]:
-                threshold, suffix = types["Suffix"][template]
-                if int(issue) <= threshold:
-                    return f"{target} {suffix}"
-            elif template in types["Suffix2"]:
-                threshold, suffix = types["Suffix2"][template]
-                if int(issue) > threshold:
-                    return f"{target} {suffix}"
-        return target
+SIMPLE_REPLACEMENTS = [
+    (" ", " "), ("|1=", "|"), ("|s=y", ""), ("|d=y", ""), ("{{'s}}", "'s"), ("{{'}}", "'"), ("{{!}}", "|"),
+    ("…", "&hellip;"), ("{{=}}", "="), ("|}}", "}}")
+]
 
 
 def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
@@ -229,9 +158,8 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
 
     :rtype: Item
     """
-    z = z.replace(" ", " ").replace("|1=", "|").replace("|s=y", "")\
-        .replace("{{'s}}", "'s").replace("{{'}}", "'").replace("{{!}}", "|")\
-        .replace("…", "&hellip;").replace("{{=}}", "=")
+    for x, y in SIMPLE_REPLACEMENTS:
+        z = z.replace(x, y)
     if "SeriesListing" in z or "UnknownListing" in z:
         z = re.sub(r"\{\{(Series|Unknown)Listing.*?}} ?", "", z)
     z = re.sub(r"{{([A-z]+)]]", "{{\\1}}", re.sub(r"\|[a-z ]+=\|", "|", z))
@@ -240,9 +168,9 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     while "  " in z:
         z = z.replace("  ", " ")
 
-    s = re.sub(r"\|volume=([0-9])\|([0-9]+)\|", "|\\1.\\2|", z).replace("|}}", "}}")
+    s = re.sub(r"\|volume=([0-9])\|([0-9]+)\|", "|\\1.\\2|", z)
     s = re.sub(r"<!--.*?-->", "", s)
-    s = re.sub(r"^(.*?\[\[.*?[^ ])#(.*?)(\|.*?]].*?)$", "\\1\\3", s).replace("|d=y", "")
+    s = re.sub(r"^(.*?\[\[.*?[^ ])#(.*?)(\|.*?]].*?)$", "\\1\\3", s)
     s = re.sub(r" ?\{\{(Ab|[Rr]eprint)\|.*?}}", "", s)
     s = re.sub(r"^(Parent: )*", "", s)
     s = re.sub(r" +(\|[a-z _]+=)", "\\1", s)
@@ -250,11 +178,17 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         s += "}"
     for i, j in COLLAPSE.items():
         if "{{" + i + "|" in s or "{{" + i + "}}" in s:
-            return Item(z, "General", a, target=COLLAPSE[i], template=i, collapsed=True)
+            return Item(z, types.get(i, "General"), a, target=j, template=i)
+    for i, j in PROTECTED.items():
+        if "{{" + i + "|" in s or "{{" + i + "}}" in s:
+            d = None
+            if "|" in j:
+                j, d = j.split("|", 1)
+            return Item(z, types.get(i, "General"), a, target=j, template=i, protected_format=True, date=d)
     if "ProductionBrief" in s:
-        y = re.search("\{\{ProductionBrief/(.*?)(\|.*?)?}}", s)
+        y = re.search(r"\{\{ProductionBrief/(.*?)(\|.*?)?}}", s)
         if y:
-            return Item(z, "General", a, target=f"Production Brief: {y.group(1)}", collapsed=True)
+            return Item(z, "General", a, target=f"Production Brief: {y.group(1)}")
 
     s = re.sub(r"''(\[[^\[].*?[^]]])''", "\\1", s)
     # Plaintext links not wrapped in WebCite or OfficialSite
@@ -309,7 +243,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
                 elif m.group(3):
                     return Item(zx, mode, a, parent=target, template=i, issue=m.group(1), target=m.group(3), text=m.group(5), ref_magazine=True)
                 else:
-                    return Item(zx, mode, a, parent=target, template=i, issue=m.group(1), text=m.group(2), collapsed=True, ref_magazine=True)
+                    return Item(zx, mode, a, parent=target, template=i, issue=m.group(1), text=m.group(2), protected_format=True, ref_magazine=True)
 
     template = re_if(re.search(r'\{\{([^|\[}\n]+)[|}]', s), 1, '')
     if template and template[0].islower():
@@ -318,11 +252,12 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     mode = types.get(tx, "General")
     if mode == "Interwiki" or (mode == "External" and "url=" not in s):
         return Item(z, mode, a, template=template)
-    elif tx in types["Nav"] or tx in types["Dates"]:
-        print(f"Skipping {'navigation' if tx in types['Nav'] else 'date'} template: {template}: {z}")
+    elif mode in IGNORED_MODES:
+        if mode != "Skip":
+            print(f"Skipping {mode.lower()} template: {template}: {z}")
         return None
     elif template in IGNORE_TEMPLATES:
-        print(f"Skipping {mode} template: {template}: {z}")
+        print(f"Skipping ignored {mode} template: {template}: {z}")
         return None
 
     # # # Template-specific logic
@@ -441,12 +376,11 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         return Item(z, mode, a, target=m.group('story'), template=template, parent=m.group('book'))
 
     # Web article with int= parameter
-    m = re.search(r"{{[^|\[}\n]+\|(.*?\|)?url=(?P<url>.*?)\|.*?(text=(?P<t1>.*?)\|)?(.*?\|)?(?P<p>int|seriesl?i?n?k?)=(?P<int>.*?)(\|.*?text=(?P<t2>.*?))?(\|.*?)?}}", s)
+    m = re.search(r"{{[^|\[}\n]+\|(.*?\|)?url=(?P<url>.*?)(\|.*?)?(\|text=(?P<t1>.*?))?(\|.*?)?\|int=(?P<int>.*?)(\|.*?text=(?P<t2>.*?))?(\|.*?)?}}", s)
     if m:
         text = m.group('t1') or m.group('t2')
-        if m.group('p') and m.group('p').startswith('series'):
-            text = f"{m.group('int')} {text}"
-        return Item(z, mode, a, target=m.group('int'), template=template, url=m.group('url'), text=text)
+        yt = re.search(r"\|yt_video=(.*?)(\|.*?)?}}", s) if "yt_video" in s else None
+        return Item(z, mode, a, target=m.group('int'), template=template, url=m.group('url'), text=(text or "").strip(), special_url=yt.group(1) if yt else None)
 
     # Web articles without int= parameter
     m = re.search(r"{{[^|\[}\n]+\|(.*?\|)?(full_url|url|video)=(?P<url>.*?)\|(.*?\|)?(text|postname|thread)=(?P<text>.*?)(\|.*?)?}}", s)
@@ -458,11 +392,8 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         text = m.group('text') or ''
         if text and "series=" in s:
             text += " " + re_if(re.search(r"series=(.*?)(\|.*?)?$", s), 1, "")
-        yt = None
-        if "yt_video=" in s:
-            y = re.search(r"\|yt_video=(.*?)(\|.*?)?}}", s)
-            yt = y.group(1) if y else None
-        return Item(z, mode, a, template=template, url=m.group('url'), text=text.strip(), special_url=yt)
+        yt = re.search(r"\|yt_video=(.*?)(\|.*?)?}}", s) if "yt_video" in s else None
+        return Item(z, mode, a, template=template, url=m.group('url'), text=text.strip(), special_url=yt.group(1) if yt else None)
 
     # Web templates without named parameters
     if mode == "Web" or mode == "External" or mode == "Publisher" or mode == "Commercial":
@@ -507,27 +438,29 @@ def handle_special_template(template, s, z, mode, a, types):
         return Item(z, mode, a, target=m.group(3), template=template, parent=f"Star Wars Adventures Annual {m.group(1)}")
     elif template == "Rebels" and "Spark of Rebellion" in s:
         return Item(z, mode, a, target="Star Wars Rebels: Spark of Rebellion", template=template)
-    elif template == "SWMB":
-        return Item(z, "Toys", a, target="Star Wars Miniatures Battles", template=template, collapsed=True)
-    elif template == "Sphero":
-        return Item(z, "Toys", a, target="Star Wars Droids App by Sphero", template=template, collapsed=True, date="2017-08-31")
     elif template == "OST":
         m = re.search(r"\{\{OST\|(.*?)(\|.*?)?}}", s)
         return Item(z, mode, a, target=m.group(1), template=template)
+    elif template == "GalaxysEdge" or template == "GEAttr":
+        m = re.search(r"\{\{(GalaxysEdge|GEAttr)\|(.*?)(\|.*?)?}}", s)
+        return Item(z, mode, a, parent="Star Wars: Galaxy's Edge", template="GalaxysEdge", card=m.group(2), protected_format="|nolink" in s)
+    elif template == "GalacticStarcruiser" or template == "GSAttr":
+        m = re.search(r"\{\{(GalacticStarcruiser|GSAttr)\|(.*?)(\|.*?)?}}", s)
+        return Item(z, mode, a, parent="Star Wars: Galactic Starcruiser", template="GalacticStarcruiser", card=m.group(2), protected_format="|nolink" in s)
     elif template == "FilmVideo":
         m = re.search(r"\{\{FilmVideo\|(.*?)(\|.*?)?}}", s)
-        return Item(z, mode, a, issue=m.group(1), template=template)
+        return Item(z, mode, a, target=f"FilmVideo|{m.group(1)}", template=template)
     elif template == "ExclusiveTrailerCite" or template == "CelebrationTrailer":
         m = re.search(r"\{\{[A-z]+\|['\[]*(?P<m>.*?)(\|.*?)?['\]]*\|(?P<c>.*?)}}", s)
         if m:
             return Item(z, mode, a, parent=m.groupdict()['c'], issue=m.groupdict()['m'])
     elif template == "CalendarCite":
-        m = re.search(r"\{\{CalendarCite\|([0-9]+)\|(.*?)}}", s)
+        m = re.search(r"\{\{CalendarCite\|([0-9]+)(\|.*?)?}}", s)
         if m:
             return Item(z, mode, a, target=f"Star Wars Day-at-a-Time Calendar 20{m.group(1)}", template=template, special=m.group(2))
     elif template == "DatapadCite":
-        m = re.search(r"\{\{DatapadCite\|(.*?)(\|.*?)?}}", s)
-        return Item(z, mode, a, target="Star Wars: Datapad", issue=m.group(1), template=template, ref_magazine=True)
+        m = re.search(r"\{\{DatapadCite\|(gs=.*?\|)?(.*?)(\|.*?)?}}", s)
+        return Item(z, mode, a, target="Star Wars: Datapad", template=template, card=m.group(2), protected_format=True)
     # HoloNet News
     elif template == "Hnn" or template == "HoloNetNewsWeb":
         m = re.search(r"\{\{" + template + r"\|([0-9]+)(\|(.*?)\|(.*?))?}", s)
@@ -539,6 +472,10 @@ def handle_special_template(template, s, z, mode, a, types):
         if m:
             i = 56 if "off.jpg" in s else 45
             return Item(z, mode, a, parent=f"HoloNet News Vol. 531 {i}", template="HoloNetNewsAd", url=m.group(1))
+    elif template == "HBCite":
+        m = re.search(r"\{\{HBCite\|([0-9]+)", s)
+        if m:
+            return Item(z, mode, a, template=template, parent="Homing Beacon (newsletter)", issue=m.group(1))
     elif template == "Holonet" or template == "HolonetOld":
         m = re.search(r"\{\{Holonet(Old)?\|(.*?\|.*?)\|(.*?)(\|.*?)?}}", s)
         if m:
@@ -557,10 +494,6 @@ def handle_special_template(template, s, z, mode, a, types):
             return Item(z, mode, a, template=template, parent="Star Wars: Force Collection",
                         card=m.group(1), special=m.group(3))
         return Item(z, mode, a, target="Star Wars: Force Collection", template=template)
-    elif template == "HBCite":
-        m = re.search(r"\{\{HBCite\|([0-9]+)", s)
-        if m:
-            return Item(z, mode, a, template=template, parent="Homing Beacon (newsletter)", issue=m.group(1))
     elif template == "VisionsFocus":
         m = re.search(r"\{\{VisionsFocus\|(?P<e>.*?)( \(.*?\))?(\|.*?)?}}", s)
         if m:
@@ -589,15 +522,15 @@ def handle_special_template(template, s, z, mode, a, types):
         if m:
             return Item(z, mode, a, target=m.group(1), template=template)
     elif template == "HomeVideoCite":
-        m = re.search(r"\{+HomeVideoCite.*?\|(set=)?(.*?)(\|.*?)?\|(episode|featurette|scene)=\[*?(.*?)]*?(\|.*?)?}+", s)
+        m = re.search(r"\{+HomeVideoCite.*?\|(set=|film=)?(.*?)(\|.*?)?\|(episode|featurette|scene)=\[*?(.*?)]*?(\|.*?)?}+", s)
         if m:
-            parent = m.group(2) if "film=" not in s else None
+            parent = f"FilmVideo|{m.group(2)}" if m.group(1) == "film=" else m.group(2)
             if "featurette=" in s and "nolink=1" not in s:
                 if m.group(5) == "The Director's Experience":
                     return Item(z, mode, a, template=template, parent=parent, target="Star Wars: The Mandalorian and Grogu — The Director's Experience")
                 return Item(z, mode, a, template=template, parent=parent, target=m.group(5))
             else:
-                return Item(z, mode, a, template=template, parent=parent, issue=m.group(5), collapsed=True)
+                return Item(z, mode, a, template=template, parent=parent, issue=m.group(5), protected_format=True)
     elif template == "OfficialSite":
         m = re.search(r"\|url=(.*?)(\|.*?)?}}", s)
         if m:
@@ -675,14 +608,90 @@ def parse_card_line(s: str, z: str, template: str, mode: str, a: bool):
             t = None
     if card and "|scenario=" in s:
         return Item(z, mode, a, template=template, parent=card_set, special=card, url=u, text=t)
-    elif card and num:
-        return Item(z, mode, a, template=template, parent=card_set, card=card, subset=subset,
-                    url=u, text=t, special=num)
     elif card:
         return Item(z, mode, a, template=template, parent=card_set, card=card, subset=subset,
-                    url=u, text=t, special=ship)
+                    url=u, text=t, special=num if num else ship)
     elif card_set:
         return Item(z, mode, a, target=card_set, template=template, parent=None, subset=subset, text=t, special=ship)
     else:
         print(s)
     return None
+
+
+def swap_parameters(s: str):
+    return re.sub(r"(\|book=.*?)(\|story=.*?)(\|.*?)?}}", "\\2\\1\\3}}", s)
+
+
+def convert_issue_to_template(s):
+    m = re.search(r"(\[\[(.*?) ([0-9]+)(\|.*?)?]]'* ?{{C\|(.*?)}})", s)
+    if m:
+        for template, v in REFERENCE_MAGAZINES.items():
+            if m.group(2) == v[0]:
+                t = f"{{{{{template}|{m.group(3)}|{m.group(5)}}}}}"
+                return s.replace(m.group(1), t.replace("\\|", "|"))
+    return re.sub(r"<!--.*?-->", "", s)
+
+
+def decide_ff_issue(y, i):
+    if y and i in ["1", "2", "3", "4", "5"]:
+        return f"Part {i} ({y})"
+    elif y == "2014":
+        return f"Part {i}"
+    else:
+        return i
+
+
+def extract_fact_file(z: str, s: str, a: bool):
+    s = s.replace("|y=2013", "2013").replace("|y=2014", "2014")
+    x = re.search(r"\{\{(FactFile(201[34])?)\|([0-9]+)\|?}}", s)
+    if x:
+        issue = decide_ff_issue(x.group(2), x.group(3))
+        return Item(z, "General", a, template=x.group(1), target=f"The Official Star Wars Fact File {issue}")
+
+    x = re.search(r"(FactFile(201[34])?)\|(?P<i>[0-9]+)\|(German Edition - )?(?P<p>(?P<a>[0-9]* ?[A-Z]+)[ -]?(?P<n>[0-9]+) ?(-|–|—|&mdash;|&ndash;)? ?\7?(?P<m>[0-9]*)?)(?P<s>[|,])? ?(?P<t>.*?)$", s)
+    if x:
+        issue = decide_ff_issue(x.group(2), x.group('i'))
+        page = x.group('p')
+        abbr = x.group('a').upper()
+        num1 = x.group('n')
+        num2 = x.group('m')
+        text = x.group('t') or ''
+        num3, num4 = None, None
+        y = re.search(r"<[A-Z]+ ([0-9]+)-([0-9]+)>", text or "")
+        if y:
+            num3, num4 = y.group(1), y.group(2)
+            text = text.replace(y.group(0), "")
+        item = Item(z, "General", a, target=f"The Official Star Wars Fact File {issue}", template=x.group(1),
+                    issue=issue, text=f"{abbr} {num1} {text.split('}')[0]}")
+        item.ff_data = {"page": page, "abbr": abbr, "num1": num1, "num2": num2, "num3": num3, "num4": num4, "text": text, "legacy": x.group('s') == ","}
+        return item
+
+    x = re.search(r"(FactFile(201[34])?)\|([0-9]+)\|'*(.*?)'*}}", s)
+    if x:
+        issue = decide_ff_issue(x.group(2), x.group(3))
+        item = Item(z, "General", a, target=f"The Official Star Wars Fact File {issue}", template=x.group(1),
+                    issue=issue, text=x.group(4))
+        item.ff_data = {"page": None, "abbr": None, "num1": None, "num2": None, "num3": None, "num4": None, "text": x.group(4), "legacy": True}
+        return item
+    return None
+
+
+def fix_insider_departments(name, template, types):
+    if template == "InsiderCite" and name in types.get("Suffix:Departments", []):
+        return f"{name} (department)"
+    return name
+
+
+def build_magazine_target(template, issue: str, types):
+    if template in types["Magazine"]:
+        target = f"{types['Magazine']} {issue}"
+        if issue.isnumeric():
+            if template in types["Suffix"]:
+                threshold, suffix = types["Suffix"][template]
+                if int(issue) <= threshold:
+                    return f"{target} {suffix}"
+            elif template in types["Suffix2"]:
+                threshold, suffix = types["Suffix2"][template]
+                if int(issue) > threshold:
+                    return f"{target} {suffix}"
+        return target

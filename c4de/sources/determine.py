@@ -165,9 +165,9 @@ def determine_id_for_item(
         # print(f"Parent: {o.full_id()}")
         t = f"{o.mode}|None|{o.parent}|None|None|None|None|None"
         if t in data:
-            return ItemId(o, data[t], o.collapsed or o.card is not None, False)
+            return ItemId(o, data[t], o.protected_format or o.card is not None, False)
         elif other_data and t in other_data:
-            return ItemId(o, other_data[t], o.collapsed or o.card is not None, True)
+            return ItemId(o, other_data[t], o.protected_format or o.card is not None, True)
         elif o.card:
             return ItemId(o, o, True, False)
 
@@ -195,7 +195,7 @@ def determine_id_for_item(
 def match_issue_item(o: Item, data, site, by_target: ItemListDict, other_targets: ItemListDict):
     t = f"{o.mode}|None|{o.target}|None|None|None|None|None"
     if t in data:
-        return ItemId(o, data[t], o.collapsed, False)
+        return ItemId(o, data[t], o.protected_format, False)
     elif o.parent and "Special Edition" in o.parent and by_target.get(o.parent):
         return ItemId(o, by_target[o.parent][0], True, False)
     x = match_issue_target(o, by_target, other_targets, True)
@@ -500,16 +500,6 @@ def match_issue_target(o: Item, by_target: ItemListDict, other_targets: ItemList
 
 
 def match_target_issue_name(o, target, by_target: ItemListDict, other_targets: ItemListDict, use_original):
-    # # TODO: remove
-    # if o.ref_magazine and target and target == "Star Wars Universe" and o.text:
-    #     for name in ["Star Wars Universe", "Character"]:
-    #         for b, targets in {False: by_target, True: other_targets}.items():
-    #             if not targets:
-    #                 continue
-    #             items = [i for i in (targets.get(name) or []) if i.issue == o.issue and i.text and (o.text.lower() in i.text or i.text.startswith(o.text[:6]))]
-    #             if items:
-    #                 return ItemId(o, items[0], False, b)
-
     if target and by_target and target in by_target:
         return ItemId(o, find_matching_issue(by_target[target], o.issue, o.original, o.template), use_original, False)
     elif target and other_targets and target in other_targets:
@@ -629,17 +619,17 @@ def match_by_target(t, o: Item, by_target: ItemListDict, other_targets: ItemList
         if not targets:
             continue
         elif len(targets) == 1:
-            return ItemId(o, targets[0], o.collapsed, from_other)
+            return ItemId(o, targets[0], o.protected_format, from_other)
         if log and not o.both_continuities:
             print(f"Multiple matches found for {t}")
         for x in targets:
             if x.format_text and o.format_text and x.format_text.replace("''", "") == o.format_text.replace("''", ""):
-                return ItemId(o, x, o.collapsed, from_other)
+                return ItemId(o, x, o.protected_format, from_other)
             elif not o.template and not x.template and not o.parent and not x.parent:
-                return ItemId(o, x, o.collapsed, from_other)
+                return ItemId(o, x, o.protected_format, from_other)
             elif x.url and o.url and do_urls_match(o.url, o.template, x, True, True):
-                return ItemId(o, x, o.collapsed, from_other)
-        return ItemId(o, targets[0], o.collapsed, False)
+                return ItemId(o, x, o.protected_format, from_other)
+        return ItemId(o, targets[0], o.protected_format, False)
     return None
 
 
@@ -786,7 +776,7 @@ def evaluate_match(x: int, url, o: Item, d: Item, ad, is_old, check_sw, merge: s
 
     elif x == 1:
         partial_matches.append(d)
-    if check_sw and d.mode == "YT" and d.special and prep_url(d.special) == url:
+    if check_sw and d.mode == "YT" and d.special_url and prep_url(d.special_url) == url:
         return ItemId(o, d, False, False)
     return None
 

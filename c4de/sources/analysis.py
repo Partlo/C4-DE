@@ -19,7 +19,13 @@ from c4de.sources.parsing import BY_INDEX, BY_DATE, UNCHANGED, is_official_link,
 
 
 KEEP_TEMPLATES = ["CalendarCite"]
-DO_NOT_MOVE = ["GEAttr", "DatapadCite", "Star Wars: Datapad (Galactic Starcruiser)"]
+GROUP_IN_APPEARANCES = {
+    "DatapadCite": "[[Star Wars: Datapad|''Star Wars'': Datapad]]",
+    "GEAttr": "[[Star Wars: Galaxy's Edge|''Star Wars'': Galaxy's Edge]]",
+    "GalaxysEdge": "[[Star Wars: Galaxy's Edge|''Star Wars'': Galaxy's Edge]]",
+    "GSAttr": "[[Star Wars: Galactic Starcruiser|''Star Wars'': Galactic Starcruiser]]",
+    "GalacticStarcruiser": "[[Star Wars: Galactic Starcruiser|''Star Wars'': Galactic Starcruiser]]",
+}
 
 FC = "ForceCollection"
 
@@ -254,30 +260,19 @@ def handle_non_canon_items(results: PageComponents, new_apps: SectionItemIds, ne
         new_src.found += new_ncs.non_canon
         new_nca.non_canon = []
 
-    if new_apps.wrong or new_nca.wrong:
-        if log:
-            print(f"Moving {len(new_apps.wrong) + len(new_nca.wrong)} sources from Appearances to Sources")
-        for x in new_apps.wrong:
-            x.current.extra = re.sub(r"\{\{1st([|}])", "{{1stm\\1", x.current.extra)
-            (new_ncs if x.master.non_canon else new_src).found.append(x)
+    if new_apps.wrong or new_apps.wrong_group_items or new_nca.wrong or new_nca.wrong_group_items:
+        handle_wrong("Appearances", "Sources", new_apps, new_nca, new_src, new_ncs, log)
         if not new_apps.found:
             results.src.preceding += results.apps.preceding
             results.src.trailing += results.apps.trailing
             results.src.after += results.apps.after
-        for x in new_nca.wrong:
-            x.current.extra = re.sub(r"\{\{1st([|}])", "{{1stm\\1", x.current.extra)
-            (new_ncs if x.master.non_canon else new_src).found.append(x)
-    if new_src.wrong or new_ncs.wrong:
-        if log:
-            print(f"Moving {len(new_src.wrong) + len(new_ncs.wrong)} entries from Sources to Appearances")
-        for x in new_src.wrong:
-            (new_nca if x.master.non_canon else new_apps).found.append(x)
+
+    if new_src.wrong or new_src.wrong_group_items or new_ncs.wrong or new_ncs.wrong_group_items:
+        handle_wrong("Sources", "Appearances", new_src, new_ncs, new_apps, new_nca, log)
         if not new_src.found:
             results.apps.preceding += results.src.preceding
             results.apps.trailing += results.src.trailing
             results.apps.after += results.src.after
-        for x in new_ncs.wrong:
-            (new_nca if x.master.non_canon else new_apps).found.append(x)
 
     if results.non_canon:
         new_apps.merge(new_nca)
@@ -286,6 +281,26 @@ def handle_non_canon_items(results: PageComponents, new_apps: SectionItemIds, ne
         new_src.merge(new_ncs)
         new_src.found += new_src.non_canon
         new_src.non_canon = []
+
+
+def handle_wrong(from_name, to_name, target: SectionItemIds, nc_target: SectionItemIds, other: SectionItemIds, nc_other: SectionItemIds, log):
+    if log:
+        print(f"Moving {len(target.wrong) + len(nc_target.wrong)} entries from {from_name} to {to_name}")
+    for x in target.wrong:
+        if from_name == "Appearances":
+            x.current.extra = re.sub(r"\{\{1st([|}])", "{{1stm\\1", x.current.extra)
+        (nc_other if x.master.non_canon else other).found.append(x)
+    for k, v in target.wrong_group_items.items():
+        if k not in other.group_items:
+            other.group_items[k] = []
+        other.group_items[k] += v
+    for k, v in target.wrong_group_ids.items():
+        if k not in other.group_ids:
+            other.group_ids[k] = v
+    for x in nc_target.wrong:
+        if from_name == "Appearances":
+            x.current.extra = re.sub(r"\{\{1st([|}])", "{{1stm\\1", x.current.extra)
+        (nc_other if x.master.non_canon else other).found.append(x)
 
 
 def analyze_section_results(target: Page, results: PageComponents, appearances: FullListData,
@@ -297,19 +312,19 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
     unknown_apps, unknown_src = [], []
     now = datetime.now()
     new_src = build_item_ids_for_section(
-        target, results.real, results.media, "Sources", results.src.items, sources, appearances, None, remap,
+        target, results.real, results.media, "Sources", results.src.items, sources, appearances, remap,
         unknown_src, results.canon, results.infobox, [], collapse_audiobooks, log)
     new_ncs = build_item_ids_for_section(
-        target, results.real, results.media, "Non-canon sources", results.ncs.items, sources, appearances, None, remap,
+        target, results.real, results.media, "Non-canon sources", results.ncs.items, sources, appearances, remap,
         unknown_src, results.canon, results.infobox, [], collapse_audiobooks, log)
     new_apps = build_item_ids_for_section(
-        target, results.real, results.media, "Appearances", results.apps.items, appearances, sources, new_src, remap,
+        target, results.real, results.media, "Appearances", results.apps.items, appearances, sources, remap,
         unknown_apps, results.canon, results.infobox, checked, collapse_audiobooks, log)
     new_nca = build_item_ids_for_section(
-        target, results.real, results.media, "Non-canon appearances", results.nca.items, appearances, sources, new_ncs, remap,
+        target, results.real, results.media, "Non-canon appearances", results.nca.items, appearances, sources, remap,
         unknown_apps, results.canon, results.infobox, checked, collapse_audiobooks, log)
     new_col = build_item_ids_for_section(
-        target, results.real, results.media, "Collections", results.collections.items, sources, appearances, None, remap,
+        target, results.real, results.media, "Collections", results.collections.items, sources, appearances, remap,
         unknown_src, results.canon, results.infobox, [], collapse_audiobooks, log)
     log_time("item IDs", now)
 
@@ -418,19 +433,17 @@ def expand_listing(target: str, o: Item, data: FullListData, expanded: int):
 
 
 def build_item_ids_for_section(page: Page, real, media, name, original: List[Item], data: FullListData, other: FullListData,
-                               src: Optional[SectionItemIds], remap: dict, unknown: List[Union[str, Item]], canon: bool,
+                               remap: dict, unknown: List[Union[str, Item]], canon: bool,
                                infobox: str, checked: list, collapse_audiobooks=True, log=True) -> SectionItemIds:
 
-    found = []
-    wrong = []
-    links = []
-    non_canon = []
-    group_items, app_group_items = _cards(), _cards()
+    found, wrong, links, non_canon = [], [], [], []
+    group_items, wrong_group_items = _cards(), _cards()
     extra = {}
     page_links = []
     any_expanded = []
     unexpanded = 0
     other_extra = 0
+    is_source = name and "appearance" not in name.lower()
     already = set(o.target for o in original if o.target)
     for i, o in enumerate(original):
         o.index = i
@@ -461,23 +474,26 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
 
         if d and (o.is_card_or_mini() or o.template == FC):
             d.fix_fc_date(canon)
-            handle_card_item(d, o, group_items, src.found if (src and "scenario" not in o.original) else found, src.wrong if src else wrong, extra, name, log)
+            if is_source or (not is_source and "scenario" in o.original):
+                handle_card_item(d, o, group_items, found, extra)
+            else:
+                handle_card_item(d, o, wrong_group_items, wrong, extra)
+
+        elif d and d.current.template in GROUP_IN_APPEARANCES:
+            (wrong_group_items if is_source else group_items)[d.master.target or d.master.parent].append(d)
         elif d and d.current.template and d.current.template.startswith("FactFile") and d.master.target:
-            group_items[d.master.target].append(d)
-            # add_to_list(group_items, d.master.target, d)
+            (group_items if is_source else wrong_group_items)[d.master.target].append(d)
         elif d and d.current.ref_magazine and d.master.parent and not o.override_date:
-            group_items[d.master.parent].append(d)
-            # add_to_list(group_items, d.master.parent, d)
-        elif d and d.current.template == "DatapadCite":
-            app_group_items[d.master.target].append(d)
-            # add_to_list(app_group_items, d.master.target, d)
+            (group_items if is_source else wrong_group_items)[d.master.parent].append(d)
+        elif d and d.current.template == "HomeVideoCite" and d.master.parent:
+            (group_items if is_source else wrong_group_items)[d.master.parent].append(d)
         elif o.mode != "Toys" and (is_official_product_page(o, real) or is_external_link(d, o, unknown)):
             if d:
                 o.master_text = d.master.original
             if not (not real and o.template == "SW" and o.url and o.url.startswith("films/")):
                 links.append(o)
-        elif d and d.current.template in KEEP_TEMPLATES:
-            found.append(d)
+        # elif d and d.current.template in KEEP_TEMPLATES:
+        #     found.append(d)
         elif d and name == "Collections":
             if not (d.master.collection_type or d.master.master_page == "Appearances/Collections") or d.current.unknown:
                 px = data.by_parent.get(d.master.target, []) + other.by_parent.get(d.master.target, [])
@@ -493,7 +509,6 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
         elif d and d.master.unlicensed and name.startswith("Non-canon") == d.master.non_canon:
             (found if name.startswith("Non-canon") == d.master.non_canon else non_canon).append(d)
         elif d and d.from_other_data and "databank" not in (o.extra or '').lower() \
-                and d.current.template not in DO_NOT_MOVE and d.current.target not in DO_NOT_MOVE \
                 and not real and (d.master.is_reprint or not d.master.from_extra):
             if log:
                 print(f"({name}) Listed in wrong section: {o.original} -> {d.master.is_appearance} {d.master.full_id()}")
@@ -552,16 +567,10 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
             elif real:
                 found.append(ItemId(o, o, False))
 
-    group_ids = {}
-    if name.startswith("File:"):
-        pass
-    elif src:
-        handle_groups(group_items, data, other, src.found, src.group_ids, extra, unknown, canon, src)
-        handle_groups(app_group_items, data, other, found, group_ids, extra, unknown, canon)
-        group_items = app_group_items
-    else:
+    group_ids, wrong_group_ids = {}, {}
+    if not name.startswith("File:"):
         handle_groups(group_items, data, other, found, group_ids, extra, unknown, canon)
-        handle_groups(app_group_items, data, other, found, group_ids, extra, unknown, canon)
+        handle_groups(wrong_group_items, data, other, wrong, wrong_group_ids, extra, unknown, canon)
 
     found += list(extra.values())
     if any_expanded:
@@ -569,7 +578,7 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
         for x in any_expanded:
             if x.current.target not in targets:
                 found.append(x)
-    return SectionItemIds(name, found, wrong, non_canon, group_items, group_ids, links, len(any_expanded) > 0 or other_extra)
+    return SectionItemIds(name, found, wrong, non_canon, links, len(any_expanded) > 0 or other_extra, group_items, group_ids, wrong_group_items, wrong_group_ids)
 
 
 def handle_expansion(d: ItemId, o: Item, page: Page, page_links: list, data, already, any_expanded, unexpanded, other_extra):
@@ -615,7 +624,7 @@ def handle_expansion(d: ItemId, o: Item, page: Page, page_links: list, data, alr
 
 
 def handle_groups(groups: ItemIdListDict, data: FullListData, other: FullListData, found: List[ItemId],
-                  group_ids: dict, extra: dict, unknown, canon: bool, src: SectionItemIds = None):
+                  group_ids: dict, extra: dict, unknown, canon: bool):
     unknown_sets = {}
     already_found = {}
     for x in found:
@@ -665,18 +674,17 @@ def handle_groups(groups: ItemIdListDict, data: FullListData, other: FullListDat
             for i in c:
                 i.current.unknown = True
             found += c
-        if src and s in src.group_items:
-            src.group_items[s] += c
-        elif src:
-            src.group_items[s] = c
+        # if src and s in src.group_items:
+        #     src.group_items[s] += c
+        # elif src:
+        #     src.group_items[s] = c
 
         for i in c:
             if i.current.unknown:
                 unknown.append(i.current)
 
 
-def handle_card_item(d: ItemId, o: Item, cards: ItemIdListDict, found: List[ItemId], wrong: List[ItemId],
-                     extra: ItemIdDict, name, log):
+def handle_card_item(d: ItemId, o: Item, cards: ItemIdListDict, found: List[ItemId], extra: ItemIdDict):
     if d.current.card and d.current.card == d.master.card and d.master.has_date() and not d.master.is_card_or_mini():
         found.append(d)
         return
@@ -714,10 +722,10 @@ def handle_card_item(d: ItemId, o: Item, cards: ItemIdListDict, found: List[Item
 
     if o.card:
         cards[parent_set].append(d)
-    elif o.special and d.from_other_data:
-        if log:
-            print(f"({name}) Listed in wrong section: {o.original}")
-        wrong.append(d)
+    # elif o.special and d.from_other_data:
+    #     if log:
+    #         print(f"Card: ({name}) Listed in wrong section: {o.original}")
+    #     wrong.append(d)
     elif o.special:
         found.append(d)
     elif o.subset:
@@ -726,10 +734,10 @@ def handle_card_item(d: ItemId, o: Item, cards: ItemIdListDict, found: List[Item
         found.append(d)
     else:
         print(f"No cards found for {parent_set}: {o.original}")
-        if "appearance" in name.lower():
-            wrong.append(d)
-        else:
-            extra[d.master.target] = d
+        # if "appearance" in name.lower():
+        #     wrong.append(d)
+        # else:
+        extra[d.master.target] = d
 
 
 # ***
@@ -997,15 +1005,15 @@ def build_card_block(o: ItemId, d: str, section: SectionItemIds, sl: str, final_
     ct = 0
     rx = 1
     block = []
-    if o.master.template == FC or o.master.template == "DatapadCite":
+    if o.master.template == FC or o.master.template in GROUP_IN_APPEARANCES:
         set_items = sorted(set_items, key=lambda a: a.current.original)
     elif o.master.is_card_or_mini():
         set_items = sorted(set_items, key=lambda a: ("rulebook" not in a.current.original and "rulebook" not in a.master.original,
                                                      "mission" not in a.current.original and "mission" not in a.master.original,
                                                      a.master.index, a.current.card_sort_text()))
 
-    if o.master.template == "DatapadCite":
-        master = "[[Star Wars: Datapad|''Star Wars'' Datapad]]"
+    if o.master.template in GROUP_IN_APPEARANCES:
+        master = GROUP_IN_APPEARANCES[o.master.template]
         parent = f"{master} {o.current.extra}".strip()
     elif o.master.template == FC or o.master.target == "Star Wars: Force Collection":
         master = "{{ForceCollection|parent=1}}"
@@ -1016,7 +1024,7 @@ def build_card_block(o: ItemId, d: str, section: SectionItemIds, sl: str, final_
     elif o.master.template:
         master = f"{o.current.original}".replace("}}", "")
         parent = f"{master}}}}} {o.current.extra}".strip()
-        if "|parent=1" not in parent and (o.master.mode != "Minis" or o.master.template == "SWIA"):
+        if "|parent=1" not in parent and o.master.template != "FilmVideo" and (o.master.mode != "Minis" or o.master.template == "SWIA"):
             parent = parent.replace("}}", "|parent=1}}")
     else:
         master = f"{o.current.original}"
@@ -1243,7 +1251,7 @@ def compile_found(section: SectionItemIds, mode, canon):
             else:
                 urls[u] = o
 
-        if should_group(section, mode, o, canon):
+        if should_group(section.is_appearances, mode, o, canon):
             group.append(o)
         else:
             new_found.append(o)
@@ -1257,9 +1265,9 @@ def compile_found(section: SectionItemIds, mode, canon):
     return new_found, group, missing, source_names
 
 
-def should_group(section, mode, o, canon):
-    if mode == BY_INDEX and section.is_appearances:
-        return (o.master.timeline_index(canon) if section.is_appearances else o.master.index) is None
+def should_group(is_appearances, mode, o, canon):
+    if mode == BY_INDEX and is_appearances:
+        return (o.master.timeline_index(canon) if is_appearances else o.master.index) is None
     elif o.current.old_version or (o.current.override and not o.current.override_date):
         return True
     elif o.master.has_date():

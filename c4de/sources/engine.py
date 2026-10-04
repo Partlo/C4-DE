@@ -22,6 +22,11 @@ SUBPAGES = [
 LIST_AT_START = ["Star Wars: Galactic Defense", "Star Wars: Force Arena", "Star Wars: Starfighter Missions", "Unlock!: Star Wars Escape Game"]
 LIST_AT_END = ["Star Wars: Galaxy of Heroes"]
 
+ISSUE_REPRINTS = ["A Certain Point of View", "Classic Moment", "Behind the Magic",
+                  "In the Star Wars Universe", "Interrogation Droid!", "Jedi Toy Box", "Legendary Authors",
+                  "My Star Wars", "Retro", "Red Five", "Rogues Gallery",
+                  "Set Piece", "Second Trooper", "The Star Wars Archive", "The Wonder Column"]
+
 EXPANSION = {
     "Star Wars Technical Journal": [
         "Star Wars Technical Journal of the Planet Tatooine", "Star Wars Technical Journal of the Imperial Forces", "Star Wars Technical Journal of the Rebel Forces"
@@ -78,7 +83,7 @@ def list_templates(site, cat, data, template_type, recurse=False, web=False):
 
 def build_template_types(site):
     now = datetime.now()
-    results = {"db": "DB", "databank": "DB", "swe": "DB", "swboards": "External", "WebsiteNames": {}}
+    results = {"db": "DB", "databank": "DB", "swe": "DB", "swboards": "External"}
 
     list_templates(site, "Category:StarWars.com citation templates", results, "Web")
     list_templates(site, "Category:Internet citation templates", results, "Web", web=True)
@@ -113,12 +118,10 @@ def build_template_types(site):
                         results["Suffix"][p.title()] = (int(y.group(1)), x.group(2))
     results["Magazine"]["InsiderCite"] = "Star Wars Insider"
 
-    for k, cat in {"Nav": "Navigation templates", "Dates": "Dating citation templates"}.items():
-        results[k] = []
-        for p in Category(site, f"Category:{cat}").articles(recurse=True):
-            if p.title(with_ns=False).lower() in results:
-                print(f"ERROR: Duplicate template name: {p.title(with_ns=False).lower()}")
-            results[k].append(p.title(with_ns=False).lower())
+    list_templates(site, "Category:External media citation templates", results, "Skip")
+    list_templates(site, "Category:Logic citation templates", results, "Logic")
+    list_templates(site, "Category:Dating citation templates", results, "Dates", recurse=True)
+    list_templates(site, "Category:Navigation templates", results, "Nav", recurse=True)
 
     px = Page(site, "Module:BaseCitation").get()
     departments = re.search(r"DEPARTMENTS = \{\"(.*?)\"}", px)
@@ -184,6 +187,15 @@ def load_auto_categories(site):
 
 # TODO: Split Appearances category by type
 
+COLLECTION_TYPES = {
+    "anthologies": "anthology",
+    "individual issues": "individual",
+    "reprint magazine": "reprint",
+    "toy lines": "toy",
+    "reprint": "reprint"
+}
+
+
 def load_appearances(site, log, canon_only=False, legends_only=False):
     data = []
     pages = ["Legends", "Canon", "Audiobook", "Unlicensed", "Audiobook/German", "Crossover", "LEGO"]
@@ -198,18 +210,11 @@ def load_appearances(site, log, canon_only=False, legends_only=False):
         p = Page(site, f"Wookieepedia:Appearances/{sp}")
         for line in p.get().splitlines():
             if line and sp in ("Extra", "Series") and line.startswith("=="):
-                if "anthologies" in line:
-                    collection_type = "anthology"
-                elif "Individual issues" in line:
-                    collection_type = "individual"
-                elif "reprint magazine" in line:
-                    collection_type = "reprint"
-                elif "Toy lines" in line:
-                    collection_type = "toy"
-                elif "reprint" in line.lower():
-                    collection_type = "reprint"
-                else:
-                    collection_type = None
+                collection_type = None
+                for k, v in COLLECTION_TYPES.items():
+                    if k in line.lower():
+                        collection_type = v
+                        break
             elif line and not line.startswith("=="):
                 if "/Header}}" in line or line.startswith("----"):
                     continue
@@ -231,14 +236,9 @@ def load_source_lists(site, log, include_web=True):
     data = []
     for sp in SUBPAGES:
         i = 0
-        skip = False
         p = Page(site, f"Wookieepedia:Sources/{sp}")
         lines = p.get().splitlines()
-        bad = []
         for o, line in enumerate(lines):
-            # if skip:
-            #     skip = False
-            #     continue
             if line and not line.startswith("==") and "/Header}}" not in line and not line.startswith("----"):
                 line = line.replace(" |reprint=", "|reprint=")
                 if "Miniatures" in sp or "RefMagazine" in sp or "CardSets" in sp or "CardTrader" in sp:
@@ -255,7 +255,7 @@ def load_source_lists(site, log, include_web=True):
                 if x:
                     i += 1
                     data.append({"index": i, "page": sp, "date": x.group("d"), "item": x.group("t"),
-                                 "canon": None if "/" not in sp else "Canon" in sp, "ref": x.group("r")})
+                                 "canon": None if "/" not in sp else "Canon" in sp})
                 else:
                     print(f"{p.title()}: Cannot parse line: {line}")
         if log:
@@ -263,67 +263,23 @@ def load_source_lists(site, log, include_web=True):
     if not include_web:
         return data
 
-    for y in [*range(1990, datetime.now().year + 1), "Special", "Repost"]:
+    for sp in [*range(1990, datetime.now().year + 1), "Special", "Repost", "Current", "Unknown", "External", "Target", "Publisher"]:
         i = 0
-        p = Page(site, f"Wookieepedia:Sources/Web/{y}")
+        p = Page(site, f"Wookieepedia:Sources/Web/{sp}")
         if p.exists():
-            lines = p.get().splitlines()
-            for o, line in enumerate(lines):
-                if "/Header}}" in line or line.startswith("----"):
+            spx = "Web/Repost" if sp == "Special" else f"Web/{sp}"
+            for line in p.get().splitlines():
+                if "/Header}}" in line or not line.strip():
                     continue
-                x = re.search(r"\*([RPF]: )?(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? *(?P<t>.*?) ?†?( {{C\|1?=?(original|alternate): (?P<a>.*?)}})?( {{C\|int: (?P<i>.*?)}})?( {{C\|d: [0-9X-]+?}})? ?†?$", line)
+                x = re.search(r"[#*]([RPF]: )?(?P<d>.*?):(?P<t>.*?) ?†?( {{C\|1?=?(original|alternate): (?P<a>.*?)}})?(?P<int> {{C\|int: (?P<i>.*?)}})?(?P<dc> {{C\|d: [0-9X-]+?}})?(?P<n> \{\{C\|[Nn]on-canon}})? ?†?$", line)
                 if x:
                     i += 1
-                    data.append({"index": i, "page": "Web/Repost" if y == "Special" else f"Web/{y}", "date": x.group("d"), "item": x.group("t"),
-                                 "alternate": x.group("a"), "int": x.group("i"), "ref": x.group("r")})
+                    data.append({"index": i, "page": spx, "date": x.group("d"), "item": x.group("t") + (x.group("n") or ''),
+                                 "alternate": x.group("a"), "int": x.group("i"), "official": x.group("d") == "OfficialSite"})
                 else:
                     print(f"{p.title()}: Cannot parse line: {line}")
             if log:
-                print(f"Loaded {i} sources from Wookieepedia:Sources/Web/{y}")
-
-    p = Page(site, f"Wookieepedia:Sources/Web/Current")
-    i = 0
-    for line in p.get().splitlines():
-        if "/Header}}" in line or line.startswith("----"):
-            continue
-        x = re.search(r"\*Current:(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?)( †)?( {{C\|1?=?(original|alternate): (?P<a>.*?)}})? ?†?$", line)
-        if x:
-            i += 1
-            data.append({"index": i, "page": "Web/Current", "date": "Current", "item": x.group("t"),
-                         "alternate": x.group("a"), "ref": x.group("r")})
-        else:
-            print(f"{p.title()}: Cannot parse line: {line}")
-    if log:
-        print(f"Loaded {i} sources from Wookieepedia:Sources/Current")
-
-    p = Page(site, f"Wookieepedia:Sources/Web/Unknown")
-    i = 0
-    for line in p.get().splitlines():
-        if "/Header}}" in line or line.startswith("----"):
-            continue
-        x = re.search(r"\*(.*?):( [0-9:-]+)? (.*?)( †)?( {{C\|1?=?(original|alternate): (.*?)}})?( \{\{C\|[Nn]on-canon}})?$", line)
-        if x:
-            i += 1
-            data.append({"index": i, "page": "Web/Unknown", "date": "Unknown", "item": x.group(3) + (x.group(8) or ''), "alternate": x.group(7), "official": x.group(1) == "OfficialSite"})
-        else:
-            print(f"{p.title()}: Cannot parse line: {line}")
-    if log:
-        print(f"Loaded {i} sources from Wookieepedia:Sources/Web/Unknown")
-
-    for sp in ["External", "Target", "Publisher"]:
-        p = Page(site, f"Wookieepedia:Sources/Web/{sp}")
-        i = 0
-        for line in p.get().splitlines():
-            if "/Header}}" in line or not line.strip():
-                continue
-            x = re.search(r"[#*]([RP]: )?(?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (?P<t>.*?) ?†?( {{C\|1?=?(original|alternate): (?P<a>[^{}\[\]|]+?)}})?( {{C\|d: [0-9X-]+?}})?(?P<x> \{\{C\|[Nn]on-canon}})?$", line)
-            if x:
-                i += 1
-                data.append({"index": i, "page": f"Web/{sp}", "date": x.group('d'), "item": x.group('t') + (x.group('x') or ''), "alternate": x.group('a')})
-            else:
-                print(f"{p.title()}: Cannot parse line: {line}")
-        if log:
-            print(f"Loaded {i} sources from Wookieepedia:Sources/{sp}")
+                print(f"Loaded {i} sources from Wookieepedia:Sources/{sp}")
 
     db_pages = {"DB": "2011-09-13", "SWE": "2014-07-01", "Databank": "Current"}
     for template, date in db_pages.items():
@@ -354,12 +310,6 @@ def load_remap(site) -> dict:
             results[x.group(1)] = "Star Wars Galaxies" if x.group(3) == "GalaxiesNGE" else x.group(3)
     _log(f"Loaded {len(results)} remap names")
     return results
-
-
-ISSUE_REPRINTS = ["A Certain Point of View", "Classic Moment", "Behind the Magic",
-                  "In the Star Wars Universe", "Interrogation Droid!", "Jedi Toy Box", "Legendary Authors",
-                  "My Star Wars", "Retro", "Red Five", "Rogues Gallery",
-                  "Set Piece", "Second Trooper", "The Star Wars Archive", "The Wonder Column"]
 
 
 def remove_templates(s):
@@ -484,7 +434,7 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
     today = datetime.now().strftime("%Y-%m-%d")
     ff_data = defaultdict(list)
     reprints = defaultdict(list)
-    card_suffixes = {}
+    card_suffixes = defaultdict(dict)
     by_parent = defaultdict(list)
     urls = defaultdict(list)
     for i in sources:
@@ -514,7 +464,6 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
                     x.non_canon = True
                     x.both_continuities = True
                 x.index = i['index']
-                x.date_ref = i.get('ref')
                 x.extra_date = i.get('extraDate')
 
                 if x.parent:
@@ -537,8 +486,6 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
                     x.set_format_text = "''" + x.target.split(" (")[0] + "''"
 
                 if x.master_page.endswith("CardSets") and x.parenthetical:
-                    if x.template not in card_suffixes:
-                        card_suffixes[x.template] = {}
                     card_suffixes[x.template][x.target.replace(f" ({parenthetical})", "")] = x.target
                 elif x.is_card_or_mini() and x.card:
                     if x.template in card_suffixes and x.parent in card_suffixes[x.template]:

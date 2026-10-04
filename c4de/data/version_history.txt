@@ -271,3 +271,6 @@
 **Lots of logic cleanup and simplification
 **Proper handling of yt_video parameter
 **Other sweep fixes
+*'''4.8.0''': October 4, 2026
+**Major cleanup of legacy code
+**SourceContents handling for DatapadCite, Galaxy's Edge and Starcruiser

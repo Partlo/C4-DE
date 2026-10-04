@@ -16,21 +16,21 @@ def build_alternate(i: ItemId):
         o = "{{SW|url=news/swca-2022-lucasfilm-publishing-behind-the-page-panel|text=SWCA 2022: 7 Things We Learned from the Lucasfilm Publishing Behind the Page Panel}}"
         template, mode, date = "SW", "Web", "2022-05-28"
     elif "livestream=" in i.master.original:
-        o = "{{" + i.master.template + "|" + i.master.special + "|" + i.master.text + " (Livestream)}}"
+        o = "{{" + i.master.template + "|" + i.master.special_url + "|" + i.master.text + " (Livestream)}}"
         template, mode = i.master.template, i.master.mode
     elif "dub_url=" in i.master.original:
-        o = "{{" + i.master.template + "|" + i.master.special + "|" + i.master.text + " (English Dub)}}"
+        o = "{{" + i.master.template + "|" + i.master.special_url + "|" + i.master.text + " (English Dub)}}"
         template, mode = i.master.template, i.master.mode
     else:
-        o = "{{SW|url=" + i.master.special + "|text=" + i.master.text + "}}"
+        o = "{{SW|url=" + i.master.special_url + "|text=" + i.master.text + "}}"
         template, mode = "SW", "Web"
-    x = Item(o, mode, i.master.is_appearance, url=i.master.special, template=template, text=i.master.text)
+    x = Item(o, mode, i.master.is_appearance, url=i.master.special_url, template=template, text=i.master.text)
     x.date = date or i.master.date
     x.index = (i.master.index or 0) + 0.1
     x.canon_index = i.master.canon_index
     x.legends_index = i.master.legends_index
     x.extra = i.current.extra
-    i.current.original = i.master.original.replace(f"|site_url={i.master.special}", "").replace(f"|sw_url={i.master.special}", "")
+    i.current.original = i.master.original.replace(f"|site_url={i.master.special_url}", "").replace(f"|sw_url={i.master.special_url}", "")
     i.use_original_text = True
     return ItemId(x, x, False, False)
 
@@ -39,13 +39,13 @@ def flatten(items: List[ItemId], found: List[ItemId], missing: List[ItemId]):
     for i in items:
         if i.master.has_date():
             found.append(i)
-            if i.master.mode == "YT" and i.master.special:
+            if i.master.mode == "YT" and i.master.special_url:
                 found.append(build_alternate(i))
             elif i.master.template == "GalaxyMapPoster":
                 found.append(build_alternate(i))
         else:
             missing.append(i)
-            if i.master.mode == "YT" and i.master.special:
+            if i.master.mode == "YT" and i.master.special_url:
                 missing.append(build_alternate(i))
 
 

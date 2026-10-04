@@ -12,7 +12,7 @@ from c4de.sources.infoboxer import handle_infobox_on_page
 
 REPLACEMENTS = [
     ("==Work==", "==Works=="), ("Apearance", "Appearance"), ("Appearence", "Appearance"), ("&#40;&#63;&#41;", "(?)"),
-    ("===Non-canonical appearances===\n*", "===Non-canon appearances===\n*"),
+    ("===Non-canonical appearances===\n*", "===Non-canon appearances===\n*"), ("\n*\n{{", "\n*{{"),
     ("==Traits and personality==", "==Personality and traits=="),
     ("{{mO}}", "{{Mo}}"), ("*{{Indexpage", "{{Indexpage"), ("<br>", "<br />"), ("{{InvalidCategory}}", ""),
     ("Youtube", "YouTube"), ("{{Scrollbox", "{{ScrollBox"), ("referneces", "references"), ("{{MO}}", "{{Mo}}"),
@@ -27,6 +27,15 @@ REPLACEMENTS = [
     ("<onlyinclude>\n{{Incomplete_app}}", "{{IncompleteApp}}\n<onlyinclude>"),
     ("<onlyinclude>\n{{IncompleteApp}}", "{{IncompleteApp}}\n<onlyinclude>"),
     ("{{C|non-canon|reprint=1}}", ""), ("[[Category: ", "[[Category:"),
+
+    ("{{GEAttr|Star Wars: Datapad}}", "[[Star Wars: Datapad|''Star Wars'': Datapad]]"),
+    ("{{GSAttr|Star Wars: Datapad}}", "[[Star Wars: Datapad|''Star Wars'': Datapad]]"),
+    ("{{GEAttr|Datapad}}", "[[Star Wars: Datapad|''Star Wars'': Datapad]]"),
+    ("{{GSAttr|Datapad}}", "[[Star Wars: Datapad|''Star Wars'': Datapad]]"),
+    ("{{GalaxysEdge|Bina's Guide to the Creatures of Batuu|''Bina's Guide to the Creatures of Batuu''}}", "''[[Bina's Guide to the Creatures of Batuu]]''"),
+    ("{{GEAttr|Bina's Guide to the Creatures of Batuu|''Bina's Guide to the Creatures of Batuu''}}", "''[[Bina's Guide to the Creatures of Batuu]]''"),
+    ("{{GalaxysEdge|Bina's Guide to the Creatures of Batuu}}", "''[[Bina's Guide to the Creatures of Batuu]]''"),
+    ("{{GEAttr|Bina's Guide to the Creatures of Batuu}}", "''[[Bina's Guide to the Creatures of Batuu]]''"),
 
     ("{{AhsokaSeriesDate}}", "{{AhsokaDate|1}}"), ("{{AhsokaDate}}", "{{AhsokaDate|1}}"),
     ("{{EncyclopediaCite|Padmé Amidala Naberrie}}", "{{EncyclopediaCite|Padmé Amidala}}"),

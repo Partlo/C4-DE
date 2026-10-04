@@ -78,8 +78,12 @@ def prepare_title(t):
     return "[" + t[0].capitalize() + t[0].lower() + "]" + t[1:]
 
 
+def re_if(m: re.Match, group, default=None) -> str:
+    return m.group(group) if m else default
+
+
 def should_skip_other_site(t):
-    return "wikipedia" in t or "memoryalpha" in t or "w:c:" in t
+    return "wikipedia" in t or "memoryalpha" in t or "w:c:" in t or t.startswith("#")
 
 
 def is_redirect(page, title=None):
@@ -446,9 +450,9 @@ def do_final_replacements(new_txt, replace, is_status):
         new_txt2 = re.sub(r"(\{\{[^\n{}]+?)(\|nobackup=1)([^\n{}]+?)}}", "\\1\\3\\2}}", new_txt2)
         new_txt2 = re.sub(r"([\n[]File:[^ \n|\]\[]+) ", "\\1_", new_txt2)
 
-        # x = re.search(r"\[\[([A-Z])(.*?)\|(.\2)(.*?)]]", new_txt2)
-        # if x and x.group(3).lower().startswith(x.group(1).lower()) and x.group(3).lower() != "ochi of bestoon":
-        #     new_txt2 = new_txt2.replace(x.group(0), f"[[{x.group(3)}]]{x.group(4)}")
+        # TODO: remove after Galaxy's Edge conversion
+        new_txt2 = re.sub(r"(\{\{SourceContents-start\|\[\[Star Wars: (Galaxy's Edge|Galactic Starcruiser).*?]]) (\{\{1st\|)\[\[(.*?)(\|.*?)?]](, (and )?)?(.*?\n(.*?\n)+?.*?(GalaxysEdge|GalacticStarcruiser|GEAttr|GSAttr)\|\4(\|.*?)?}})", "\\1 \\3\\8", new_txt2)
+        new_txt2 = re.sub(r"(\{\{1st[a-z]*)\|}}", "\\1}}", new_txt2)
 
         new_txt2 = re.sub(r"(\|[a-z]+=[^|{}\n]*)\1+", "\\1", new_txt2)
 

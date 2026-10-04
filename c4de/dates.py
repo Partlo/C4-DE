@@ -125,7 +125,9 @@ def get_reference_for_release_date(site, target, formatted, date, refs: dict, co
 
 def extract_release_date(title, text) -> Tuple[List[Tuple[str, datetime, str]], List[Tuple[str, str]], List[str]]:
     date_strs = []
-    m = re.search(r"\|(publish date|premiere date|publication date|first aired|airdate|start date|first date|release date|released|published)=(?P<d1>.*?)(?P<r1><ref.*?)?\n(\*(?P<d2>.*?)(?P<r2><ref.*?)?\n)?(\*(?P<d3>.*?)(?P<r3><ref.*?)?\n)?", text)
+    m = re.search(r"\|(oou release date)=(?P<d1>.*?)(?P<r1><ref.*?)?\n(\*(?P<d2>.*?)(?P<r2><ref.*?)?\n)?(\*(?P<d3>.*?)(?P<r3><ref.*?)?\n)?", text)
+    if not m:
+        m = re.search(r"\|(publish date|premiere date|publication date|first aired|airdate|start date|first date|release date|released|published)=(?P<d1>.*?)(?P<r1><ref.*?)?\n(\*(?P<d2>.*?)(?P<r2><ref.*?)?\n)?(\*(?P<d3>.*?)(?P<r3><ref.*?)?\n)?", text)
     if m:
         for i in range(1, 4):
             if m.groupdict()[f"d{i}"]:

@@ -10,7 +10,7 @@ from c4de.sources.cleanup import initial_cleanup, EXTRA
 from c4de.sources.determine import determine_id_for_item
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, SectionComponents, SectionLeaf
 from c4de.sources.external import prepare_basic_url
-from c4de.sources.extract import extract_item, convert_issue_to_template, swap_parameters
+from c4de.sources.extract import extract_item, convert_issue_to_template, swap_parameters, IGNORED_MODES
 from c4de.sources.media import match_header, check_for_cover_image, COVER_GALLERY_MEDIA, \
     SUBSECTIONS, add_plot_template, rearrange_sections, combine_sections
 
@@ -58,11 +58,11 @@ def is_official_link(o: Item):
 
 
 def is_nav_or_date_template(template, types: dict):
-    return template.lower().replace("_", " ") in types["Nav"] or template.lower().replace("_", " ") in types["Dates"]
+    return types.get(template.lower().replace("_", " ")) in IGNORED_MODES
 
 
 def is_nav_template(template, types: dict):
-    return template.lower().replace("_", " ") in types["Nav"]
+    return types.get(template.lower().replace("_", " ")) == "Nav"
 
 
 def check_format_text(o: ItemId, x: Item):
@@ -837,7 +837,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
 
         new_templates = []
         for t in templates:
-            if "bypass=1" in t or t == "{{'}}" or t == "{{'s}}" or any(t.lower().startswith("{{" + i.lower()) for i in [*TEMPLATE_SKIPS, *types["Dates"]]):
+            if "bypass=1" in t or t == "{{'}}" or t == "{{'s}}" or types.get(t) == "Dates" or any(t.lower().startswith("{{" + i.lower()) for i in TEMPLATE_SKIPS):
                 continue
             x = extract_item(t, False, "reference", types)
             if x:
@@ -846,7 +846,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                 o = determine_id_for_item(x, page, appearances.unique, appearances.urls, appearances.target, sources.unique, sources.urls, sources.target, {}, canon, log, ref=True)
                 if o and o.current.is_card_or_mini():
                     new_templates.append((t, o, []))
-                elif o and not (o.use_original_text or o.current.collapsed) and t != (o.master.original.replace(f"|int={page.title()}|", "|").replace(f"|int={page.title()}" + "}", "}") if media else o.master.original):
+                elif o and not (o.use_original_text or o.current.protected_format) and t != (o.master.original.replace(f"|int={page.title()}|", "|").replace(f"|int={page.title()}" + "}", "}") if media else o.master.original):
                     found.append(o)
                     ex = []
                     if "|author=" in t:

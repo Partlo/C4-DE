@@ -26,7 +26,7 @@ class Item:
 
     def __init__(self, original: str, mode: str, is_app: bool, *, invalid=False, target: str = None, text: str = None,
                  parent: str = None, template: str = None, url: str = None, issue: str = None, subset: str = None,
-                 card: str = None, special=None, collapsed=False, format_text: str = None, no_issue=False, ref_magazine=False,
+                 card: str = None, special=None, protected_format=False, format_text: str = None, no_issue=False, ref_magazine=False,
                  full_url: str = None, publisher_listing=False, check_both=False, date="", archivedate="", issue2=None,
                  alternate_url=None, special_url=None):
         self.master_page = None
@@ -47,12 +47,12 @@ class Item:
         self.template = self.strip(template)
         self.url = self.strip(url)
         self.full_url = self.strip(full_url)
+        self.special_url = self.strip(special_url)
         self.alternate_url = self.strip(alternate_url)
         self.alternate_urls = []
-        self.special_url = self.strip(special_url)
         self.special = self.strip(special)
         self.subset = self.strip(subset)
-        self.collapsed = collapsed
+        self.protected_format = protected_format
         self.ff_data = {}
 
         # media-type flags
@@ -108,7 +108,6 @@ class Item:
         self.self_cite = False
         self.followed_redirect = False
         self.original_target = None
-        self.date_ref = None
         self.extra_date = None
 
         # Templates/text for appending after the listing
@@ -351,14 +350,17 @@ class AnalysisResults:
 
 
 class SectionItemIds:
-    def __init__(self, name, found: List[ItemId], wrong: List[ItemId], non_canon: List[ItemId],
-                 group_items: Dict[str, List[ItemId]], group_ids: Dict[str, str], links: List[Item], expanded):
+    def __init__(self, name, found: List[ItemId], wrong: List[ItemId], non_canon: List[ItemId], links: List[Item],
+                 expanded, group_items: Dict[str, List[ItemId]], group_ids: Dict[str, str],
+                 wrong_group_items: Dict[str, List[ItemId]], wrong_group_ids: Dict[str, str]):
         self.name = name
         self.found = found
-        self.wrong = wrong
         self.non_canon = non_canon
         self.group_items = group_items
         self.group_ids = group_ids
+        self.wrong = wrong
+        self.wrong_group_items = wrong_group_items
+        self.wrong_group_ids = wrong_group_ids
         self.links = links
         self.is_appearances = name and "appearances" in name.lower()
         self.expanded = expanded
@@ -373,6 +375,9 @@ class SectionItemIds:
         other.wrong = []
         self.found += other.non_canon
         other.non_canon = []
+        self.links += other.links
+        other.links = []
+
         for k, v in other.group_items.items():
             if k in self.group_items:
                 self.group_items[k] += v
@@ -383,8 +388,17 @@ class SectionItemIds:
             if k not in self.group_ids:
                 self.group_ids[k] = v
         other.group_ids = {}
-        self.links += other.links
-        other.links = []
+
+        for k, v in other.wrong_group_items.items():
+            if k in self.wrong_group_items:
+                self.wrong_group_items[k] += v
+            else:
+                self.wrong_group_items[k] = v
+        other.wrong_group_items = {}
+        for k, v in other.wrong_group_ids.items():
+            if k not in self.wrong_group_ids:
+                self.wrong_group_ids[k] = v
+        other.wrong_group_ids = {}
 
 
 class SectionLeaf:

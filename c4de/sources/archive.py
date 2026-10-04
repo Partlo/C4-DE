@@ -1,4 +1,5 @@
 from c4de.sources.engine import load_template_types
+from c4de.sources.extract import IGNORED_MODES
 from pywikibot import Page, Category, showDiff, input_choice
 import re
 from c4de.common import archive_url
@@ -145,7 +146,8 @@ def build_missing_and_new(page, types, archives, patterns, new_data, skip):
     actual = []
     for tx in page.templates():
         title = tx.title(with_ns=False)
-        if title not in types:
+        mode = types.get(title)
+        if not mode:
             if tx.isRedirectPage():
                 t1 = tx.title(with_ns=False)
                 t2 = tx.getRedirectTarget().title(with_ns=False)
@@ -153,7 +155,7 @@ def build_missing_and_new(page, types, archives, patterns, new_data, skip):
                 if " " in t1:
                     text = text.replace("{{" + t1.replace(" ", "_") + "|", "{{" + t2 + "|")
                 continue
-        if not tx.title().startswith("Template:") or title in skip or title in types["Nav"] or title in types["Dates"]:
+        if not tx.title().startswith("Template:") or title in skip or mode in IGNORED_MODES:
             continue
         actual.append(tx.title(with_ns=False))
 
