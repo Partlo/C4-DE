@@ -304,7 +304,7 @@ REMAP = {
 }
 
 
-def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None, add=False):
+def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None, add=False, log=True):
     extract = True
 
     original_text = f"{text}"
@@ -328,7 +328,8 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
     pre = handle_multiple_issues(pre)
 
     if not found or found not in all_infoboxes:
-        print(f"No infobox found, or infobox below body text; cannot parse {page.title()}")
+        if log:
+            print(f"No infobox found, or infobox below body text; cannot parse {page.title()}")
         return text, None, original
     elif found.lower().startswith("year"):
         return text, found, original

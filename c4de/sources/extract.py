@@ -10,7 +10,6 @@ IGNORED_MODES = ["Nav", "Dates", "Logic", "Skip"]
 
 
 COLLAPSE = {
-    "HighRepublicReaderGuide": "Star Wars: The High Republic: Chronological Reader's Guide",
     "GalaxyMapAppendix": "Star Systems of the Galaxy",
     "GalaxyMapPoster": "Star Wars Galaxy Map (poster)",
     "StarWarsGalaxyMap": "Star Wars Galaxy Map",
@@ -19,6 +18,7 @@ COLLAPSE = {
 }
 
 PROTECTED = {
+    "HighRepublicReaderGuide": "Star Wars: The High Republic: Chronological Reader's Guide",
     "FindtheForce": "Find the Force",
     "CSWECite": "The Complete Star Wars Encyclopedia",
     "TFU": "Star Wars: The Force Unleashed",

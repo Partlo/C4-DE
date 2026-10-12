@@ -431,6 +431,7 @@ def do_final_replacements(new_txt, replace, is_status):
         # new_txt2 = re.sub(r"\[\[(.*?)\|\1((?!(Bestoon)[^\n \[\]}{])*?)]]", "[[\\1]]\\2", new_txt2)
         new_txt2 = re.sub(r"(\|set=(.*?) \(.*?\))\|(s?text|sformatt?e?d?)=\2([|}])", "\\1\\4", new_txt2)
         new_txt2 = handle_repeated_references(new_txt2, is_status)
+        new_txt2 = re.sub(r"----\n\n+\{\{", "----\n{{", new_txt2)
 
         # italicization & apostrophes
         new_txt2 = re.sub(r"([^']''[^' ][^']+?'')'s ", "\\1{{'s}} ", new_txt2)

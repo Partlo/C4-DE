@@ -239,7 +239,7 @@ def load_source_lists(site, log, include_web=True):
         p = Page(site, f"Wookieepedia:Sources/{sp}")
         lines = p.get().splitlines()
         for o, line in enumerate(lines):
-            if line and not line.startswith("==") and "/Header}}" not in line and not line.startswith("----"):
+            if line and not line.startswith("==") and "/Header}}" not in line and not line.startswith("---"):
                 line = line.replace(" |reprint=", "|reprint=")
                 if "Miniatures" in sp or "RefMagazine" in sp or "CardSets" in sp or "CardTrader" in sp:
                     line = re.sub(r"(\{\{SWMiniCite.*?)\|num=[0-9-]+", "\\1", line)
@@ -286,7 +286,7 @@ def load_source_lists(site, log, include_web=True):
         p = Page(site, f"Wookieepedia:Sources/Web/{template}")
         i = 0
         for line in p.get().splitlines():
-            if "/Header}}" in line or not line.strip() or line.startswith("----"):
+            if "/Header}}" in line or not line.strip() or line.startswith("---"):
                 continue
             x = re.search(r"\*((?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? )?(?P<t>{{.*?)( {{C\|1?=?(original|alternate): (?P<a>.*?)}})?$", line)
             if x:

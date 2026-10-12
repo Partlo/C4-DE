@@ -701,7 +701,7 @@ def check_audible(cache: Dict[str, List[str]]):
             date_text = date.text.split("Release date:")[-1].strip()
             try:
                 dx = datetime.strptime(date_text, "%m-%d-%y")
-                if today > dx:
+                if today >= dx:
                     continue
             except Exception as e:
                 print(f"Cannot parse date string {date_text}: {e}")
@@ -712,7 +712,7 @@ def check_audible(cache: Dict[str, List[str]]):
         fixed = v['text'].replace("Star Wars: ", "").replace(": Star Wars Legends", "").replace(
             "Star Wars Audio Adventures: ", "")
         f1, _, f2 = fixed.replace(")", "").partition(" (")
-        results.append(f"**New Audible Listing**:    {fixed}\n-<https://www.audible.com{v['link']}>\n-Release Date: {v['date']}")
+        results.append(f"**New Audible Listing**:    {fixed}\n- <https://www.audible.com{v['link']}>\n- Release Date: {v['date']}")
         cache["Audible"].append(book_id)
 
     return results

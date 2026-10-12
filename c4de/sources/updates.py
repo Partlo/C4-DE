@@ -645,6 +645,116 @@ def build_new_page(page, data: FullListData, key, all_new: Dict[str, List[Future
         showDiff(page.get(), new_txt, context=2)
 
 
+FUTURE_TYPE_MAP = {
+    "Appearances/Collections": "Collection",
+    "Appearances/Series": "Series",
+    "Appearances/Audiobook": "Audiobook",
+    "Canon/CardSets": "Card/Miniatures Set",
+    "Legends/CardSets": "Card/Miniatures Set",
+    "Canon/General": "Reference Work",
+    "Legends/General": "Reference Work",
+
+    "Cards": "Card Set",
+    "Minis": "Miniatures",
+    "TV": "TV Episode",
+
+    "ComicArc": "Comic Story Arc",
+    "ComicCollection": "TPB",
+    "TelevisionEpisode": "TV Episode",
+    "TelevisionSeason": "TV Season",
+    "TelevisionSeries": "TV Series"
+}
+
+PRE_CHECKS = {
+    "activity book": "Activity Book",
+    "trade paperback": "TPB",
+    "epic collection": "TPB",
+    "(episode)": "TV Episode",
+    "(short story)": "Short Story",
+}
+
+
+def decide_type(site, v: Item, types, infoboxes):
+    if not v.master_page:
+        return "Unknown"
+
+    if v.template and types.get(v.template.lower()) in FUTURE_TYPE_MAP:
+        return FUTURE_TYPE_MAP[types.get(v.template.lower())]
+    found = None
+    for k, x in PRE_CHECKS.items():
+        if k in v.target.lower():
+            found = x
+            break
+    if found:
+        return found
+    elif v.is_appearance and re.search(r"\[\[(.*?) ([0-9][0-9]?)\|''\\1'' \\2]]", v.original):
+        return "Comic"
+
+    p = Page(site, v.target)
+    if p.exists():
+        if p.isRedirectPage():
+            p = p.getRedirectTarget()
+        infobox = identify_infobox(p.get(), infoboxes)
+        if infobox:
+            return FUTURE_TYPE_MAP.get(infobox, re.sub(r"^([A-Z][a-z]+)([A-Z][a-z]+)", "\\1 \\2", infobox))
+
+    if v.master_page in FUTURE_TYPE_MAP:
+        return FUTURE_TYPE_MAP[v.master_page]
+
+    return "Unknown"
+
+
+def should_list_on_future_products(v: Item, today: str):
+    if v.date and v.is_future(today):
+        if v.master_page:
+            if v.master_page.startswith("Web"):
+                return False
+            elif "Toys" in v.master_page or "CardTrader" in v.master_page:
+                return False
+            elif "|promo=" in v.original:
+                return False
+        return True
+    return False
+
+
+def future_sort(v: Item):
+    return v.date, "Series" not in (v.master_page or "")
+
+
+def build_future(site, types, infoboxes, appearances: FullListData, sources: FullListData):
+    today = datetime.now().strftime("%Y-%m-%d")
+    has_date, future = [], []
+    for k, v in appearances.full.items():
+        if should_list_on_future_products(v, today):
+            (future if v.date.startswith("Future") else has_date).append(v)
+    for k, v in sources.full.items():
+        if should_list_on_future_products(v, today):
+            (future if v.date.startswith("Future") else has_date).append(v)
+
+    results, future_results = [], []
+    for v in sorted(has_date, key=lambda a: future_sort(a)):
+        tx = decide_type(site, v, types, infoboxes)
+        results.append((v.date, tx, v.original))
+    for v in future:
+        tx = decide_type(site, v, types, infoboxes)
+        future_results.append((tx, v.original))
+    return results, future_results
+
+
+def build_future_products_page(site, types, infoboxes, appearances: FullListData, sources: FullListData):
+    content = """{{Top|real}}\nThe following is a list of future ''[[Star Wars]]'' products that are yet to be published. This list is updated daily by {{U|C4-DE Bot}}, and as such any manual updates will be overwritten.\n\n{| {{Prettytable}}\n|- bgcolor="#CCCCCC"\n! Date !! Type !! Title"""
+    results, future = build_future(site, types, infoboxes, appearances, sources)
+    for date, media_type, title in results:
+        content += f"\n|-\n| {date} || {media_type} || {title}"
+
+    content += """\n|}\n\n----\n'''Announced Content w/o Date:'''\n{| {{Prettytable}}\n|- bgcolor="#CCCCCC"\n! Type !! Title"""
+    for media_type, title in future:
+        content += f"\n|-\n| {media_type} || {title}"
+    content += "\n|}\n\n[[Category:Real-world lists]]\n[[Category:Wookieepedia Sources Project]]"
+
+    Page(site, "List of future products").put(content, "Updating future product list", botflag=False)
+
+
 NUMBERS = {"first": "01", "second": "02", "third": "03", "fourth": "04", "fifth": "05", "sixth": "06", "seventh": "07",
            "eighth": "08", "ninth": "09", "tenth": "10"}
 

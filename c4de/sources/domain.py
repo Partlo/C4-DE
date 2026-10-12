@@ -17,6 +17,7 @@ SORT_MODES = {
 class Item:
     """
     :type date: str
+    :type master_page: str
     :type template: str
     :type target: str
     :type text: str
@@ -166,6 +167,9 @@ class Item:
 
     def has_date(self):
         return self.date is not None and (self.date.startswith("1") or self.date.startswith("2") or self.date == "Current" or self.date.startswith("Cancel") or self.date == "OfficialSite")
+
+    def is_future(self, x):
+        return self.date and ((self.date.startswith("2") and self.date >= x) or self.date.startswith("Future"))
 
     def match_expected(self):
         return (not self.non_canon and not self.unlicensed and not self.from_extra and not self.is_reprint

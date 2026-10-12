@@ -372,10 +372,10 @@ def analyze_products(site, products: List[dict], search_terms):
         try:
             url = f"<https://www.edelweiss.plus/#sku={item['sku']}>"
             page, by_isbn = determine_page(site, item["title"], item, pages_by_isbn)
-            if page.isRedirectPage():
+            if page and page.isRedirectPage():
                 page = page.getRedirectTarget()
-            if not item["hasImage"]:
-                new_missing_images.append(item["sku"])
+            # if not item["hasImage"]:
+            #     new_missing_images.append(item["sku"])
 
             if not page and any(s.lower() in item["title"].lower() for s in false_positives):
                 continue
@@ -452,9 +452,9 @@ def analyze_products(site, products: List[dict], search_terms):
             item_date = datetime.strptime(item["publicationDate"], "%b %d, %Y")
 
             past = any([d < datetime.now() for d in page_dates])
-            if item["sku"] in missing_images and item["hasImage"]:
-                results["newImages"].append((item['sku'], f"{title} - {url}{archive_sku(item['sku'])}"))
-            elif any([d == item_date for d in page_dates]):
+            # if item["sku"] in missing_images and item["hasImage"]:
+            #     results["newImages"].append((item['sku'], f"{title} - {url}{archive_sku(item['sku'])}"))
+            if any([d == item_date for d in page_dates]):
                 log(f"No date changes found for {page.title()}")
             elif "Canceled" in date_strs and (item_date - datetime.now()).days > 3650:
                 log(f"Canceled product {page.title()} has placeholder date of {item['publicationDate']}")

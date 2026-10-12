@@ -46,7 +46,7 @@ from c4de.sources.engine import load_full_sources, load_full_appearances, load_r
 from c4de.sources.index import create_index, prepare_ordered_list
 from c4de.sources.infoboxer import reload_infoboxes, load_infoboxes
 from c4de.sources.parsing import fix_template_redirects
-from c4de.sources.updates import get_future_products_list, handle_results, search_for_missing
+from c4de.sources.updates import get_future_products_list, handle_results, search_for_missing, build_future_products_page
 
 import logging
 
@@ -1254,6 +1254,7 @@ class C4DE_Bot(commands.Bot):
             results = get_future_products_list(self.site)
             handle_results(self.site, results, [])
             await self.build_sources()
+            build_future_products_page(self.site, self.templates, self.infoboxes, self.appearances, self.sources)
         except Exception as e:
             traceback.print_exc()
             await self.report_error("Future products", type(e), e)

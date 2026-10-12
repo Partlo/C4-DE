@@ -39,7 +39,7 @@ def task():
                             to_check[t].pop(k)
         current = sum(len(v) for k, v in to_check.items())
 
-    add_data_to_archive(site, data, archives, False)
+    add_data_to_archive(site, data, archives, True)
 
 
 if __name__ == "__main__":

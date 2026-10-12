@@ -127,8 +127,6 @@ def find_matching_audiobook(a: ItemId, existing: list, appearances: FullListData
     results = []
     if z in AUDIOBOOK_MAPPING:
         to_check = [AUDIOBOOK_MAPPING[z]]
-    # elif z in GERMAN_MAPPING:
-    #     to_check = [GERMAN_MAPPING[z]]
     else:
         to_check = [f"{z} (audiobook)", f"{z} (unabridged audiobook)", f"{z} (abridged audiobook)", f"{z} (script)",
                     f" (audio drama)", f" (German audio drama)"]
@@ -154,7 +152,6 @@ def find_matching_parent_audiobook(a: ItemId, existing: list, appearances: FullL
         z = a.master.parent
     elif a.master.parent.endswith(")"):
         z = a.master.parent.rsplit("(", 1)[0].strip()
-    # elif a.master.parent in AUDIOBOOK_MAPPING or a.master.parent in GERMAN_MAPPING:
     elif a.master.parent in AUDIOBOOK_MAPPING:
         z = a.master.parent
 
@@ -513,7 +510,7 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
             if log:
                 print(f"({name}) Listed in wrong section: {o.original} -> {d.master.is_appearance} {d.master.full_id()}")
             wrong.append(d)
-        elif d and not real and d.master.is_audiobook and not d.master.is_abridged and collapse_audiobooks:
+        elif d and not real and d.master.is_audiobook and not d.master.is_abridged and not d.master.german_ad and collapse_audiobooks:
             continue    # ignore audiobooks
         elif d and not real and d.master.non_canon and not name.startswith("Non-canon") and not o.canon_override \
                 and d.master.target != "Star Tours: The Adventures Continue" and not page.title().endswith("/LEGO"):
@@ -927,7 +924,7 @@ def build_new_section(title, name, section: SectionItemIds, results: PageCompone
     final_without_extra = []
     final_items = []
     rows = 0
-    sl = "|r=1" if results.real else ("" if results.canon else "|l=1")
+    sl = "|r=1" if results.real else ""
     for o in found:
         if mode == BY_DATE and o.current.index is None and o.master.index is None:
             if not (o.current.target and "(audio drama)" not in o.current.target):
@@ -1324,7 +1321,7 @@ def handle_sorting(mode, new_found: List[ItemId], missing: List[Tuple[ItemId, Li
 def get_analysis_from_page(target: Page, infoboxes: dict, types, disambigs, appearances: FullListData,
                            sources: FullListData, bad_cats: list, remap: dict, log=True, collapse_audiobooks=True,
                            index=False):
-    text, redirects, results = build_initial_components(target, disambigs, infoboxes, bad_cats, None)
+    text, redirects, results = build_initial_components(target, disambigs, infoboxes, bad_cats, None, log=log)
     build_page_sections(target, text, results, redirects, disambigs, types, appearances, sources, remap, log)
     if results.real and collapse_audiobooks:
         collapse_audiobooks = False

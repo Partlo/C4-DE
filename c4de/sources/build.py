@@ -226,9 +226,17 @@ MAINTENANCE = ["catneeded", "citation", "cleanup", "cleanup-context", "confirm",
 
 
 def format_update_contents(ln, page: Page, results: PageComponents, appearances: FullListData, sources: FullListData, types):
-    ln = ln.replace("|hide=1", "")
+    ln = ln.replace("|hide=1", "").replace("{{Update|", "").replace("{{update|", "")
     new_items = []
+    params = {}
+    to_check = list(enumerate(re.findall(r"(\|[a-z]+=\[\[.*?]])", ln)))
+    for i, x in to_check:
+        params[i] = x
+        ln = ln.replace(x, f"<param{i}>")
+
     for i in re.findall(r",? ?('*(\[\[|\{\{)+[^\n\[\]}{]+(}}|]])'*)}?}?", ln):
+        if f"={i[0]}" in ln:
+            continue
         if "{{" in i[0]:
             x = extract_item(i[0], False, page.title(), types)
             if x:
@@ -241,7 +249,10 @@ def format_update_contents(ln, page: Page, results: PageComponents, appearances:
                     new_items.append(d.master.original.replace("|reprint=1", ""))
                     continue
         new_items.append(i[0])
-    return ", ".join(new_items)
+    results = ", ".join(new_items)
+    for i, x in params.items():
+        results = results.replace(f"<param{i}>", x)
+    return results
 
 
 def build_iu_intro(page: Page, results: PageComponents, appearances: FullListData, sources: FullListData, types: dict):

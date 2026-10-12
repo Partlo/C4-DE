@@ -86,14 +86,14 @@ def fix_template_redirects(target: Page, manual: str = None):
 
 
 def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_cats: list, manual: str = None,
-                             keep_page_numbers=False, redirects: dict = None) -> Tuple[str, Dict, PageComponents]:
+                             redirects: dict = None, log=True) -> Tuple[str, Dict, PageComponents]:
     now = datetime.now()
     if not redirects:
         manual = manual or target.get(force=True)
         manual, redirects = fix_template_redirects(target, manual)
         log_time("template-redirects", now)
 
-    before, infobox, original = initial_cleanup(target, all_infoboxes, before=manual)
+    before, infobox, original = initial_cleanup(target, all_infoboxes, before=manual, infobox_log=log)
 
     log_time("cleanup", now)
     if "{{otheruses" in before.lower() or "{{youmay" in before.lower():
@@ -569,7 +569,7 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
                 other1.append(z)
             continue
 
-        if s.strip().startswith("*"):
+        if s.strip().startswith("*") or s.strip().startswith("#*"):
             start = False
             x = handle_valid_line(s, is_appearances, log, types, data, [] if external else other2, unknown,
                                   unique_ids, False, name)
@@ -627,7 +627,7 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
             z = zx.group(1)
             extra = zx.group(2)
 
-    while z.startswith("*"):
+    while z.startswith("*") or z.startswith("#"):
         z = z[1:].strip()
     z = re.sub(r"(\{\{InsiderCite\|[0-9]{2}\|)Ask Lobot.*?}}", "\\1Star Wars Q&A}}", z)
     if "SWGTCG" in s and "scenario" in z:
