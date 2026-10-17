@@ -193,14 +193,6 @@ def build_redirects(page: Page, manual: str = None):
             if f"Template:{x}" not in pagenames and not x.startswith("#"):
                 pages.append(Page(page.site, f"Template:{x}"))
                 pagenames.append(x)
-        # for _, x, _ in re.findall(r"\|(title=|set=)(.*?)(\|.*?)?}}", manual):
-        #     if x not in pagenames:
-        #         pages.append(Page(page.site, x))
-        #         pagenames.append(x)
-        # for _, x, _ in re.findall(r"\{\{(?!(Quote))[A-z0-9]+\|([^=|\n]+?)(\|.*?)?}}", manual):
-        #     if x not in pagenames:
-        #         pages.append(Page(page.site, x))
-        #         pagenames.append(x)
 
     for i, r in enumerate(pages):
         try:

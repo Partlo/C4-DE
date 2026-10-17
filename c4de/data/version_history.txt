@@ -274,3 +274,6 @@
 *'''4.8.0''': October 4, 2026
 **Major cleanup of legacy code
 **SourceContents handling for DatapadCite, Galaxy's Edge and Starcruiser
+*'''4.8.1''': October 11, 2026
+**[[List of future products]] hooked up to be regenerated daily
+**Cleanup of legacy fixes no longer needed

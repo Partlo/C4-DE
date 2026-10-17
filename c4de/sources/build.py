@@ -227,6 +227,9 @@ MAINTENANCE = ["catneeded", "citation", "cleanup", "cleanup-context", "confirm",
 
 def format_update_contents(ln, page: Page, results: PageComponents, appearances: FullListData, sources: FullListData, types):
     ln = ln.replace("|hide=1", "").replace("{{Update|", "").replace("{{update|", "")
+    if ln.count("[") == 0 and ln.count("{") == 0:
+        return ln[:-2] if ln.endswith("}}") else ln
+
     new_items = []
     params = {}
     to_check = list(enumerate(re.findall(r"(\|[a-z]+=\[\[.*?]])", ln)))
@@ -326,8 +329,7 @@ NO_MEDIA = ["MagazineArticle", "ShortStory"]
 
 
 def build_final_text(pieces, otx, page: Page, results: PageComponents, disambigs: list, remap: dict,
-                     redirects: dict, sources: FullListData, components: NewComponents, keep_page_numbers: bool,
-                     log: bool, redo=False):
+                     redirects: dict, sources: FullListData, components: NewComponents, log: bool, redo=False):
 
     subpage_pieces = []
     pieces.append("")
@@ -424,7 +426,7 @@ def build_final_text(pieces, otx, page: Page, results: PageComponents, disambigs
         replace = True
         subpage_text = do_final_replacements(subpage_text, replace, False)
 
-    return final_steps(page, results, components, pieces, disambigs, remap, redirects, media_cat, sources, keep_page_numbers, redo=redo), subpage_text
+    return final_steps(page, results, components, pieces, disambigs, remap, redirects, media_cat, sources, redo=redo), subpage_text
 
 
 def strip_page_number(t):
@@ -432,7 +434,7 @@ def strip_page_number(t):
 
 
 def final_steps(page: Page, results: PageComponents, components: NewComponents, pieces: list, disambigs: list,
-                remap: dict, redirects: dict, media_cat, sources: FullListData, keep_page_numbers, redo=False):
+                remap: dict, redirects: dict, media_cat, sources: FullListData, redo=False):
     if components.navs:
         pieces.append("")
         pieces.append("")
@@ -528,12 +530,12 @@ def build_final(final, media_cat, redirects, canon):
 
 
 def build_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appearances: FullListData,
-               sources: FullListData, bad_cats: list, remap: dict, include_date: bool, checked: list, *, log=True,
-               use_index=True, collapse_audiobooks=True, manual: str = None, extra=None, time=False, keep_pages=False,
+               sources: FullListData, bad_cats: list, remap: dict, include_date: bool, *, log=True,
+               use_index=True, collapse_audiobooks=True, manual: str = None, extra=None, time=False,
                redirects: dict = None, redo=False):
     start = datetime.now()
     now = start
-    text, redirects, results = build_initial_components(target, disambigs, infoboxes, bad_cats, manual, keep_pages, redirects)
+    text, redirects, results = build_initial_components(target, disambigs, infoboxes, bad_cats, manual, redirects, log=log)
 
     if time:
         now = report_duration("initial", now, start)
@@ -550,12 +552,12 @@ def build_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appe
         collapse_audiobooks = False
 
     components, unknown_items, analysis = analyze_section_results(
-        target, results, appearances, sources, remap, use_index, include_date, collapse_audiobooks, checked, log)
+        target, results, appearances, sources, remap, use_index, include_date, collapse_audiobooks, log)
     if time:
         now = report_duration("analysis", now, start)
 
     new_txt, subpage_text = build_final_text(pieces, text, target, results, disambigs, remap, redirects,
-                                             sources, components, keep_page_numbers=keep_pages, log=log, redo=redo)
+                                             sources, components, log=log, redo=redo)
     if subpage_text and "{{1st" in subpage_text:
         new_txt = new_txt.replace("{{SourcesPage}}", "{{SourcesPage|full=1}}")
 
@@ -579,11 +581,11 @@ def remove_index_param(t):
 
 
 def build_new_text(target: Page, infoboxes: dict, types: dict, disambigs: list, appearances: FullListData,
-                   sources: FullListData, bad_cats: list, remap: dict, include_date: bool, checked: list, *, log=True,
-                   use_index=True, collapse_audiobooks=True, manual: str = None, extra=None, keep_pages=False, redo=False):
+                   sources: FullListData, bad_cats: list, remap: dict, include_date: bool, *, log=True,
+                   use_index=True, collapse_audiobooks=True, manual: str = None, extra=None, redo=False):
     new_txt, subpage_text, analysis, unknown, unknown_items = build_text(
-        target, infoboxes, types, disambigs, appearances, sources, bad_cats, remap, include_date, checked, log=log,
-        use_index=use_index, collapse_audiobooks=collapse_audiobooks, manual=manual, extra=extra, keep_pages=keep_pages, redo=redo)
+        target, infoboxes, types, disambigs, appearances, sources, bad_cats, remap, include_date, log=log,
+        use_index=use_index, collapse_audiobooks=collapse_audiobooks, manual=manual, extra=extra, redo=redo)
 
     record_local_unknown(unknown, unknown_items, target)
     return new_txt, subpage_text, unknown, unknown_items
@@ -594,7 +596,7 @@ def analyze_target_page(target: Page, infoboxes: dict, types: dict, disambigs: l
                         log=True, use_index=True, collapse_audiobooks=True, old_text=None, redirects: dict = None):
     old_text = old_text or target.get(force=True)
     new_txt, subpage_text, analysis, unknown, unknown_items = build_text(
-        target, infoboxes, types, disambigs, appearances, sources, bad_cats, remap, include_date, [], log=log,
+        target, infoboxes, types, disambigs, appearances, sources, bad_cats, remap, include_date, log=log,
         use_index=use_index, collapse_audiobooks=collapse_audiobooks, redirects=redirects, manual=old_text)
     subpage = Page(target.site, f"{target.title()}/Sources") if subpage_text else None
     old_subtext = subpage.get() if subpage else None

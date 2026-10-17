@@ -71,10 +71,14 @@ def check_format_text(o: ItemId, x: Item):
     return _check_format_text(o.master.target, x.format_text)
 
 
+def _clean_simple(t):
+    return t.replace("''", "").strip().lower().replace("novelization", "novel")
+
+
 def _check_format_text(t, y):
     return t and y and "(" in t and (
-            t.split("(")[0].strip().lower().replace("novelization", "novel").replace("''", "") not in y.replace("''", "").lower().replace("novelization", "novel") and
-            t.replace("(", "").replace(")", "").strip().lower().replace("novelization", "novel").replace("''", "") not in y.replace("''", "").lower().replace("novelization", "novel")
+            _clean_simple(t.split("(")[0]) not in _clean_simple(y) and
+            _clean_simple(t.replace(":", "").replace("(", "").replace(")", "")) not in _clean_simple(y)
     )
 
 
@@ -133,8 +137,7 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_c
     stub = None
     if "{{Mediacat" in before:
         x = re.search(r"\{\{Mediacat.*?}}", before)
-        if x:
-            media_cat = x.group(0)
+        media_cat = x.group(0) if x else None
     if real and media:
         if media_cat:
             before = before.replace(r"\n" + media_cat, "")
@@ -835,7 +838,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
         for ot, ni in new_links:
             new_ref = new_ref.replace(ot, swap_parameters(ni))
 
-        new_templates = []
+        new_templates, unknown_templates = [], []
         for t in templates:
             if "bypass=1" in t or t == "{{'}}" or t == "{{'s}}" or types.get(t) == "Dates" or any(t.lower().startswith("{{" + i.lower()) for i in TEMPLATE_SKIPS):
                 continue
@@ -858,6 +861,8 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                     new_templates.append((t, o, ex))
                 elif o:
                     found.append(o)
+                else:
+                    unknown_templates.append(x)
 
         for ot, ni, extra in new_templates:
             if ni.master.is_card_or_mini():
@@ -883,29 +888,28 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
         new_ref = fix_redirects(redirects, new_ref, "Reference", disambigs, remap, canon=canon)
         if not media and new_ref.count('[') == 0 and new_ref.count("]") == 0 and new_ref.count("{") == 0:
             new_ref = "{{UnlinkedRef}} " + new_ref
-        # if not media and re.search(PAGE_NUMBER_REGEX.replace("</ref>", ""), new_ref):
-        #     if "|url=" not in new_ref and not re.search(r"(SWGcite|Sony).*?Chapter [0-9]+: ", new_ref):
-        #         page_number = "{{PageNumber}} "
+
         final_ref = re.sub(r"\{\{[Aa]b\|.*?}}", "", full_ref.replace(">" + ref, ">" + new_ref))
         if "<ref>" in final_ref:
+            named_ref = None
             if len(found) == 1 and found[0].master.target:
                 z = found[0].master.target.replace('"', '').replace('(', '').replace(')', '')
-                final_ref = final_ref.replace("<ref>", f"<ref name=\"{z}\">")
+                named_ref = ensure_unique_references(new_text, z)
             elif len(found) == 1 and found[0].master.template and found[0].master.text:
                 z = found[0].master.text.replace('"', '').replace('(', '').replace(')', '').replace("'''", "").replace("''", "")
-                final_ref = final_ref.replace("<ref>", f"<ref name=\"{found[0].master.template}-{z}\">")
+                named_ref = ensure_unique_references(new_text, f"{found[0].master.template}-{z}")
             elif len(found) == 1:
                 print(f"Cannot fix nameless reference to {found[0].master.target}: {ref}")
             elif "|cardname=" in final_ref:
                 z = re.sub(r"^.*?\{\{(.*?)\|.*?cardname=(.*?)(\|.*?)?}}.*?$", "\\1-\\2", final_ref).replace('"', '').replace('(', '').replace(')', '').replace("'''", "").replace("''", "")
-                if f'="{z}"' in new_text:
-                    i = 2
-                    while f'="{z}-{i}"' in new_text:
-                        i += 1
-                    z = f"{z}-{i}"
-                final_ref = final_ref.replace("<ref>", f"<ref name=\"Card-{z}\">")
+                named_ref = ensure_unique_references(new_text, f"Card-{z}")
+            elif len(unknown_templates) == 1 and unknown_templates[0].mode in ("Web", "External", "YT") and "WebCite" not in final_ref:
+                named_ref = ensure_unique_references(new_text, unknown_templates[0].template)
             elif "WebCite" not in final_ref:
                 print(f"Cannot fix nameless reference, due to {len(found)} links found in reference: {final_ref}")
+
+            if named_ref:
+                final_ref = final_ref.replace("<ref>", named_ref)
         for r, x in REF_REPLACEMENTS:
             if not ("reprint" in r and "reprint" in full_ref):
                 final_ref = final_ref.replace(r, x)
@@ -916,3 +920,16 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
         traceback.print_exc()
         print(f"Encountered {e} while handling reference", type(e))
     return new_text
+
+
+def ensure_unique_references(text, ref_name):
+    zx = f"<ref name=\"{ref_name}\">"
+    if zx in text:
+        i = 2
+        zx = f"<ref name=\"{ref_name}-{i}\">"
+        while zx in text:
+            i += 1
+            zx = f"<ref name=\"{ref_name}-{i}\">"
+            if i > 10:
+                break
+    return zx

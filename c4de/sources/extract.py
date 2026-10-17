@@ -147,7 +147,7 @@ CORE_SETS = {
 
 
 SIMPLE_REPLACEMENTS = [
-    (" ", " "), ("|1=", "|"), ("|s=y", ""), ("|d=y", ""), ("{{'s}}", "'s"), ("{{'}}", "'"), ("{{!}}", "|"),
+    (" ", " "), ("|1=", "|"), ("|s=y", ""), ("{{'s}}", "'s"), ("{{'}}", "'"), ("{{!}}", "|"),
     ("…", "&hellip;"), ("{{=}}", "="), ("|}}", "}}")
 ]
 
@@ -174,6 +174,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     s = re.sub(r" ?\{\{(Ab|[Rr]eprint)\|.*?}}", "", s)
     s = re.sub(r"^(Parent: )*", "", s)
     s = re.sub(r" +(\|[a-z _]+=)", "\\1", s)
+    s = s.replace ("|d=y", "")
     if s.count("{") == 2 and s.count("}") == 1:
         s += "}"
     for i, j in COLLAPSE.items():

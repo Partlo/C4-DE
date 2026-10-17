@@ -8,11 +8,12 @@ import traceback
 import time
 from datetime import datetime
 
-from c4de.sources.domain import Item, ItemId
 from pywikibot import Site, Page, handle_args, pagegenerators, showDiff, input_choice, Timestamp
 from pywikibot.exceptions import APIMWError
 
 from c4de.data.filenames import PROJECT_DIR
+from c4de.common import log
+from c4de.sources.domain import Item, ItemId
 from c4de.sources.build import build_new_text, STATUS
 from c4de.sources.engine import load_full_sources, load_full_appearances, load_remap, load_template_types, \
     load_auto_categories
@@ -64,7 +65,7 @@ def prep(text, old_text):
 
 def analyze(*args, to_save):
     gen_factory = pagegenerators.GeneratorFactory()
-    log = False
+    do_log = False
     start_on, end_on, skip_start, skip_end, redo = None, None, None, None, None
     include_date = False
     legends, canon = False, False
@@ -74,7 +75,7 @@ def analyze(*args, to_save):
     encyclopedia, ultimate, ultimate2 = [], [], []
     for arg in handle_args(*args):
         if arg.startswith("-page:"):
-            log = True
+            do_log = True
         if arg.startswith("-st:"):
             _, _, start_on = arg.replace('"', '').partition("-st:")
         elif arg.startswith("-et:"):
@@ -112,21 +113,24 @@ def analyze(*args, to_save):
     remap = load_remap(gen_factory.site)
     infoboxes = load_infoboxes(gen_factory.site)
     duration = datetime.now() - start
-    print(f"Loaded {len(appearances.unique)} appearances and {len(sources.unique)} sources in {duration.seconds} seconds")
+    log(f"Loaded {len(appearances.unique)} appearances and {len(sources.unique)} sources in {duration.seconds} seconds")
 
     save = any("save:true" in s.lower() for s in args[0])
     passive = False
 
     gen = pagegenerators.PreloadingGenerator(gen_factory.getCombinedGenerator(), groupsize=50)
 
-    ci = 50623
-    li = 116357
+    nci = 27766
+    ci = 61191
+    li = 117010
     i = count - 1
-    if any("Legends articles" in a or "C4-DE traversal" in a for a in args):
-        i += ci
-    # total = ci + li
-    total = li
-    checked = []
+    total = ci + li
+    if any("Legends articles" in a for a in args[0]):
+        total = li
+    elif any("Canon articles" in a for a in args[0]):
+        total = ci
+    elif any("Non-canon articles" in a for a in args[0]):
+        total = nci
     processed = []
     always_comment = False
     found = False
@@ -156,7 +160,8 @@ def analyze(*args, to_save):
                 quit()
 
         if start_on:
-            if remove_the(page.title()).lower() >= start_on.lower() and not page.title().startswith("Wookieepedia:"):
+            # if remove_the(page.title()).lower() >= start_on.lower() and not page.title().startswith("Wookieepedia:"):
+            if page.title().lower() >= start_on.lower() and not page.title().startswith("Wookieepedia:"):
                 print(f"Found: {page.title()}")
                 start_on = None
             else:
@@ -185,8 +190,6 @@ def analyze(*args, to_save):
 
             before = page.get(force=True)
             old_text = f"{before}"
-            # if "{{HelmetCollection" not in old_text and "{{ForceCollection" not in old_text:
-            #     continue
 
             old_revision = None
             if redo and redo >= page.title(with_ns=False): #and "audiobook" in old_text:
@@ -198,8 +201,9 @@ def analyze(*args, to_save):
 
             subpage = None
             extra = []
-            text, subtext, u1, u2 = build_new_text(page, infoboxes, types, [], appearances, sources, cats, remap, include_date,
-                                                   checked, log=log, collapse_audiobooks=True, manual=old_revision, extra=extra, keep_pages=False, redo=redo)
+            text, subtext, u1, u2 = build_new_text(
+                page, infoboxes, types, [], appearances, sources, cats, remap, include_date,
+                log=do_log, collapse_audiobooks=True, manual=old_revision, extra=extra, redo=redo)
 
             if subtext:
                 subpage = Page(page.site, f"{page.title()}/Sources")
@@ -233,6 +237,9 @@ def analyze(*args, to_save):
             #     override = "RelatedCategories" in text and "RelatedCategories" not in old_text
             # if override:
             #     continue
+
+            if match and (old_text.count("{{ID|") + old_text.count("{{1st")) < (text.count("{{ID|") + text.count("{{1st")):
+                match = False
 
             if passive:
                 print(f"Changes found for {page.title()}")
@@ -301,15 +308,16 @@ def analyze(*args, to_save):
             time.sleep(30)
             continue
         except Exception as e:
+            to_save.append(page.title())
             traceback.print_exc()
             print(e)
 
 
 if __name__ == "__main__":
     to_save = []
-    # try:
-    analyze(sys.argv, to_save=to_save)
-    # except KeyboardInterrupt:
-    #     if to_save:
-    #         with codecs.open(f"{PROJECT_DIR}/c4de/protocols/review.txt", mode="a", encoding="utf-8") as f:
-    #             f.writelines("\n".join(to_save))
+    try:
+        analyze(sys.argv, to_save=to_save)
+    except KeyboardInterrupt:
+        if to_save:
+            with codecs.open(f"{PROJECT_DIR}/c4de/protocols/review.txt", mode="a", encoding="utf-8") as f:
+                f.writelines("\n".join(to_save))

@@ -720,6 +720,13 @@ def should_list_on_future_products(v: Item, today: str):
 def future_sort(v: Item):
     return v.date, "Series" not in (v.master_page or "")
 
+def is_redlink(site, v: Item):
+    try:
+        return not Page(site, v.target).exists()
+    except Exception as e:
+        print(f"Encountered {type(e)} while checking {v.target} existence")
+        return False
+
 
 def build_future(site, types, infoboxes, appearances: FullListData, sources: FullListData):
     today = datetime.now().strftime("%Y-%m-%d")
@@ -731,23 +738,34 @@ def build_future(site, types, infoboxes, appearances: FullListData, sources: Ful
         if should_list_on_future_products(v, today):
             (future if v.date.startswith("Future") else has_date).append(v)
 
-    results, future_results = [], []
+    redlinks, results, future_results = [], [], []
     for v in sorted(has_date, key=lambda a: future_sort(a)):
         tx = decide_type(site, v, types, infoboxes)
-        results.append((v.date, tx, v.original))
+        if is_redlink(site, v):
+            redlinks.append((v.date, tx, v.original))
+        else:
+            results.append((v.date, tx, v.original))
     for v in future:
         tx = decide_type(site, v, types, infoboxes)
         future_results.append((tx, v.original))
-    return results, future_results
+    return redlinks, results, future_results
 
 
 def build_future_products_page(site, types, infoboxes, appearances: FullListData, sources: FullListData):
-    content = """{{Top|real}}\nThe following is a list of future ''[[Star Wars]]'' products that are yet to be published. This list is updated daily by {{U|C4-DE Bot}}, and as such any manual updates will be overwritten.\n\n{| {{Prettytable}}\n|- bgcolor="#CCCCCC"\n! Date !! Type !! Title"""
-    results, future = build_future(site, types, infoboxes, appearances, sources)
+    content = """{{Top|real}}\nThe following is a list of future ''[[Star Wars]]'' products that are yet to be published. This list is updated daily by {{U|C4-DE Bot}}, and as such any manual updates will be overwritten."""
+    redlinks, results, future = build_future(site, types, infoboxes, appearances, sources)
+
+    if redlinks:
+        content += """\n\n==Redlinks==\n{| {{Prettytable}}\n|- bgcolor="#CCCCCC"\n! Date !! Type !! Title"""
+        for date, media_type, title in results:
+            content += f"\n|-\n| {date} || {media_type} || {title}"
+        content += "\n|}"
+
+    content += """\n\n==Future products==\n{| {{Prettytable}}\n|- bgcolor="#CCCCCC"\n! Date !! Type !! Title"""
     for date, media_type, title in results:
         content += f"\n|-\n| {date} || {media_type} || {title}"
 
-    content += """\n|}\n\n----\n'''Announced Content w/o Date:'''\n{| {{Prettytable}}\n|- bgcolor="#CCCCCC"\n! Type !! Title"""
+    content += """\n|}\n\n===Announced Content w/o Date===\n{| {{Prettytable}}\n|- bgcolor="#CCCCCC"\n! Type !! Title"""
     for media_type, title in future:
         content += f"\n|-\n| {media_type} || {title}"
     content += "\n|}\n\n[[Category:Real-world lists]]\n[[Category:Wookieepedia Sources Project]]"

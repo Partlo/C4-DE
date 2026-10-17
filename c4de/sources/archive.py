@@ -127,7 +127,7 @@ def extract_urls(text, template, youtube):
     elif template == "Databank":
         zx = [(i[0], i[2]) for i in re.findall(r"(\{\{Databank\|(url=)?([^|\n}]+?)(\|.*?)(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
     else:
-        zx = [(i[0], i[3]) for i in re.findall(r"(\{\{" + template + r"(\|[^\n}]*?)?\|(url|link|altlink)==?([^|\n}]+?(\{\{=}})?[^|\n}]*?)[/ ]*\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
+        zx = [(i[0], i[3]) for i in re.findall(r"(\{\{" + template + r"(\|[^\n}]*?)?\|(url|link|altlink)==?([^|\n}]+?(\{\{=}})?[^|\n}]*?)[/ ]*(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text)]
         if template in ["Bluesky", "Threads", "TikTok", "Twitter"]:
             for i in re.findall(r"(\{\{" + template + r".*?\|/?((post|statuse?s?|video|playlist)/[^|\n}]+?)[/ ]*(\|[^{]*?(\{\{[^}]*?}}[^{]*?)?)?}})", text):
                 zx.append((i[0], i[1]))

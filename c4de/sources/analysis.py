@@ -302,7 +302,7 @@ def handle_wrong(from_name, to_name, target: SectionItemIds, nc_target: SectionI
 
 def analyze_section_results(target: Page, results: PageComponents, appearances: FullListData,
                             sources: FullListData, remap: dict, use_index: bool, include_date: bool,
-                            collapse_audiobooks: bool, checked: list, log, index=False) \
+                            collapse_audiobooks: bool, log, index=False) \
         -> Tuple[NewComponents, UnknownItems, AnalysisResults]:
     both_continuities = appearances.both_continuities.union(sources.both_continuities)
     # dates = []
@@ -310,19 +310,19 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
     now = datetime.now()
     new_src = build_item_ids_for_section(
         target, results.real, results.media, "Sources", results.src.items, sources, appearances, remap,
-        unknown_src, results.canon, results.infobox, [], collapse_audiobooks, log)
+        unknown_src, results.canon, results.infobox, collapse_audiobooks, log)
     new_ncs = build_item_ids_for_section(
         target, results.real, results.media, "Non-canon sources", results.ncs.items, sources, appearances, remap,
-        unknown_src, results.canon, results.infobox, [], collapse_audiobooks, log)
+        unknown_src, results.canon, results.infobox, collapse_audiobooks, log)
     new_apps = build_item_ids_for_section(
         target, results.real, results.media, "Appearances", results.apps.items, appearances, sources, remap,
-        unknown_apps, results.canon, results.infobox, checked, collapse_audiobooks, log)
+        unknown_apps, results.canon, results.infobox, collapse_audiobooks, log)
     new_nca = build_item_ids_for_section(
         target, results.real, results.media, "Non-canon appearances", results.nca.items, appearances, sources, remap,
-        unknown_apps, results.canon, results.infobox, checked, collapse_audiobooks, log)
+        unknown_apps, results.canon, results.infobox, collapse_audiobooks, log)
     new_col = build_item_ids_for_section(
         target, results.real, results.media, "Collections", results.collections.items, sources, appearances, remap,
-        unknown_src, results.canon, results.infobox, [], collapse_audiobooks, log)
+        unknown_src, results.canon, results.infobox, collapse_audiobooks, log)
     log_time("item IDs", now)
 
     handle_non_canon_items(results, new_apps, new_nca, new_src, new_ncs, log)
@@ -431,7 +431,7 @@ def expand_listing(target: str, o: Item, data: FullListData, expanded: int):
 
 def build_item_ids_for_section(page: Page, real, media, name, original: List[Item], data: FullListData, other: FullListData,
                                remap: dict, unknown: List[Union[str, Item]], canon: bool,
-                               infobox: str, checked: list, collapse_audiobooks=True, log=True) -> SectionItemIds:
+                               infobox: str, collapse_audiobooks=True, log=True) -> SectionItemIds:
 
     found, wrong, links, non_canon = [], [], [], []
     group_items, wrong_group_items = _cards(), _cards()
@@ -469,8 +469,9 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
         if should_skip:
             continue
 
-        if d and (o.is_card_or_mini() or o.template == FC):
+        if d:
             d.fix_fc_date(canon)
+        if d and (o.is_card_or_mini() or o.template == FC):
             if is_source or (not is_source and "scenario" in o.original):
                 handle_card_item(d, o, group_items, found, extra)
             else:
@@ -546,7 +547,7 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
             if log:
                 print(f"Cannot find {o.unique_id()}: {o.original}")
             save = True
-            if o.is_appearance and o.target and o.target not in checked:
+            if o.is_appearance and o.target:
                 p = Page(page.site, o.target)
                 if not o.target.lower().startswith("w:c:") and p.exists() and not p.isRedirectPage():
                     cats = [c.title() for c in p.categories()]
@@ -1327,5 +1328,5 @@ def get_analysis_from_page(target: Page, infoboxes: dict, types, disambigs, appe
         collapse_audiobooks = False
 
     _, _, analysis = analyze_section_results(target, results, appearances, sources, remap, True,
-                                             False, collapse_audiobooks, [], log, index=index)
+                                             False, collapse_audiobooks, log, index=index)
     return analysis
