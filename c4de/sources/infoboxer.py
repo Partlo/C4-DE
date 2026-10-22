@@ -346,7 +346,8 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
         r = re.search(r"Category:Individuals with (.*?) pronouns", text)
         data["pronouns"] = r.group(1) if r else ""
 
-    extra = [k for k in infobox.optional if k not in infobox.params]
+    optional = [*infobox.optional, "override", "no_grid_check", "unlisted", "skip_date_cat", "debug_mode", "outside"]
+    extra = [k for k in optional if k not in infobox.params]
     params = [*extra, *infobox.params]
     i = -1
     intro_only = text.split("==", 1)[0]
@@ -364,34 +365,34 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
                 # x = [k for k, v in REMAP.items() if v == f and data.get(k) and data.get(k) != "new"]
                 x = [k for k, v in REMAP.items() if v == f and data.get(k)]
                 v = data.get(x[0] if x else '') or v
-            if f == "release date" and not iu_media:
-                x = re.search(r"([Pp]ublished|[Rr]eleased|[Ii]ncluded|from) (in|on)? ?((\[*(January|February|March|April|May|June|July|August|September|October|November|December|fall|spring|winter|autumn)/?]* ?)*?([0-9\[\], ]*)?(of )?\[*?[0-9]{4}]*)",
-                              intro_only)
-                if x:
-                    v = x.group(3)
-            if f == "author" and not v:
-                x = re.search(r"([Ww]ritten|article|interview) by (?P<t>\[\[.*?]])", intro_only)
-                if not x:
-                    x = re.search(r"(?P<t>\[\[.*?]]) interviews", intro_only)
-                if not x:
-                    x = re.search(r"article (in \[\[.*?]] )?by (?P<t>\[\[.*?]])", intro_only)
-                if x:
-                    v = x.group('t')
-            if f == "published in" and not v and not iu_media:
-                v = data.get("issue") or ''
-                if re.search(r"\[\[(.*?) ([0-9]+)\|\2( of .*?)?]]", v):
-                    v = re.sub(r"\[\[(.*?) ([0-9]+)\|\2( of .*?)?]]", "[[\\1 \\2|''\\1'' \\2]]", v)
-                elif extract:
-                    x = re.search(
-                        "(published|adventure|released|article|supplement|appearing|appeare?[sd]|included|feature|department) (w?i?t?h?in|of|from) (\[\[(Fantasy Flight Games|De ?Agostini)]]'?s? )?(the )?(magazine )?(?P<t>'*\[\[.*?]]'*)",
-                        intro_only)
-                    if not x:
-                        x = re.search(
-                            "written.* for (\[\[(Fantasy Flight Games|De ?Agostini)]]'?s? )?(the )?(magazine )?(?P<t>'*\[\[.*? [0-9]+(\|.*? [0-9]+'*?)?]]'*)",
-                            intro_only)
-                    if x:
-                        v = x.groupdict()['t']
-            if f in infobox.optional and f not in data and not v:
+            # if f == "release date" and not iu_media:
+            #     x = re.search(r"([Pp]ublished|[Rr]eleased|[Ii]ncluded|from) (in|on)? ?((\[*(January|February|March|April|May|June|July|August|September|October|November|December|fall|spring|winter|autumn)/?]* ?)*?([0-9\[\], ]*)?(of )?\[*?[0-9]{4}]*)",
+            #                   intro_only)
+            #     if x:
+            #         v = x.group(3)
+            # if f == "author" and not v:
+            #     x = re.search(r"([Ww]ritten|article|interview) by (?P<t>\[\[.*?]])", intro_only)
+            #     if not x:
+            #         x = re.search(r"(?P<t>\[\[.*?]]) interviews", intro_only)
+            #     if not x:
+            #         x = re.search(r"article (in \[\[.*?]] )?by (?P<t>\[\[.*?]])", intro_only)
+            #     if x:
+            #         v = x.group('t')
+            # if f == "published in" and not v and not iu_media:
+            #     v = data.get("issue") or ''
+            #     if re.search(r"\[\[(.*?) ([0-9]+)\|\2( of .*?)?]]", v):
+            #         v = re.sub(r"\[\[(.*?) ([0-9]+)\|\2( of .*?)?]]", "[[\\1 \\2|''\\1'' \\2]]", v)
+            #     elif extract:
+            #         x = re.search(
+            #             "(published|adventure|released|article|supplement|appearing|appeare?[sd]|included|feature|department) (w?i?t?h?in|of|from) (\[\[(Fantasy Flight Games|De ?Agostini)]]'?s? )?(the )?(magazine )?(?P<t>'*\[\[.*?]]'*)",
+            #             intro_only)
+            #         if not x:
+            #             x = re.search(
+            #                 "written.* for (\[\[(Fantasy Flight Games|De ?Agostini)]]'?s? )?(the )?(magazine )?(?P<t>'*\[\[.*? [0-9]+(\|.*? [0-9]+'*?)?]]'*)",
+            #                 intro_only)
+            #         if x:
+            #             v = x.groupdict()['t']
+            if f in optional and f not in data and not v:
                 continue
             elif f in infobox.combo and (data.get(infobox.combo[f]) or not any(data.get(i) for i in infobox.groups[infobox.combo[f]])):
                 continue
@@ -429,7 +430,7 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
             continue
         elif f in infobox.groups and any(data.get(i) for i in infobox.groups[f] if i != f):
             continue
-        elif f in infobox.optional and not v and f not in data:
+        elif f in optional and not v and f not in data:
             continue
         else:
             new_infobox.append(f"|{f}={v or ''}")

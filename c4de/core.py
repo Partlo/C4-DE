@@ -1,4 +1,3 @@
-import codecs
 import re
 import emoji
 import json
@@ -308,7 +307,6 @@ class C4DE_Bot(commands.Bot):
     rss_command_search = {
         "ghost touch": "ghost_touch",
         "rss": "check_internal_rss",
-        "load web": "save_web_sources",
         "clean bot requests": "check_bot_requests",
         "clear bot requests": "check_bot_requests",
     }
@@ -572,37 +570,6 @@ class C4DE_Bot(commands.Bot):
 
         if target:
             await target.reply("**Commands have been updated! Please view this channel's pinned messages for more info.**")
-
-    async def save_web_sources(self, message):
-        log("Loading web sources file")
-        try:
-            by_year = {"Unknown": [], "Current": [], "Special": []}
-            with codecs.open(f"{PROJECT_DIR}/web.txt", mode="r", encoding="utf-8") as f:
-                for i in f.readlines():
-                    d, c = i.split("\t", 1)
-                    if "®" not in i and "™" not in i and emoji.emoji_count(i) > 0:
-                        by_year["Special"].append(f"{d} {c}")
-                    elif d.startswith("1") or d.startswith("2"):
-                        y = d[:4]
-                        if y not in by_year:
-                            by_year[y] = []
-                        by_year[y].append(f"{d} {c}")
-                    elif d.startswith("Current"):
-                        by_year["Current"].append(f"{d} {c}")
-                    else:
-                        by_year["Unknown"].append(f"{d} {c}")
-
-            for k, v in by_year.items():
-                p = Page(self.site, f"Wookieepedia:Sources/Web/{k}")
-                t = p.get() if p.exists() else ""
-                c = len(t.splitlines())
-                log(f"{len(v)} sources found for {k}; currently {c - 1} are listed")
-                text = ("{{Wookieepedia:Sources/Web/Header}}\n" + "\n".join(f"*{i}".strip() for i in sorted(v))).replace("\n\n", "\n")
-                if text != t:
-                    p.put(text, "Updating sources list", botflag=False)
-            await message.add_reaction(THUMBS_UP)
-        except Exception as e:
-            error_log(type(e), e)
 
     async def create_archive_categories(self, message: Message, _=None):
         match = re.search(r"create archive categor[yies]* for (Template:.*?)$", message.content)

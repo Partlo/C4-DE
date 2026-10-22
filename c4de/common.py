@@ -244,12 +244,12 @@ MULTIPLE_ISSUE_CONVERSION = {
     "npov": "NPOV",
     "stayontarget": "StayOnTarget"
 }
-COMBINE = ["catneeded", "citation", "cleanup", "confirm", "contradict", "disputed", "expand", "imageReal",
-           "imagePerson", "image", "moresources", "oou", "plot", "redlink", "stayontarget", "tense"]
+MAINTENANCE = ["catneeded", "citation", "cleanup", "cleanup-context", "confirm", "contradict", "disputed",
+               "imageReal", "imagePerson", "image", "moresources", "oou", "plot", "redlink", "stayontarget", "tense"]
 
 
 def should_move_to_multiple_issues(x):
-    for i in COMBINE:
+    for i in MAINTENANCE:
         z = MULTIPLE_ISSUE_CONVERSION.get(i, i).lower()
         if x.startswith(f"{{{{{z}|") or x.startswith(f"{{{{{z}}}}}"):
             return i
@@ -263,34 +263,42 @@ def handle_multiple_issues(text: Union[List[str], str]):
         lines = text.splitlines()
     else:
         return text
-    to_remove = []
-    params = []
-    current = None
-    for ln in lines:
-        if "{{multiple" in ln.lower():
-            current = ln
-            to_remove.append(ln)
-        elif ln.startswith("{{"):
+    maintenance_tags = {}
+    for i, ln in enumerate(lines):
+        if "{{multipleissues|" in ln.lower():
+            maintenance_tags[ln] = ln.rsplit("}}", 1)[0].split("{{MultipleIssues|")[-1]
+        elif "{{update|" in ln.lower() or "{{expand|" in ln.lower():
+            x = re.search(r"([Uu]pdate|[Ee]xpand)\|(.*?)}}[ ]*$", ln)
+            if x:
+                maintenance_tags[ln] = f"{x.group(1).lower()}content={x.group(2)}"
+            continue
+        elif ln.strip().startswith("{{"):
             param = should_move_to_multiple_issues(ln.lower())
             if param:
-                to_remove.append(ln)
-                params.append(param)
+                maintenance_tags[ln] = param
+        elif ln.strip().startswith("=="):
+            break
 
-    if len(params) > 1:
-        new_lines = []
-        current = current or "{{MultipleIssues}}"
-        if "{{MultipleIssues" not in current:
-            current = re.sub(r"{{[Mm]ultiple.?[Ii]ssues", "{{MultipleIssues", current)
-        for x in params:
-            current = current.replace("MultipleIssues", f"MultipleIssues|{x}")
-        for ln in lines:
-            if not ("{{Top|" in ln or "{{Top}}" in ln or "{{Otheruses" in ln or "{{Youmay" in ln):
-                if current not in new_lines:
-                    new_lines.append(current)
-            if ln not in to_remove:
-                new_lines.append(ln)
-        return new_lines
-    return lines
+    if len(maintenance_tags) <= 1:
+        return lines
+
+    maintenance_params = sorted(v for v in maintenance_tags.values())
+    add_multiple_issues = True
+    new_lines = []
+    for i, ln in enumerate(lines):
+        if ln in maintenance_tags and add_multiple_issues:
+            new_lines.append("{{MultipleIssues|" + "|".join(maintenance_params) + "}}")
+            add_multiple_issues = False
+        elif ln in maintenance_tags:
+            pass
+        else:
+            new_lines.append(ln)
+
+    return new_lines
+
+
+def flatten(t):
+    return t.replace("–", "-").replace("—", "-").replace("&mdash;", "-").replace("&ndash;", "-")
 
 
 def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, remap, file=False, overwrite=False,

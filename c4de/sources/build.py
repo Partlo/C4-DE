@@ -147,7 +147,7 @@ def matches_category(ln, categories):
     return any(f"[[{c.lower()}|" in ln or f"[[{c.lower()}]]" in ln for c in categories)
 
 
-def sort_categories(pieces, namespace_id, bad_categories):
+def sort_categories(pieces, namespace_id, bad_categories) -> str:
     pieces = "\n".join(pieces)
     if namespace_id == 6:
         return pieces
@@ -260,42 +260,8 @@ def format_update_contents(ln, page: Page, results: PageComponents, appearances:
 
 def build_iu_intro(page: Page, results: PageComponents, appearances: FullListData, sources: FullListData, types: dict):
     pieces = []
-    content = results.before.strip().splitlines()
-    maintenance_tags = {}
-    update_content = None
-    expand_content = None
-    for ln in content:
-        if "{{multipleissues|" in ln.lower():
-            maintenance_tags[ln] = ln.rsplit("}}", 1)[0].split("{{MultipleIssues|")[-1]
-        elif "{{update|" in ln.lower():
-            update_content = format_update_contents(ln, page, results, appearances, sources, types)
-            maintenance_tags[ln] = "updatecontent"
-        elif "{{expand|" in ln.lower():
-            x = re.search(r"expand\|(.*?)}}", ln)
-            if x:
-                expand_content = x.group(1)
-                maintenance_tags[ln] = "expand"
-            break
-        elif "{{split|" in ln.lower():
-            continue
-        else:
-            for x in MAINTENANCE:
-                if f"{{{{{x}|" in ln.lower() or f"{{{{{x}}}}}" in ln.lower():
-                    maintenance_tags[ln] = x
-                    break
-    if len(maintenance_tags) > 1:
-        maintenance_params = sorted(v for v in maintenance_tags.values() if "content" not in v)
-        if expand_content:
-            maintenance_params.append(f"expandcontent={expand_content}")
-        if update_content:
-            maintenance_params.append(f"updatecontent={update_content}")
-    else:
-        maintenance_tags = {}
-        maintenance_params = []
-
-    add_multiple_issues = True
     found_section = False
-    for ln in content:
+    for ln in results.before.strip().splitlines():
         if ln.startswith("==") and not found_section:
             found_section = True
             if results.stub:
@@ -304,6 +270,9 @@ def build_iu_intro(page: Page, results: PageComponents, appearances: FullListDat
 
         if "{{top" in ln.lower():
             pieces.append(sort_top_template(page.title(), ln))
+        elif "{{update|" in ln.lower():
+            lx = format_update_contents(ln, page, results, appearances, sources, types)
+            pieces.append("{{Update|" + lx + "}}")
         elif "|updatecontent=" in ln.lower():
             x = re.search(r"updatecontent=(.*?)(\|[a-z0-9=|]*)?}}$", ln)
             if x:
@@ -311,13 +280,6 @@ def build_iu_intro(page: Page, results: PageComponents, appearances: FullListDat
                 pieces.append(ln.replace(x.group(1), lx))
             else:
                 pieces.append(ln)
-        elif ln in maintenance_tags and add_multiple_issues:
-            pieces.append("{{MultipleIssues|" + "|".join(maintenance_params) + "}}")
-            add_multiple_issues = False
-        elif ln in maintenance_tags:
-            pass
-        elif "{{update|" in ln.lower() and update_content is not None:
-            pieces.append("{{Update|" + update_content + "}}")
         else:
             pieces.append(ln)
 
