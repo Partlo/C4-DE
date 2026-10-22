@@ -30,6 +30,14 @@ REPLACEMENTS = [
     ("[[Black]]", "[[Color/Legends|Black]]"), ("[[black]]", "[[Color/Legends|black]]"),
     ("parent=Riddell mini-helmet", "parent=Riddell"),
 
+    ("''[[Order 66: A Republic Commando Novel]]''", "''[[Republic Commando: Order 66]]''"),
+    ("''[[Republic Commando]]''", "[[Star Wars: Republic Commando (novel series)|''Star Wars: Repbulic Commando'']]"),
+    ("[[The Jedi Path: A Manual for Students of the Force (real-life book)|''The Jedi Path: A Manual for Students of the Force'']]", "''[[Star Wars: The Jedi Path]]''"),
+    ("[[The Jedi Path: A Manual for Students of the Force (real-life book)|''The Jedi Path'']]", "''[[Star Wars: The Jedi Path]]''"),
+    ("[[Book of Sith: Secrets from the Dark Side|''Book of Sith'']]", "''[[Star Wars: Book of Sith]]''"),
+    ("[[Book of Sith: Secrets from the Dark Side]]", "[[Star Wars: Book of Sith]]"),
+    ("[[Star Wars: Imperial Handbook: A Commander's Guide]]", "[[Star Wars: Imperial Handbook]]"),
+    ("[[The Bounty Hunter Code: From the Files of Boba Fett]]", "[[Star Wars: The Bounty Hunter Code]]"),
     ("{{EncyclopediaCite|Padmé Amidala Naberrie}}", "{{EncyclopediaCite|Padmé Amidala}}"),
 ]
 
@@ -195,11 +203,6 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, infobox_log=T
     before = re.sub(r"\[\[Category:Articles with /LEGO.*?\n", "", before)
     before = re.sub(r"\n\[\[Category:Articles with /LEGO.*?]](\{\{.*?}})?$", "", before)
 
-    before = re.sub(r">\[\[Star Wars Galaxy Map \(poster\)\|[^\n\]\[]+]]<", ">{{GalaxyMapPoster}}<", before)
-    before = re.sub(r">The \[\[Star Wars Galaxy Map \(poster\)\|[^\n\]\[]+]]", ">The {{GalaxyMapPoster}}", before)
-    if "{{TradeRoute" not in before:
-        before = re.sub(r"(\*\{\{(StarWarsGalaxyMap|TheStarWarsGalaxy}})}})\n", "*{{StarWarsGalaxyMap}} {{MapPoint}}\n", before)
-
     while re.search(r"\[\[Category:[^\n|\]_]+_", before):
         before = re.sub(r"(\[\[Category:[^\n|\]_]+)_", "\\1 ", before)
     log_time("regex-1", now)
@@ -250,18 +253,46 @@ def regex_cleanup(before: str) -> str:
         before = re.sub(r"\|oldversion=1(\|[^\n}{]*?)?(\|archive(date|url)=([^|\n}{]+))", "|oldversion=\\4\\1", before)
 
     if "|work=" in before:
-        before = re.sub(r"\|work='*?(Slash Film|/Film|ABC News|BBC News Online|Biography|Bleeding Cool|BoardGameGeek|British Academy of Film and Television Arts|CBS News|CNN|Comic Book Resources|ComicBook\.com|Daily Mail|Deadline Hollywood|Discogs)'*?(\|.*?)?}}", "\\2}}", before)
+        before = re.sub(r"\|work='*?(Slash Film|/Film|ABC News|BBC News Online|Biography|Bleeding Cool|BoardGameGeek|British Academy of Film and Television Arts|CBS News|CNN|CBR|CBR\.com|Comic Book Resources|ComicBook\.com|Daily Mail|Deadline Hollywood|Discogs)'*?(\|.*?)?}}", "\\2}}", before)
         before = re.sub(r"\|work='*?\[\[Wikipedia:(/Film|ABC News|BBC News Online|Biography|Bleeding Cool|BoardGameGeek|British Academy of Film and Television Arts|CBS News|CNN|Comic Book Resources|ComicBook\.com|Daily Mail|Deadline Hollywood|Discogs)( \(.*?\))?\|.*?]]'*", "", before)
         before = re.sub(r"\|work='*?(E!|Empire|Encyclopædia Britannica|Engadget|Entertainment Weekly|Esquire|Eurogamer#Digital Foundry|Eurogamer|Forbes|Game Informer|GameSpot|GamesRadar\+|Gizmodo|Good Morning America|Google Books|Hollywood.com|HuffPost)'*(\|.*?)?}}", "\\2}}", before)
-        before = re.sub(r"\|work='*?\[\[Wikipedia:(E!|Empire|Encyclopædia Britannica|Engadget|Entertainment Weekly|Esquire|Eurogamer#Digital Foundry|Eurogamer|Forbes|Game Informer|GameSpot|GamesRadar\+|Gizmodo|Good Morning America|Google Books|Hollywood.com|HuffPost)( \(.*?\))?\|.*?]]'*", "", before)
+        before = re.sub(r"\|work='*?\[\[Wikipedia:(E!|Empire|Encyclop.*?dia Britannica|Engadget|Entertainment Weekly|Esquire|Eurogamer#Digital Foundry|Eurogamer|Forbes|Game Informer|GameSpot|GamesRadar\+|Gizmodo|Good Morning America|Google Books|Hollywood.com|HuffPost)( \(.*?\))?\|.*?]]'*", "", before)
         before = re.sub(r"\|work='*?(IGN|Inverse|Io9|Kotaku|MTV|Mashable|Merriam-Webster|Metro|Midtown Comics|NBC|Nerdist|Newsarama|PC Game[rs]|Polygon|Qidian|Qobuz|Rolling Stone|Screen Rant|Syfy|TMZ|TechRadar)'*(\|.*?)?}}", "\\2}}", before)
         before = re.sub(r"\|work='*?\[\[Wikipedia:(IGN|Inverse|Io9|Kotaku|MTV|Mashable|Merriam-Webster|Metro|Midtown Comics|NBC|Nerdist|Newsarama|PC Game[rs]|Polygon|Qidian|Qobuz|Rolling Stone|Screen Rant|Syfy|TMZ|TechRadar)( \(.*?\))?\|.*?]]'*", "", before)
         before = re.sub(r"\|work='*?(The A\.V\. Club|The Daily Telegraph|The Guardian|The Hollywood Reporter|The Huffington Post|The Independent|The New York Times|The New Yorker|The Times|The Verge|The Washington Post|Time|TIME|USA Today|Universal Music Group)'*(\|.*?)?}}", "\\2}}", before)
         before = re.sub(r"\|work='*?\[\[Wikipedia:(The A\.V\. Club|The Daily Telegraph|The Guardian|The Hollywood Reporter|The Huffington Post|The Independent|The New York Times|The New Yorker|The Times|The Verge|The Washington Post|Time|TIME|USA Today|Universal Music Group)( \(.*?\))?\|.*?]]'*", "", before)
         before = re.sub(r"\|work='*?(TheForce\.net|Valnet#Collider|Valnet#Screen_Rant|Vanity Fair|Variety|VentureBeat|Wired|WIRED|Yahoo)'*(\|.*?)?}}", "\\2}}", before)
         before = re.sub(r"\|work='*?\[\[Wikipedia:(Valnet#Collider|Valnet#Screen_Rant|Vanity Fair|Variety|VentureBeat|Wired|WIRED|Yahoo)( \(.*?\))?\|.*?]]'*", "", before)
+        before = re.sub("(url=.*?//(.*?\.)?(ew|collider|aiptcomics|npr|rollingstonaveleyman|ign|cbr|theforce|nerdist|gameinformer|latimes|inverse|starwarsinterviews|jedi-bibliothek|swtor\.jedipedia)\..*?)\|work=.*?(\|[a-z ]+=.*?)?}}", "\\1\\4}}", before)
+
+    before = handle_repeated_ve_references(before)
+    before = handle_dupe_ve_references(before)
 
     return re.sub(r"(\{\{[A-z0-9 _]+\|.*?\|(.*?) \(.*?\))\|\2}}", "\\1}}", before)
+
+
+def handle_repeated_ve_references(text):
+    z = re.search(r"((<ref name=\":[0-9]+\")>.*?</ref>)((.*?\n)*?.*?)\1", text)
+    if z:
+        a, b, c = text.partition(z.group(1))
+        text = a + b + c.replace(z.group(1), z.group(2) + " />")
+    return text
+
+
+DUPE_REFERENCE_PATTERN = "(<ref name=(\"[^:<>\"\n\[\]][^><\"\n\[\]]*?\")>(.*?)</ref>.*?((\n.*?)*?))(<ref (name=\":[0-9]*?\")>\\3</ref>)"
+
+
+def handle_dupe_ve_references(text):
+    i = 0
+    z = re.search(DUPE_REFERENCE_PATTERN, text)
+    while z:
+        text = text.replace(z.group(6), f"<ref name={z.group(2)} />")
+        text = text.replace(z.group(7), f"name={z.group(2)}")
+        z = re.search(DUPE_REFERENCE_PATTERN, text)
+        i += 1
+        if i >= 10:
+            break
+    return text
 
 
 def handle_top_title(before: str, target: str):

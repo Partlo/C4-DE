@@ -48,13 +48,11 @@ def flatten(x):
 def prep(text, old_text):
     z1 = re.sub(r"(\|[A-z _0-9]+=.*?(\n.+?)?)}}(\n((The |A )?'''|\{\{Quote))", "\\1\n}}\\3",
                 re.sub(r"(\|.*?=)}}\n", "\\1\n}}\n", text.replace("{{!}}", "|")))
-    z1 = re.sub(r"\[\[([Cc])redit]](s)?", "[[Galactic Credit Standard|\\1redit\\2]]", z1)
     z2 = re.sub(r"(\|[A-z _0-9]+=.*?(\n.+?)?)}}(\n((The |A )?'''|\{\{Quote))", "\\1\n}}\\3",
-                re.sub(r"(\|.*?=)}}\n", "\\1\n}}\n",
+                re.sub(r"(\|.*?=)}}\n", "\\1\n}}F",
                        re.sub(r"(\|book=[^\n}]*?)(\|story=[^\n}]*?)(\|.*?)?}}", "\\2\\1\\3}}",
                               old_text.replace("text=SWCC 2022", "text=SWCA 2022").replace("{{!}}", "|"))))
     z2 = re.sub(r"(\{\{1st.*?\|\[\[(.*?) \(.*?audiobook\)\|)''\\2'' (.*?audiobook)", "\\1\\3", z2)
-    z2 = re.sub(r"\[\[([Cc])redit]](s)?", "[[Galactic Credit Standard|\\1redit\\2]]", z2)
 
     for ix in re.findall(r"((\{\{(BuildFalconCite|BuildR2Cite|BuildXWingCite|BustCollectionCite|DarthVaderCite|FalconCite|FigurineCite|HelmetCollectionCite|ShipsandVehiclesCite|StarshipsVehiclesCite)\|S?[0-9]+\|[^|\[{}]+?)(\|((?!reprint).)*?)}})", text):
         text = text.replace(ix[0], ix[1] + "}}")
@@ -72,7 +70,6 @@ def analyze(*args, to_save):
     always = False
     bot = True
     count = 0
-    encyclopedia, ultimate, ultimate2 = [], [], []
     for arg in handle_args(*args):
         if arg.startswith("-page:"):
             do_log = True

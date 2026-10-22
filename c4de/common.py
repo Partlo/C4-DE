@@ -87,11 +87,11 @@ def should_skip_other_site(t):
 
 
 def is_redirect(page, title=None):
-    if title and should_skip_other_site(title.lower()):
-        return False
-    elif page.title() and should_skip_other_site(page.title().lower()):
-        return False
     try:
+        if title and should_skip_other_site(title.lower()):
+            return False
+        elif page.title() and should_skip_other_site(page.title().lower()):
+            return False
         return page.exists() and page.full_url() and page.isRedirectPage()
     except JSONDecodeError:
         print(f"JSONDecodeError, likely an interwiki link")
@@ -233,7 +233,7 @@ CONSOLES = ["32X", "3DO", "Android (operating system)", "Atari 2600", "Atari 520
 
 
 def check_text(r, text):
-    return f"[[{r}" in text or f"={r}" in text or f"[[{r.replace('_', ' ')}" in text
+    return f"[[{r}" in text or f"={r}" in text or f"[[{r.replace('_', ' ')}" in text or f"[[:{r}" in text
 
 
 MULTIPLE_ISSUE_CONVERSION = {
@@ -353,11 +353,18 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
                     if re.sub(r",? (Ltd|Limited|Inc|LLC)\.?", "", r) == t:
                         text = re.sub(r"\[\[" + x + r"(\|" + prepare_title(t) + ")?]]", f"[[{t}]]", text)
 
-                if r == f"{t}s":
+                if flatten(r) == f"{flatten(t)}s":
                     text = text.replace(f"[[{r}]]", f"[[{t}]]s")
+                elif flatten(t) == flatten(r):
+                    text = text.replace(f"[[{r}]]", f"[[{t}]]")
+                elif abs(len(r) - len(t)) and r.replace(" ", "") == t.replace(" ", ""):
+                    text = text.replace(f"[[{r}]]", f"[[{t}]]")
+
+                text = text.replace(f"[[:{r}|", f"[[:{t}|")
+                text = re.sub(r"(''')?('')?\[\[" + x + r"\|('')?(" + prepare_title(t) + ")('')?]](s)?(''')?('')?", "\\1\\2\\3[[\\4]]\\6\\2\\3", text)
+                text = text.replace(f"[[{r}|{t}]]", f"[[{t}]]")
                 text = text.replace(f"[[{r}|{t[0].lower()}{t[1:]}]]", f"[[{t[0].lower()}{t[1:]}]]")
 
-                text = re.sub(r"(''')?('')?\[\[" + x + r"\|('')?(" + prepare_title(t) + ")('')?]](s)?(''')?('')?", f"\\1\\2\\3[[\\4]]\\6\\2\\3", text)
                 if r.startswith("File:"):
                     text = re.sub(r"\[\[(" + x + r")(\|.*?)?]]", f"[[{t}\\2]]", text)
                 elif file or r.replace("Star Wars: Republic: ", "Star Wars: ") == t \
@@ -384,12 +391,12 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
 
 
 def handle_repeated_references(text, status):
-    if "{{FamilyTree" not in text and re.search(r"(?<!>)((<ref name=\"[^\"\n>]+?\")(>((?!(<ref|\{\{Fact}})[^\n])*?</ref>| ?/>)(((?!<ref).)*?)\\2 ?/>))(?!<ref)", text):
+    if "{{FamilyTree" not in text and "{{TradeRoute" not in text and re.search(r"(?<!>)((<ref name=\"[^\"\n>]+?\")(>(?!(<ref|\{\{Fact}})[^\n])*?</ref>| ?/>)(((?!<ref).)*?)\2 ?/>)(?!<ref)", text):
         nx = text.splitlines()
         for i in range(len(nx)):
             if nx[i].startswith("|") or "{{RepeatedRef" in nx[i]:
                 continue
-            nx[i] = re.sub(r"(?<!>)((<ref name=\"[^\"\n>]+?\")(>((?!<ref)[^\n])*?</ref>| ?/>)(((?!<ref).)*?)\\2 ?/>)(?!<ref)", "{{RepeatedRef}}\\1" if status else "\\5\\2\\3", nx[i])
+            nx[i] = re.sub(r"(?<!>)((<ref name=\"[^\"\n>]+?\")(>(?!(<ref|\{\{Fact}})[^\n])*?</ref>| ?/>)(((?!<ref).)*?)\2 ?/>)(?!<ref)", "{{RepeatedRef}}\\1" if status else "\\5\\2\\3", nx[i])
         return "\n".join(nx)
     return text
 
@@ -423,51 +430,40 @@ def do_final_replacements(new_txt, replace, is_status):
     new_txt = re.sub(r"(==(Sources|Appearances)==)\n\n(===Non-canon (appearances|sources)===)", "\\1\n\\3", new_txt)
 
     while replace:
-        new_txt2 = re.sub(r"(\[\[(?!File:)[^\[\]|\r\n]+)&ndash;", "\\1–",
-                          re.sub(r"(\[\[(?!File:)[^\[\]|\n]+)&mdash;", "\\1—", new_txt))
-        new_txt2 = re.sub(r"(\[\[(?!File:)[^\[\]|\r\n]+–[^\[\]|\r\n]+\|[^\[\]|\r\n]+)&ndash;", "\\1–",
-                          re.sub(r"(\[\[(?!File:)[^\[\]|\n]+—[^\[\]|\r\n]+\|[^\[\]|\r1\n]+)&mdash;", "\\1—", new_txt2))
+        new_txt2 = re.sub(r"(\[\[(?!File:)[^\[\]|\n]+)&ndash;", "\\1–", new_txt)
+        new_txt2 = re.sub(r"(\[\[(?!File:)[^\[\]|\n]+–[^\[\]|\n]+\|[^\[\]|\n]+)&ndash;", "\\1–", new_txt2)
         new_txt2 = re.sub(r"\[\[([A-Z])(.*?)\|([a-z])\2(s)?]]", "[[\\3\\2]]\\4", new_txt2)
-        # new_txt2 = re.sub(r"\[\[(.*?)\|\1((?!(Bestoon)[^\n \[\]}{])*?)]]", "[[\\1]]\\2", new_txt2)
-        new_txt2 = re.sub(r"(\|set=(.*?) \(.*?\))\|(s?text|sformatt?e?d?)=\2([|}])", "\\1\\4", new_txt2)
         new_txt2 = handle_repeated_references(new_txt2, is_status)
         new_txt2 = re.sub(r"----\n\n+\{\{", "----\n{{", new_txt2)
-
         # italicization & apostrophes
         new_txt2 = re.sub(r"([^']''[^' ][^']+?'')'s ", "\\1{{'s}} ", new_txt2)
         new_txt2 = re.sub(r"([^']''((?!-class)[^' ])+?[^']+?s'')' ", "\\1{{'}} ", new_txt2)
         new_txt2 = new_txt2.replace("{{'}}s", "{{'s}}")
         new_txt2 = new_txt2.replace("{{'}}\n", "{{'}}")
+        new_txt2 = new_txt2.replace("\n\n*{{ISBN", "\n*{{ISBN")
         if "'''s " in new_txt2:
             new_txt2 = re.sub(r"( ''[^'\n]+'')'s ", "\\1{{'s}} ", new_txt2)
 
         new_txt2 = re.sub(r"(\|url=[^\n|{}]+?)/\|", "\\1|", new_txt2)
-        new_txt2 = new_txt2.replace("\n\n*{{ISBN", "\n*{{ISBN")
-        if "stext=" in new_txt2:
+        if "stext=" in new_txt2 or "sformat" in new_txt2:
+            new_txt2 = re.sub(r"(\|set=(.*?) \(.*?\))\|(s?text|sformatt?e?d?)=\2([|}])", "\\1\\4", new_txt2)
             new_txt2 = re.sub(r"(\|set=[^|{}\n]*?)(\|stext=[^|{}\n]*?)}}", "\\1}}", new_txt2)
 
         new_txt2 = re.sub(r"(\[\[((.*?) \((.*?)\)).*?]].*?)(\{\{Ab\|.*?)\[\[\2\|''\3'' \4]]", "\\1\\5[[\\2|\\4]]", new_txt2)
         new_txt2 = re.sub(r"(\{\{[^\n{}]+?)(\|nolive=1)([^\n{}]*?(\|nobackup=1)?[^\n{}]*?)}}", "\\1\\3\\2}}", new_txt2)
         new_txt2 = re.sub(r"(\{\{[^\n{}]+?)(\|nobackup=1)([^\n{}]+?)}}", "\\1\\3\\2}}", new_txt2)
         new_txt2 = re.sub(r"([\n[]File:[^ \n|\]\[]+) ", "\\1_", new_txt2)
-
-        # TODO: remove after Galaxy's Edge conversion
-        new_txt2 = re.sub(r"(\{\{SourceContents-start\|\[\[Star Wars: (Galaxy's Edge|Galactic Starcruiser).*?]]) (\{\{1st\|)\[\[(.*?)(\|.*?)?]](, (and )?)?(.*?\n(.*?\n)+?.*?(GalaxysEdge|GalacticStarcruiser|GEAttr|GSAttr)\|\4(\|.*?)?}})", "\\1 \\3\\8", new_txt2)
         new_txt2 = re.sub(r"(\{\{1st[a-z]*)\|}}", "\\1}}", new_txt2)
-
         new_txt2 = re.sub(r"(\|[a-z]+=[^|{}\n]*)\1+", "\\1", new_txt2)
 
         if "''{{Film|" in new_txt2:
             new_txt2 = re.sub(r"(?<!')''(\{\{Film\|.*?}})'*", "\\1", new_txt2)
 
-        new_txt2 = re.sub(r"2012 edition}} \{\{C\|\[*2012]* edition}}", "2012 edition}}", new_txt2)
         new_txt2 = re.sub(r"(\{\{SWMiniCite\|set=[^\n}]+?\|)cardname=", "\\1pack=", new_txt2)
-        new_txt2 = new_txt2.replace(" (SWGTCG)|scenario=", "|scenario=")
         new_txt2 = new_txt2.replace("[[Ochi]] of Bestoon", "[[Ochi|Ochi of Bestoon]]")
         new_txt2 = new_txt2.replace("[[Battle station/Legends|battlestation", "[[Battle station/Legends|battle station")
-        new_txt2 = re.sub(r"\*.*?\{\{FactFile\|1\|Gala.*? [Mm]ap.*?}}", "*<!-- 2001-12-27 -->{{FactFile|1|[[:File:Galaxymap3.jpg|Galaxy Map poster]]}}", new_txt2)
         if "{{more" in new_txt2.lower():
-            new_txt2 = re.sub(r"\{\{[Mm]ore[ _]?[Ss]ources}}\n+}}", "}}\n{{MoreSources}}", new_txt2)
+            new_txt2 = re.sub(r"\{\{[Mm]ore[Ss]ources}}\n+}}", "}}\n{{MoreSources}}", new_txt2)
         replace = new_txt != new_txt2
         new_txt = new_txt2
     return new_txt

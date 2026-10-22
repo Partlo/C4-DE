@@ -281,3 +281,5 @@
 **Automatic adding/removal of NOTOC from the Top template dependent on the number of sections
 **Expanded handling for edge case templates for the archive crawler
 **Exempted collections from SeriesListing flagging on real-world person pages (no I'm not building a RWP sweep)
+**Unified handling of MultipleIssues; previously there were two inconsistent implementations overlapping and eating stuff
+**Fixed RepeatedRef flagging, and replacements of VisualEditor unnamed/duplicate references
