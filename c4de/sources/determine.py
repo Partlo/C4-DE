@@ -64,8 +64,8 @@ def determine_id_for_item(
     """ :rtype: ItemId """
 
     # Remapping common mistakes in naming
-    if remap and o.target and o.target in remap:
-        m = check_targets(o, remap[o.target], by_target, other_targets, use_original_text=False)
+    if remap and o.target and o.target.replace("/Legends", "") in remap:
+        m = check_targets(o, remap[o.target.replace("/Legends", "")], by_target, other_targets, use_original_text=False)
         if m:
             return m
     elif o.target and o.target in SPECIAL_REMAP and o.parent:

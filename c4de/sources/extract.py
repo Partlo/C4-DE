@@ -464,10 +464,10 @@ def handle_special_template(template, s, z, mode, a, types):
         return Item(z, mode, a, target="Star Wars: Datapad", template=template, card=m.group(2), protected_format=True)
     # HoloNet News
     elif template == "Hnn" or template == "HoloNetNewsWeb":
-        m = re.search(r"\{\{" + template + r"\|([0-9]+)(\|(.*?)\|(.*?))?}", s)
+        m = re.search(r"\{\{" + template + r"\|(issue=)?([0-9]+)(\|(url=)?(.*?)\|(text=)?(.*?))?}", s)
         if m:
-            return Item(z, mode, a, parent=f"HoloNet News Vol. 531 {m.group(1)}", template="HoloNetNewsWeb",
-                        issue=m.group(1), url=m.group(3), text=m.group(4))
+            return Item(z, mode, a, parent=f"HoloNet News Vol. 531 {m.group(2)}", template="HoloNetNewsWeb",
+                        issue=m.group(2), url=m.group(5), text=m.group(7))
     elif template == "HnnAd" or template == "HoloNetNewsAd":
         m = re.search(r"\{\{" + template + r"\|url=(.*?)(\|.*?)?}}", s)
         if m:

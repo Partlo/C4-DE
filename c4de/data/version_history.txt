@@ -278,4 +278,6 @@
 **[[List of future products]] hooked up to be regenerated daily
 **Cleanup of legacy fixes no longer needed
 *'''4.8.2''': October 22, 2026
+**Automatic adding/removal of NOTOC from the Top template dependent on the number of sections
 **Expanded handling for edge case templates for the archive crawler
+**Exempted collections from SeriesListing flagging on real-world person pages (no I'm not building a RWP sweep)

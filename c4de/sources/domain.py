@@ -334,6 +334,9 @@ class PageComponents:
         self.cover_images = []
         self.redirects_fixed = set()
 
+    def is_iu(self):
+        return not self.real and not self.media and not self.person
+
     def get_navs(self):
         return [*self.nav_templates, *self.apps.nav, *self.nca.nav, *self.src.nav, *self.ncs.nav, *self.links.nav]
 

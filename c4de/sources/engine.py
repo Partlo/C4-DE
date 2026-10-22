@@ -571,7 +571,7 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
         item = i['item']
         old = f"{i['item']}"
         try:
-            is_reprint = "{{c|republish" in item.lower() or i["page"] == "Reprint"
+            is_reprint = "{{c|republish" in item.lower() or "Reprint" in i["page"]
             item = re.sub(r"{{C\|([Uu]nlicensed|[Nn]on[ -]?canon|source)}}", "", item)
             item, reprint = remove_capture(item, re.compile(r"{{[Rr]eprint\|.*?}}"), 0)
             item, ab = remove_capture(item, re.compile(r"\{\{[Aa]b\|.*?}}"), 0)

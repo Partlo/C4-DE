@@ -938,7 +938,7 @@ def build_new_section(title, name, section: SectionItemIds, results: PageCompone
             if o.master.target == "Classic Star Wars Box Set":
                 continue
             # TODO: handle multi-issue reprints
-            flag = build_flags(o, sl, section.name)
+            flag = build_flags(o, sl, section.name, person=results.person)
             d = build_date_text(o, include_date).replace("E -->", " -->")
             zt = o.current.original if o.use_original_text else o.master.original
             if o.master.issue2:
@@ -975,14 +975,14 @@ def build_new_section(title, name, section: SectionItemIds, results: PageCompone
             print(f"Replacing reprint of {o.master.target} with original version")
             itext = build_item_text(ItemId(o.current, o.master.original_printing, False),
                                     d, sl, final_without_extra, final_items, section.name,
-                                    collapse_audiobooks, section.mark_as_non_canon, results.unlicensed, log)
+                                    collapse_audiobooks, section.mark_as_non_canon, results.person, results.unlicensed, log)
         else:
             if o.master.is_reprint and not results.real and o.master.has_content:
                 print(f"Including content reprint version of {o.master.target}")
             elif o.master.is_reprint and not results.real:
                 print(f"Unexpected state: {o.master.target} reprint with template {o.master.template} and parent {o.master.parent} but no original-printing")
             itext = build_item_text(o, d, sl, final_without_extra, final_items, section.name,
-                                    collapse_audiobooks, section.mark_as_non_canon, results.unlicensed, log)
+                                    collapse_audiobooks, section.mark_as_non_canon, results.person, results.unlicensed, log)
         if itext:
             if results.media and o.master.collection_type == "individual" and "{{SeriesListing" in itext:
                 itext = re.sub(r"\{\{SeriesListing.*?}} ?", "", itext)
@@ -1093,7 +1093,7 @@ def is_extra(o: ItemId, ex):
            "cover only" not in ex.lower() and "{{ad}}" not in ex.lower() and o.current.template != "HomeVideoCite"
 
 
-def build_flags(o: ItemId, sl, section_name, is_file=False):
+def build_flags(o: ItemId, sl, section_name, is_file=False, person=False):
     if is_file and "[[File:" in o.current.original:
         return ""
     elif o.current.is_exception or o.current.override:
@@ -1103,7 +1103,9 @@ def build_flags(o: ItemId, sl, section_name, is_file=False):
             return ""
         elif "{{c|cut}}" in (o.current.extra or "").lower():
             return ""
-        elif o.master.collection_type and "{{crawl}}" in (o.current.extra or "").lower():
+        elif o.master.collection_type and (person or "{{crawl}}" in (o.current.extra or "").lower()):
+            return ""
+        elif "Weekly" in o.master.target and re.search("(Wars|Back|Jedi) Weekly [0-9]+", o.master.target):
             return ""
         else:
             return f"{{{{SeriesListing{sl}}}}} "
@@ -1114,7 +1116,7 @@ def build_flags(o: ItemId, sl, section_name, is_file=False):
 
 
 def build_item_text(o: ItemId, d: str, sl: str, final_without_extra: list, final_items: List[ItemId],
-                    section_name, collapse_audiobooks: bool, nc: str, unlicensed: bool,
+                    section_name, collapse_audiobooks: bool, nc: str, person: bool, unlicensed: bool,
                     log: bool, is_file=False, skip_parent=False):
     zt = o.current.original if o.use_original_text else o.master.original
     if not zt.strip():
@@ -1136,7 +1138,7 @@ def build_item_text(o: ItemId, d: str, sl: str, final_without_extra: list, final
     elif d == "<!-- Unknown -->" and "{{Hyperspace" in zt and "/member/fiction" in zt:
         d = ""
     else:
-        d += build_flags(o, sl, section_name, is_file)
+        d += build_flags(o, sl, section_name, is_file=is_file, person=person)
     zn = f"{d}{zt}" if is_file else f"*{d}{zt}"
     if zn.startswith("**"):
         zn = zn[1:]

@@ -105,7 +105,7 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_c
             if t in disambigs or "(disambiguation)" in t:
                 before = fix_disambigs(r, t, before)
 
-    canon, legends, real, media, person, non_canon, unlicensed = False, False, False, False, False, False, False
+    canon, real, media, person, non_canon, unlicensed = None, False, False, False, False, False
     app_mode = BY_INDEX
     flag = []
     for c in target.categories():
@@ -116,7 +116,7 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_c
         if "canon articles" in c.title().lower():
             canon = True
         elif "legends articles" in c.title().lower():
-            legends = True
+            canon = False
         elif c.title(with_ns=False) == "Real-world people":
             real = True
             person = True
@@ -125,16 +125,15 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_c
             media = True
             if re.search(r"\{\{Top\|(.*?\|)?(dotj|tor|thr|fotj|rote|aor|tnr|rofo|cnjo|can|ncc)(\|.*?)?}}", target.get()):
                 canon = True
-            # elif re.search(r"\{\{Top\|(.*?\|)?(pre|btr|old|imp|reb|new|njo|lgc|inf|ncl|leg)(\|.*?)?}}", target.get()):
-            #     canon = False
+            elif re.search(r"\{\{Top\|(.*?\|)?(pre|btr|old|imp|reb|new|njo|lgc|inf|ncl|leg)(\|.*?)?}}", target.get()):
+                canon = False
         elif c.title(with_ns=False).startswith("Real-world") and c.title(with_ns=False) not in ["Real-world restaurants", "Real-world stores"]:
             real = True
 
-        if c.title() in bad_cats:
+        if c.title() in bad_cats and c.title(with_ns=False) != "Legends locations with canon-only grid coordinates":
             flag.append(c.title())
 
-    media_cat = None
-    stub = None
+    media_cat, stub = None, None
     if "{{Mediacat" in before:
         x = re.search(r"\{\{Mediacat.*?}}", before)
         media_cat = x.group(0) if x else None

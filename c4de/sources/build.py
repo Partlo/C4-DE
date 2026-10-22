@@ -463,6 +463,24 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
         new_txt, _ = clean_archive_usages(page, new_txt, sources.archive_data, redo)
     if "|archive" in new_txt:
         new_txt, _ = clean_archive_usages(page, new_txt, sources.archive_data, redo)
+
+    if results.is_iu():
+        has_notoc = "notoc=1" in new_txt
+        iu_sections = new_txt.count("==History==") + new_txt.count("==Biography==")
+        oou_sections = 0
+        for sx in ["Behind the scenes", "Appearances", "Sources", "Notes and references", "External links"]:
+            a, b, c = new_txt.partition(f"=={sx}==")
+            if b and c:
+                iu_sections = a.count("\n==") - a.count("\n===")
+                oou_sections = ("\n" + b + c).count("\n==")
+                break
+        if has_notoc and (iu_sections > 0 or oou_sections < 4):
+            new_txt = new_txt.replace("|notoc=1", "")
+            print(f"Removing NOTOC: {iu_sections} IU sections and {oou_sections} OOU sections")
+        elif not has_notoc and iu_sections == 0 and oou_sections > 3:
+            new_txt = re.sub(r"(\{\{Top(\|.*?)?)}}", "\\1|notoc=1}}", new_txt)
+            print(f"Adding NOTOC to article with no IU sections and {oou_sections} OOU sections")
+
     # log_time("archive", now)
 
     new_txt = re.sub(r"(\{\{DEFAULTSORT:.*?}})\n\n+\[\[[Cc]ategory", "\\1\n[[Category", new_txt)
