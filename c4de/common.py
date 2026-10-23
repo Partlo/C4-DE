@@ -71,7 +71,7 @@ def extract_err_msg(e):
 
 
 def prepare_title(t):
-    for i in ['(', ')', '?', '!']:
+    for i in ['(', ')', '?', '!', '/']:
         t = t.replace(i, '\\' + i)
     if t[0].capitalize().isnumeric():
         return t
@@ -102,74 +102,6 @@ def is_redirect(page, title=None):
         except Exception:
             print(f"Unable to parse link: {title}")
         return False
-
-
-TOP_ORDER = [
-    ["fa", "pfa", "ffa", "ga", "pga", "fga", "ca", "pca", "fca"],
-    ["fprot", "sprot", "ssprot", "mprot"],
-    ["real", "rwm", "rwp", "rwc", "music"],
-    ["noncanon", "can", "leg", "ncc", "ncl", "ref"],
-    ["dotj", "tor", "thr", "fotj", "rote", "aor", "tnr", "rofo", "cnjo"],
-    ["pre", "btr", "old", "imp", "reb", "new", "njo", "lgc", "inf"],
-    ["canon", "legends", "hide"],
-    ["italics", "title", "italics2", "title2", "notitle"],
-    ["notoc", "audio"]
-]
-FULL_ORDER = [tp for pgroup in TOP_ORDER for tp in pgroup]
-
-
-def prep_title_parameter(repl, val, p=""):
-    if val.count("''") == 2 and val.startswith("''") and val.endswith("''"):
-        repl[f"italics{p}"] = "1"
-    elif "''" in val:
-        repl[f"title{p}"] = val
-
-
-def handle_title_format(actual, fmt):
-    replacement = None
-    if fmt:
-        replacement = {}
-        if fmt.startswith('"') and fmt.endswith('"'):
-            fmt = fmt[1:-1]
-        if "(" in fmt and fmt.endswith(")"):
-            title, _, paren = fmt.partition(" (")
-        else:
-            title, paren = fmt, ""
-        paren = paren[:-1] if paren.endswith(")") else paren
-        prep_title_parameter(replacement, title)
-        if paren:
-            prep_title_parameter(replacement, paren, "2")
-    return replacement
-
-
-def sort_top_template(title, t, add_ref=False, fmt=None):
-    if t and add_ref and "|ref" not in t:
-        t = t.replace("{{Top|", "{{Top|ref|")
-    px = re.search(r"^(.*?\{\{Top\|)(.*?)(}}.*?)$", t)
-    replacement = handle_title_format(title, fmt)
-    new_params = [(k, v) for k, v in (replacement or {}).items()]
-    unknown = []
-    if px:
-        p1, p2 = px.group(1), px.group(3)
-        for p in (px.group(2) or '').split("|"):
-            v = ""
-            if "=" in p:
-                p, v = p.split("=", 1)
-            if replacement is not None and p in ["title", "italics"]:
-                continue
-            if p in new_params or p in unknown:
-                continue
-            elif p in FULL_ORDER:
-                new_params.append((p, v))
-            else:
-                unknown.append((p, v))
-    elif new_params:
-        p1, p2 = "{{Top|", "}}"
-    else:
-        return t
-    params = sorted(new_params, key=lambda a: FULL_ORDER.index(a[0]))
-    new_text = "|".join(f"{a}={b}" if b else a for a, b in [*params, *unknown])
-    return p1 + new_text + p2
 
 
 def build_redirects(page: Page, manual: str = None):
@@ -230,10 +162,6 @@ CONSOLES = ["32X", "3DO", "Android (operating system)", "Atari 2600", "Atari 520
             "Oculus Quest", "Personal computer", "PlayStation", "PlayStation 2", "PlayStation 3", "PlayStation 4", "PlayStation 5",
             "PlayStation Portable", "PlayStation Vita", "R-Zone", "Sega CD", "Sega Game Gear", "Steam", "Xbox", "Xbox 360",
             "Xbox Cloud Gaming", "Xbox One", "Xbox Series X/S"]
-
-
-def check_text(r, text):
-    return f"[[{r}" in text or f"={r}" in text or f"[[{r.replace('_', ' ')}" in text or f"[[:{r}" in text
 
 
 MULTIPLE_ISSUE_CONVERSION = {
@@ -299,6 +227,10 @@ def handle_multiple_issues(text: Union[List[str], str]):
 
 def flatten(t):
     return t.replace("–", "-").replace("—", "-").replace("&mdash;", "-").replace("&ndash;", "-")
+
+
+def check_text(r, text):
+    return f"[[{r}" in text or f"={r}" in text or f"[[{r.replace('_', ' ')}" in text or f"[[:{r}" in text
 
 
 def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, remap, file=False, overwrite=False,
@@ -388,122 +320,6 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
             text = text.replace(f"story={r}|", f"story={t}|")
             text = text.replace(f"story={r}" + "}", f"story={t}|" + "}")
     return text
-
-
-def handle_repeated_references(text, status):
-    if "{{FamilyTree" not in text and "{{TradeRoute" not in text and re.search(r"(?<!>)((<ref name=\"[^\"\n>]+?\")(>(?!(<ref|\{\{Fact}})[^\n])*?</ref>| ?/>)(((?!<ref).)*?)\2 ?/>)(?!<ref)", text):
-        nx = text.splitlines()
-        for i in range(len(nx)):
-            if nx[i].startswith("|") or "{{RepeatedRef" in nx[i]:
-                continue
-            nx[i] = re.sub(r"(?<!>)((<ref name=\"[^\"\n>]+?\")(>(?!(<ref|\{\{Fact}})[^\n])*?</ref>| ?/>)(((?!<ref).)*?)\2 ?/>)(?!<ref)", "{{RepeatedRef}}\\1" if status else "\\5\\2\\3", nx[i])
-        return "\n".join(nx)
-    return text
-
-
-def remove_links_from_quotes(new_txt):
-    for x in re.findall(r"((\{\{[Qq]uote\|[^{}\[\]|\n]*)(\[\[([^{}\[\]\n]*?\|)?[^{}\[\]\n]*?]][^{}\n]*?)(\|audio=[^|{}\[\]]*?)?\|<ref.*?}})", new_txt):
-        new_quote, attr, link, bc = "", "", "", 0
-        for c in x[2]:
-            if (c == "|" and bc == 0) or attr:
-                attr += c
-            elif c == "[":
-                bc += 1
-            elif c == "]":
-                bc -= 1
-                if bc == 0:
-                    new_quote += link
-                    link = ""
-            elif bc > 0 and c == "|":
-                link = ""
-            elif bc > 0:
-                link += c
-            else:
-                new_quote += c
-        new_txt = new_txt.replace(x[2], f"{new_quote}{attr}")
-    return new_txt
-
-
-def do_final_replacements(new_txt, replace, is_status):
-    new_txt = remove_links_from_quotes(new_txt)
-    new_txt = new_txt.replace("TORTYPE", "type")
-    new_txt = re.sub(r"(==(Sources|Appearances)==)\n\n(===Non-canon (appearances|sources)===)", "\\1\n\\3", new_txt)
-
-    while replace:
-        new_txt2 = re.sub(r"(\[\[(?!File:)[^\[\]|\n]+)&ndash;", "\\1–", new_txt)
-        new_txt2 = re.sub(r"(\[\[(?!File:)[^\[\]|\n]+–[^\[\]|\n]+\|[^\[\]|\n]+)&ndash;", "\\1–", new_txt2)
-        new_txt2 = re.sub(r"\[\[([A-Z])(.*?)\|([a-z])\2(s)?]]", "[[\\3\\2]]\\4", new_txt2)
-        new_txt2 = handle_repeated_references(new_txt2, is_status)
-        new_txt2 = re.sub(r"----\n\n+\{\{", "----\n{{", new_txt2)
-        # italicization & apostrophes
-        new_txt2 = re.sub(r"([^']''[^' ][^']+?'')'s ", "\\1{{'s}} ", new_txt2)
-        new_txt2 = re.sub(r"([^']''((?!-class)[^' ])+?[^']+?s'')' ", "\\1{{'}} ", new_txt2)
-        new_txt2 = new_txt2.replace("{{'}}s", "{{'s}}")
-        new_txt2 = new_txt2.replace("{{'}}\n", "{{'}}")
-        new_txt2 = new_txt2.replace("\n\n*{{ISBN", "\n*{{ISBN")
-        if "'''s " in new_txt2:
-            new_txt2 = re.sub(r"( ''[^'\n]+'')'s ", "\\1{{'s}} ", new_txt2)
-
-        new_txt2 = re.sub(r"(\|url=[^\n|{}]+?)/\|", "\\1|", new_txt2)
-        if "stext=" in new_txt2 or "sformat" in new_txt2:
-            new_txt2 = re.sub(r"(\|set=(.*?) \(.*?\))\|(s?text|sformatt?e?d?)=\2([|}])", "\\1\\4", new_txt2)
-            new_txt2 = re.sub(r"(\|set=[^|{}\n]*?)(\|stext=[^|{}\n]*?)}}", "\\1}}", new_txt2)
-
-        new_txt2 = re.sub(r"(\[\[((.*?) \((.*?)\)).*?]].*?)(\{\{Ab\|.*?)\[\[\2\|''\3'' \4]]", "\\1\\5[[\\2|\\4]]", new_txt2)
-        new_txt2 = re.sub(r"(\{\{[^\n{}]+?)(\|nolive=1)([^\n{}]*?(\|nobackup=1)?[^\n{}]*?)}}", "\\1\\3\\2}}", new_txt2)
-        new_txt2 = re.sub(r"(\{\{[^\n{}]+?)(\|nobackup=1)([^\n{}]+?)}}", "\\1\\3\\2}}", new_txt2)
-        new_txt2 = re.sub(r"([\n[]File:[^ \n|\]\[]+) ", "\\1_", new_txt2)
-        new_txt2 = re.sub(r"(\{\{1st[a-z]*)\|}}", "\\1}}", new_txt2)
-        new_txt2 = re.sub(r"(\|[a-z]+=[^|{}\n]*)\1+", "\\1", new_txt2)
-
-        if "''{{Film|" in new_txt2:
-            new_txt2 = re.sub(r"(?<!')''(\{\{Film\|.*?}})'*", "\\1", new_txt2)
-
-        new_txt2 = re.sub(r"(\{\{SWMiniCite\|set=[^\n}]+?\|)cardname=", "\\1pack=", new_txt2)
-        new_txt2 = new_txt2.replace("[[Ochi]] of Bestoon", "[[Ochi|Ochi of Bestoon]]")
-        new_txt2 = new_txt2.replace("[[Battle station/Legends|battlestation", "[[Battle station/Legends|battle station")
-        if "{{more" in new_txt2.lower():
-            new_txt2 = re.sub(r"\{\{[Mm]ore[Ss]ources}}\n+}}", "}}\n{{MoreSources}}", new_txt2)
-        replace = new_txt != new_txt2
-        new_txt = new_txt2
-    return new_txt
-
-
-def determine_title_format(page_title, text) -> str:
-    """ Examines the target article's usage of {{Top}} and extracts the title= and title2= parameters, in order to
-      generate a properly-formatted pipelink to the target. """
-
-    if page_title.startswith("en:"):
-        page_title = page_title[3:]
-
-    pagename = re.match(r"{{[Tt]op\|[^\n]+\|title=''{{PAGENAME}}''", text)
-    if pagename:
-        return f"''[[{page_title}]]''"
-
-    title1 = None
-    title_match = re.match(r"{{[Tt]op\|[^\n]+\|title=(?P<title>.*?)[|}]", text)
-    if title_match:
-        title1 = title_match.groupdict()['title']
-        if title1 == f"''{page_title}''":
-            return f"''[[{page_title}]]''"
-
-    match = re.match(r"^(?P<title>.+?) \((?P<paren>.*?)\)$", page_title)
-    if match:
-        title2 = None
-        title2_match = re.match(r"{{[Tt]op\|[^\n]+\|title2=(?P<title>.*?)[|}]", text)
-        if title2_match:
-            title2 = title2_match.groupdict()['title']
-
-        if title1 or title2:
-            title1 = title1 or match.groupdict()['title']
-            title2 = title2 or match.groupdict()['paren']
-            return f"[[{page_title}|{title1} ({title2})]]"
-        else:
-            return f"[[{page_title}]]"
-    elif title1 and title1 != page_title:
-        return f"[[{page_title}|{title1}]]"
-    else:
-        return f"[[{page_title}]]"
 
 
 def determine_nominator(page: Page, nom_type: str, nom_page: Page) -> str:
@@ -669,14 +485,25 @@ def archive_url(url, force_new=False, timeout=30, enabled=True, skip=False, star
     return False, err_msg or ""
 
 
-def dash_redirects():
+def dash_redirects(site):
     gen_factory = pagegenerators.GeneratorFactory()
     gen_factory.handle_arg("-ns:0")
     gen_factory.handle_arg("-start:*")
     gener = None
     gener = gen_factory.getCombinedGenerator(gener)
     gen = pagegenerators.PreloadingGenerator(gener, groupsize=50)
-    found = []
+    has_dash, possible = [], []
     for page in gen:
-        if "-" in page.title() or "–" in page.title() or "—":
-            found.append(page.title())
+        if "–" in page.title() or "—" in page.title():
+            has_dash.append(page.title())
+        elif "-" in page.title():
+            possible.append(page.title())
+
+    for p in has_dash:
+        px = p.replace("–", "-").replace("—", "-")
+        if px in possible:
+            continue
+        rx = Page(site, px)
+        if not rx.exists():
+            print(f"{p} --> [{px}]")
+            # rx.put(f"#REDIRECT [[{p}]]")

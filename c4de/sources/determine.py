@@ -123,7 +123,7 @@ def determine_id_for_item(
 
     elif o.template == "InsiderCite" and o.target in ["The Last Page", "From the Editor's Desk", "A Message from the Editor", "From the Publisher"]:
         if o.parent and (o.parent in by_target or o.parent in other_targets):
-            return ItemId(o, by_target[o.parent][0] if o.parent in by_target else other_targets[o.parent], True, False)
+            return ItemId(o, (by_target[o.parent] if o.parent in by_target else other_targets[o.parent])[0], True, False)
         print(f"Unexpected state: {o.target} fell through Insider parent logic")
         t = f"General|None|Star Wars Insider {o.issue}|None|None|None|None|None"
         if t in data or t in other_data:

@@ -4,11 +4,11 @@ from datetime import datetime
 
 from pywikibot import Page, Category, showDiff
 
-from c4de.common import error_log, fix_redirects, do_final_replacements, sort_top_template, to_duration, \
-    report_duration, MULTIPLE_ISSUE_CONVERSION, log_time
+from c4de.common import error_log, fix_redirects, report_duration, MULTIPLE_ISSUE_CONVERSION
 from c4de.data.filenames import PROJECT_DIR
 from c4de.sources.archive import clean_archive_usages
 from c4de.sources.analysis import analyze_section_results
+from c4de.sources.cleanup import do_final_replacements, sort_top_template
 from c4de.sources.determine import determine_id_for_item
 from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, SectionComponents, FinishedSection, \
     NewComponents, UnknownItems

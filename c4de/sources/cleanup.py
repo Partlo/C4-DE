@@ -1,9 +1,8 @@
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
+from pywikibot import Page
 
 from c4de.common import log_time
-from pywikibot import Page, showDiff
-
 from c4de.sources.infoboxer import handle_infobox_on_page
 
 
@@ -82,7 +81,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, infobox_log=T
         before = re.sub(r"(]]|}})(" + EXTRA + ")","\\1 \\2", before)
 
     # Handle title parameters in Template:Top
-    before = handle_top_title(before, target.title())
+    # before = handle_top_title(before, target.title())
 
     now = datetime.now()
     while "== " in before or " ==" in before:
@@ -153,7 +152,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, infobox_log=T
     before = re.sub(r"({{[Ss]croll[_ ]?[Bb]ox\|)\*", "{{ScrollBox|\n*", before)
     before = re.sub(r"<small>\((.*?)\)</small>", "{{C|\\1}}", before)
 
-    before = re.sub(r"(\{\{[A-z]+YouTube\|[^\n[\]{}]*?\|[^\n[\]{}]*?) \| ([^\n[\]{}]*?(\|[a-z]+=.*?)?}})", "\\1 &#124; \\2", before)
+    before = re.sub(r"(\{\{[A-z]*You[Tt]ube\|[^\n[\]{}]*?\|[^\n[\]{}]*?) \| ([^\n[\]{}]*?(\|[a-z]+=.*?)?}})", "\\1 &#124; \\2", before)
     before = re.sub(r"(\{\{Databank[^}\n]*?)\|title=", "\\1|text=", before)
 
     # removing work= parameters and prioritizing
@@ -169,14 +168,12 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, infobox_log=T
     # weird multi-link listings, legacy formatting from the 2000s
     before = re.sub(r"\*('*?)\[\[([^\n\]|{]*?)]]('*?) '*?\[\[(\2\([^\n\]{]*?)\|(.*?)]]'*", "*[[\\4|\\1\\2\\3 \\5]]", before)
     before = re.sub(r"\*'*?\[\[([^\n\]{]*?)(\|[^\n\]{]*?)]]'*? '*?\[\[(\1 \([^\n\]{]*?)\|(.*?)]]'*", "*[[\\3|\\2 \\4]]", before)
-    before = re.sub(r">(<!--.*?)?['\"]*\[\[([^\n\[\]|]*?)(\|[^\n\[\]|]*?)?]]['\"]* ?(-|—|&.dash;) ?['\"]*\[\[([^\n\[\]|]*?)(\|[^\n\[\]|]*?)?]]['\"]* ?((<small>\(|\{\{[Cc]\|)[Rr]eprinted.*?(}}|\)</small>))?", ">\\1{{StoryCite|story=\\2|book=\\5}}", before)
 
     before = re.sub(r"\|story=\[\[(.*?)(\|.*?)?]]", "|story=\\1", before)
     before = re.sub(r"(\|set=(.*?))\|sformatted=''\2''", "\\1", before)
     before = re.sub(r"(\|set=.*?)(\|subset=.*?)(\|stext=.*?)(\|.*?)?}}", "\\1\\3\\2\\4}}", before)
     before = re.sub(r"(\{\{([A-z_ ]+)\|(set=)?[^|=\n}]+?)(\|link=[^|\n}]+?)(\|cardname=[^|\n}]+?)(\|[^\n}]*?)?}}", "\\1\\5\\4\\6}}", before)
 
-    before = re.sub(r"\{\{[Ii]ncomplete[ _]?[Ll]ist.*?}}\n?\{\{(App|Credits)", "{{Incomplete\\1}}\n{{\\1", before)
     before = re.sub(r"( \{\{(C\|Hologram|1st|[MmPpCcVv]o).*?}})\1+", "\\1", before)
 
     # Visual Editor fix, can't remove
@@ -185,13 +182,14 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, infobox_log=T
     # temp fixes
     before = re.sub(r"'*\[\[Fortnite]]'* ?&[mn]dash; ?'*\[\[(.*?)(\|.*?)?]]'*", "{{Fortnite|\\1}}", before)
     before = re.sub(r"\{\{InsiderCite\|link=(.*?)(.*?)\|''\1''\2\|(.*?)}}", "{{StoryCite|book=\\1|story=\\3}}", before)
-    before = re.sub(r"'*\[(https?://[w.]*?archive.org/.*?) (.*?)]'* (on|at)( the)? ('*\[https?://[w.]*archive\.org/? )?Internet Archive]?'*", "{{WebCite|url=\\1|text=\\2}}", before)
     before = re.sub(r"(\{\{GalaxyMapAppendix}})( |&.dash;)*[Bb]ased on (corresponding )?(info(rmation)?|data) for (the )?(\[\[((?! and ).)*?]]).?</ref>", "\\1 &mdash; Based on corresponding data for the \\7</ref>", before)
 
-    before = re.sub(r"\[\[Star Wars: Force Collection]]'* \{\{C\|Card: (.*?)}}", "{{ForceCollection|\\1}}", before)
+    before = re.sub(r"'*\[\[Star Wars: Force Collection]]'* \{\{C\|Card: (.*?)}}", "{{ForceCollection|\\1}}", before)
+    if "{{ForceCollection" in before:
+        before = re.sub("(\{\{ForceCollection\|.*?) ?\(Special\)}}", "\\1|star=S}}", before)
     before = re.sub(r">'*\[\[Star Wars Rebels: (Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)]]'*", ">{{Rebels|\\1}}", before)
-    before = re.sub(r">'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \1'*]]'*", ">{{Rebels|\\1}}", before)
     before = re.sub(r"'*\[\[Star Wars Rebels: (Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)]]'*", "\"[[\\1]]\"", before)
+    before = re.sub(r">'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \1'*]]'*", ">{{Rebels|\\1}}", before)
     before = re.sub(r"'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \1'*]]'*", "\"[[\\1]]\"", before)
 
     before = re.sub(r"\[\[(Star Wars: (A New Hope|The Empire Strikes Back|Return of the Jedi|Revenge of the Sith) \(novelization\))\|'*Star Wars[: ']+Episode [IV]+[: ']+\2'* novel[a-z]*]]", "[[\\1|''Star Wars: \\2'' novelization]]", before)
@@ -200,8 +198,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, infobox_log=T
     before = re.sub(r"\[\[([Ee]Book)]]", "\\1", before)
     before = re.sub(r"'*\[\[Star.Wars:.X-Wing.vs..TIE.Fighter#Expansion.pack\|.*?]]'*", "''[[Star Wars: X-Wing vs. TIE Fighter: Balance of Power]]''", before)
 
-    before = re.sub(r"\[\[Category:Articles with /LEGO.*?\n", "", before)
-    before = re.sub(r"\n\[\[Category:Articles with /LEGO.*?]](\{\{.*?}})?$", "", before)
+    before = re.sub(r"\{\{SWIA\|set=Star Wars: Imperial Assault Core Set(\|text=Core Set)?(\|.*?)?}}", "{{SWIA|set=Core Set\\2}}", before)
 
     while re.search(r"\[\[Category:[^\n|\]_]+_", before):
         before = re.sub(r"(\[\[Category:[^\n|\]_]+)_", "\\1 ", before)
@@ -210,7 +207,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, infobox_log=T
     now = datetime.now()
     before = regex_cleanup(before)
     log_time("regex-2", now)
-    if "{{C|unlicensed}}" in before:
+    if "{{c|unlicensed}}" in before.lower():
         before = re.sub(r"( {{[Cc]\|[Uu]nlicensed}})+", "", before)
     if "{{Mentioned" in before or "{{mentioned" in before:
         before = re.sub(r"\{\{[Mm]entioned[ _]only\|?}}", "{{Mo}}", before)
@@ -271,6 +268,89 @@ def regex_cleanup(before: str) -> str:
     return re.sub(r"(\{\{[A-z0-9 _]+\|.*?\|(.*?) \(.*?\))\|\2}}", "\\1}}", before)
 
 
+def do_final_replacements(new_txt, replace, is_status):
+    new_txt = remove_links_from_quotes(new_txt)
+    new_txt = new_txt.replace("TORTYPE", "type")
+    new_txt = re.sub(r"(==(Sources|Appearances)==)\n\n(===Non-canon (appearances|sources)===)", "\\1\n\\3", new_txt)
+
+    while replace:
+        # restoring m/n dashes in wikilinks
+        new_txt2 = re.sub(r"(\[\[(?!File:)[^\[\]|\n]+)&mdash;", "\\1—", new_txt)
+        new_txt2 = re.sub(r"(\[\[(?!File:)[^\[\]|\n]+)&ndash;", "\\1–", new_txt2)
+        new_txt2 = re.sub(r"(\[\[(?!File:)[^\[\]|\n]+—[^\[\]|\n]+\|[^\[\]|\n]+)&mdash;", "\\1—", new_txt2)
+        new_txt2 = re.sub(r"(\[\[(?!File:)[^\[\]|\n]+–[^\[\]|\n]+\|[^\[\]|\n]+)&ndash;", "\\1–", new_txt2)
+
+        new_txt2 = re.sub(r"\[\[([A-Z])(.*?)\|([a-z])\2(s)?]]", "[[\\3\\2]]\\4", new_txt2)
+        new_txt2 = handle_repeated_references(new_txt2, is_status)
+        new_txt2 = re.sub(r"----\n\n+\{\{", "----\n{{", new_txt2)
+        # italicization & apostrophes
+        new_txt2 = re.sub(r"([^']''[^' ][^']+?'')'s ", "\\1{{'s}} ", new_txt2)
+        new_txt2 = re.sub(r"([^']''((?!-class)[^' ])+?[^']+?s'')' ", "\\1{{'}} ", new_txt2)
+        new_txt2 = new_txt2.replace("{{'}}s", "{{'s}}")
+        new_txt2 = new_txt2.replace("{{'}}\n", "{{'}}")
+        new_txt2 = new_txt2.replace("\n\n*{{ISBN", "\n*{{ISBN")
+        if "'''s " in new_txt2:
+            new_txt2 = re.sub(r"( ''[^'\n]+'')'s ", "\\1{{'s}} ", new_txt2)
+
+        new_txt2 = re.sub(r"(\|url=[^\n|{}]+?)/\|", "\\1|", new_txt2)
+        if "stext=" in new_txt2 or "sformat" in new_txt2:
+            new_txt2 = re.sub(r"(\|set=(.*?) \(.*?\))\|(s?text|sformatt?e?d?)=\2([|}])", "\\1\\4", new_txt2)
+            new_txt2 = re.sub(r"(\|set=[^|{}\n]*?)(\|stext=[^|{}\n]*?)}}", "\\1}}", new_txt2)
+
+        new_txt2 = re.sub(r"(\[\[((.*?) \((.*?)\)).*?]].*?)(\{\{Ab\|.*?)\[\[\2\|''\3'' \4]]", "\\1\\5[[\\2|\\4]]", new_txt2)
+        new_txt2 = re.sub(r"(\{\{[^\n{}]+?)(\|nolive=1)([^\n{}]*?(\|nobackup=1)?[^\n{}]*?)}}", "\\1\\3\\2}}", new_txt2)
+        new_txt2 = re.sub(r"(\{\{[^\n{}]+?)(\|nobackup=1)([^\n{}]+?)}}", "\\1\\3\\2}}", new_txt2)
+        new_txt2 = re.sub(r"([\n[]File:[^ \n|\]\[]+) ", "\\1_", new_txt2)
+        new_txt2 = re.sub(r"(\{\{1st[a-z]*)\|}}", "\\1}}", new_txt2)
+        new_txt2 = re.sub(r"(\|[a-z]+=[^|{}\n]*)\1+", "\\1", new_txt2)
+
+        if "''{{Film|" in new_txt2:
+            new_txt2 = re.sub(r"(?<!')''(\{\{Film\|.*?}})'*", "\\1", new_txt2)
+
+        new_txt2 = re.sub(r"(\{\{SWMiniCite\|set=[^\n}]+?\|)cardname=", "\\1pack=", new_txt2)
+        new_txt2 = new_txt2.replace("[[Ochi]] of Bestoon", "[[Ochi|Ochi of Bestoon]]")
+        new_txt2 = new_txt2.replace("[[Battle station/Legends|battlestation", "[[Battle station/Legends|battle station")
+        if "{{more" in new_txt2.lower():
+            new_txt2 = re.sub(r"\{\{[Mm]ore[Ss]ources}}\n+}}", "}}\n{{MoreSources}}", new_txt2)
+        replace = new_txt != new_txt2
+        new_txt = new_txt2
+    return new_txt
+
+
+def remove_links_from_quotes(new_txt):
+    for x in re.findall(r"((\{\{[Qq]uote\|[^{}\[\]|\n]*)(\[\[([^{}\[\]\n]*?\|)?[^{}\[\]\n]*?]][^{}\n]*?)(\|audio=[^|{}\[\]]*?)?\|<ref.*?}})", new_txt):
+        new_quote, attr, link, bc = "", "", "", 0
+        for c in x[2]:
+            if (c == "|" and bc == 0) or attr:
+                attr += c
+            elif c == "[":
+                bc += 1
+            elif c == "]":
+                bc -= 1
+                if bc == 0:
+                    new_quote += link
+                    link = ""
+            elif bc > 0 and c == "|":
+                link = ""
+            elif bc > 0:
+                link += c
+            else:
+                new_quote += c
+        new_txt = new_txt.replace(x[2], f"{new_quote}{attr}")
+    return new_txt
+
+
+def handle_repeated_references(text, status):
+    if "{{FamilyTree" not in text and "{{TradeRoute" not in text and re.search(r"(?<!>)((<ref name=\"[^\"\n>]+?\")(>(?!(<ref|\{\{Fact}})[^\n])*?</ref>| ?/>)(((?!<ref).)*?)\2 ?/>)(?!<ref)", text):
+        nx = text.splitlines()
+        for i in range(len(nx)):
+            if nx[i].startswith("|") or "{{RepeatedRef" in nx[i]:
+                continue
+            nx[i] = re.sub(r"(?<!>)((<ref name=\"[^\"\n>]+?\")(>(?!(<ref|\{\{Fact}})[^\n])*?</ref>| ?/>)(((?!<ref).)*?)\2 ?/>)(?!<ref)", "{{RepeatedRef}}\\1" if status else "\\5\\2\\3", nx[i])
+        return "\n".join(nx)
+    return text
+
+
 def handle_repeated_ve_references(text):
     z = re.search(r"((<ref name=\":[0-9]+\")>.*?</ref>)((.*?\n)*?.*?)\1", text)
     if z:
@@ -279,20 +359,94 @@ def handle_repeated_ve_references(text):
     return text
 
 
-DUPE_REFERENCE_PATTERN = "(<ref name=(\"[^:<>\"\n\[\]][^><\"\n\[\]]*?\")>(.*?)</ref>.*?((\n.*?)*?))(<ref (name=\":[0-9]*?\")>\\3</ref>)"
-
-
 def handle_dupe_ve_references(text):
     i = 0
-    z = re.search(DUPE_REFERENCE_PATTERN, text)
-    while z:
-        text = text.replace(z.group(6), f"<ref name={z.group(2)} />")
-        text = text.replace(z.group(7), f"name={z.group(2)}")
-        z = re.search(DUPE_REFERENCE_PATTERN, text)
+    done = False
+    while not done and i < 10:
         i += 1
-        if i >= 10:
-            break
+        z = re.search(r"(<ref name=(\"[^:<>\"\n\[\]][^><\"\n\[\]]*?\")>(.*?)</ref>.*?((\n.*?)*?))(<ref (name=\":[0-9]*?\")>\\3</ref>)", text)
+        if z:
+            text = text.replace(z.group(6), f"<ref name={z.group(2)} />")
+            text = text.replace(z.group(7), f"name={z.group(2)}")
+        else:
+            done = True
     return text
+
+
+# ***
+#
+# Top template handling
+#
+# ***
+
+
+TOP_ORDER = [
+    ["fa", "pfa", "ffa", "ga", "pga", "fga", "ca", "pca", "fca"],
+    ["fprot", "sprot", "ssprot", "mprot"],
+    ["real", "rwm", "rwp", "rwc", "music"],
+    ["noncanon", "can", "leg", "ncc", "ncl", "ref"],
+    ["dotj", "tor", "thr", "fotj", "rote", "aor", "tnr", "rofo", "cnjo"],
+    ["pre", "btr", "old", "imp", "reb", "new", "njo", "lgc", "inf"],
+    ["canon", "legends", "hide"],
+    ["italics", "title", "italics2", "title2", "notitle"],
+    ["notoc", "audio"]
+]
+FULL_ORDER = [tp for pgroup in TOP_ORDER for tp in pgroup]
+
+
+def sort_top_template(title, t, add_ref=False, fmt=None):
+    t = handle_top_title(t, title)
+    if t and add_ref and "|ref" not in t:
+        t = t.replace("{{Top|", "{{Top|ref|")
+    px = re.search(r"^(.*?\{\{Top\|)(.*?)(}}.*?)$", t)
+    replacement = handle_title_format(fmt)
+    new_params = [(k, v) for k, v in (replacement or {}).items()]
+    unknown = []
+    if px:
+        p1, p2 = px.group(1), px.group(3)
+        for p in (px.group(2) or '').split("|"):
+            v = ""
+            if "=" in p:
+                p, v = p.split("=", 1)
+            if replacement is not None and p in ["title", "italics"]:
+                continue
+            if p in new_params or p in unknown:
+                continue
+            elif p in FULL_ORDER:
+                new_params.append((p, v))
+            else:
+                unknown.append((p, v))
+    elif new_params:
+        p1, p2 = "{{Top|", "}}"
+    else:
+        return t
+    params = sorted(new_params, key=lambda a: FULL_ORDER.index(a[0]))
+    new_text = "|".join(f"{a}={b}" if b else a for a, b in [*params, *unknown])
+    return p1 + new_text + p2
+
+
+def prep_title_parameter(repl, val, p=""):
+    if val.count("''") == 2 and val.startswith("''") and val.endswith("''"):
+        repl[f"italics{p}"] = "1"
+    elif "''" in val:
+        repl[f"title{p}"] = val
+
+
+def handle_title_format(fmt):
+    replacement = None
+    if fmt:
+        replacement = {}
+        if fmt.startswith('"') and fmt.endswith('"'):
+            fmt = fmt[1:-1]
+        if "(" in fmt and fmt.endswith(")"):
+            title, _, paren = fmt.partition(" (")
+        else:
+            title, paren = fmt, ""
+        paren = paren[:-1] if paren.endswith(")") else paren
+        prep_title_parameter(replacement, title)
+        if paren:
+            prep_title_parameter(replacement, paren, "2")
+    return replacement
 
 
 def handle_top_title(before: str, target: str):
@@ -300,10 +454,7 @@ def handle_top_title(before: str, target: str):
     for z in ["{{PAGENAME}}", x, target]:
         for i in ["|", "}"]:
             before = before.replace(f"|title=''{z}''{i}", f"|italics=1{i}")
-            if f"Otheruses|title={z}" in before:
-                before = re.sub(r"(\{\{Top.*?)\|title=" + z + r"(\|.*?)?}}", "\\1\\2", before)
-            else:
-                before = before.replace(f"|title={z}{i}", f"{i}")
+            before = before.replace(f"|title={z}{i}", f"{i}")
     if y:
         y = y.replace(")", "").strip()
         if f"|title2=''{y}''" in before:

@@ -18,7 +18,6 @@ from c4de.sources.parsing import BY_INDEX, BY_DATE, UNCHANGED, is_official_link,
     build_initial_components, build_page_sections
 
 
-KEEP_TEMPLATES = ["CalendarCite"]
 GROUP_IN_APPEARANCES = {
     "DatapadCite": "[[Star Wars: Datapad|''Star Wars'': Datapad]]",
     "GEAttr": "[[Star Wars: Galaxy's Edge|''Star Wars'': Galaxy's Edge]]",
@@ -232,30 +231,13 @@ def augment_appearances(new_apps: SectionItemIds, appearances: FullListData, col
 def handle_non_canon_items(results: PageComponents, new_apps: SectionItemIds, new_nca: SectionItemIds,
                            new_src: SectionItemIds, new_ncs: SectionItemIds, log=False):
     if results.non_canon:
-        new_apps.merge(new_nca)
-        new_apps.found += new_apps.non_canon
-        new_apps.non_canon = []
-        new_src.merge(new_ncs)
-        new_src.found += new_src.non_canon
-        new_src.non_canon = []
+        merge_nc_for_non_canon_page(new_apps, new_nca, new_src, new_ncs)
 
     # move non-canon items to the appropriate lists, and swap to non-canon only if no canon entries
-    if new_apps.non_canon:
-        if log:
-            print(f"Moving {len(new_apps.non_canon)} 'appearances' to the Non-canon Appearances")
-        new_nca.found += new_apps.non_canon
-        new_apps.non_canon = []
-    if new_nca.non_canon:
-        if log:
-            print(f"Moving {len(new_nca.non_canon)} 'non-canon' appearances to the main Appearances")
-        new_apps.found += new_nca.non_canon
-        new_nca.non_canon = []
-    if new_src.non_canon:
-        new_ncs.found += new_src.non_canon
-        new_src.non_canon = []
-    if new_ncs.non_canon:
-        new_src.found += new_ncs.non_canon
-        new_nca.non_canon = []
+    swap_non_canon(new_apps, new_nca)
+    swap_non_canon(new_nca, new_apps)
+    swap_non_canon(new_src, new_ncs)
+    swap_non_canon(new_ncs, new_src)
 
     if new_apps.wrong or new_apps.wrong_group_items or new_nca.wrong or new_nca.wrong_group_items:
         handle_wrong("Appearances", "Sources", new_apps, new_nca, new_src, new_ncs, log)
@@ -272,12 +254,23 @@ def handle_non_canon_items(results: PageComponents, new_apps: SectionItemIds, ne
             results.apps.after += results.src.after
 
     if results.non_canon:
-        new_apps.merge(new_nca)
-        new_apps.found += new_apps.non_canon
-        new_apps.non_canon = []
-        new_src.merge(new_ncs)
-        new_src.found += new_src.non_canon
-        new_src.non_canon = []
+        merge_nc_for_non_canon_page(new_apps, new_nca, new_src, new_ncs)
+
+
+def swap_non_canon(target: SectionItemIds, other_canon: SectionItemIds):
+    if target.non_canon:
+        other_canon.found += target.non_canon
+        target.non_canon = []
+
+
+def merge_nc_for_non_canon_page(new_apps: SectionItemIds, new_nca: SectionItemIds,
+                                new_src: SectionItemIds, new_ncs: SectionItemIds):
+    new_apps.merge(new_nca)
+    new_apps.found += new_apps.non_canon
+    new_apps.non_canon = []
+    new_src.merge(new_ncs)
+    new_src.found += new_src.non_canon
+    new_src.non_canon = []
 
 
 def handle_wrong(from_name, to_name, target: SectionItemIds, nc_target: SectionItemIds, other: SectionItemIds, nc_other: SectionItemIds, log):
@@ -394,10 +387,6 @@ def _cards() -> ItemIdListDict:
     return defaultdict(list)
 
 
-# def should_expand(t):
-#     return t and (t in SERIES_MAPPING or t in EXPANSION)  # and not ("Crimson Empire" in t or "Dark Empire" in t)
-
-
 def add_to_list(items, key, item):
     if key not in items:
         items[key] = []
@@ -429,6 +418,89 @@ def expand_listing(target: str, o: Item, data: FullListData, expanded: int):
     return ItemId(x, data.target[target][0], False)
 
 
+def handle_group_item(d: ItemId, o: Item, is_sources):
+    if d and d.current.template in GROUP_IN_APPEARANCES:
+        return not is_sources, d.master.target or d.master.parent
+    elif d and d.current.template and d.current.template.startswith("FactFile") and d.master.target:
+        return is_sources, d.master.target
+    elif d and d.current.ref_magazine and d.master.parent and not o.override_date:
+        return is_sources, d.master.parent
+    elif d and d.current.template == "HomeVideoCite" and d.master.parent:
+        return is_sources, d.master.parent
+    return None, None
+
+
+def handle_item_result(d: ItemId, o: Item, name, is_appearances, is_sources, is_nc_section, infobox, page: Page,
+                       real: bool, media: bool, data: FullListData, other: FullListData, unknown, collapse_audiobooks):
+    if o.mode != "Toys" and (is_official_product_page(o, real) or is_external_link(d, o, unknown)):
+        if d:
+            o.master_text = d.master.original
+        if not (not real and o.template == "SW" and o.url and o.url.startswith("films/")):
+            return "links"
+        return ""
+    elif d and name == "Collections":
+        if not (d.master.collection_type or d.master.master_page == "Appearances/Collections") or d.current.unknown:
+            px = data.by_parent.get(d.master.target, []) + other.by_parent.get(d.master.target, [])
+            if infobox == "MagazineDepartment" and not px:
+                pass
+            elif infobox not in VALID_COLLECTIONS and not any(page.title() == i.target for i in px) and not page.title().startswith(d.master.target):
+                print(infobox, d.current.unknown, d.master.master_page, d.master.target, d.current.original)
+                d.current.unknown = True
+                unknown.append(o)
+        return "found"
+    elif d and name == "Appearances" and d.master.master_page == "Appearances/Collections" and d.master.has_content:
+        return "wrong"
+
+    if d and not real:
+        if d.master.is_audiobook and not d.master.is_abridged and not d.master.german_ad and collapse_audiobooks:
+            return ""  # ignore audiobooks
+
+        elif d.master.unlicensed:
+            if d.master.is_appearance == is_appearances:
+                return "found" if is_nc_section == d.master.non_canon else "non_canon"
+            return "wrong"
+
+        elif d.from_other_data and "databank" not in (o.extra or '').lower() and (d.master.is_reprint or not d.master.from_extra):
+            return "wrong"
+
+        elif d.master.non_canon != is_nc_section and not o.canon_override:
+            if "cameo" in d.current.extra or "{{C|" in d.current.extra or d.current.template == "TFU" or \
+                    d.master.target == "Star Wars: The Force Unleashed II" or \
+                    d.master.target == "Star Tours: The Adventures Continue" or page.title().endswith("/LEGO"):
+                pass
+            else:
+                # move listings out of NCA/NCS and tag them with the Nc/Ncm templates
+                if d.master.template not in ["JTC", "Tales", "TFU"] and not is_sources:
+                    if "{{Nc" not in d.current.extra:
+                        if "{{Mo}}" in d.current.extra:
+                            d.current.extra = d.current.extra.replace("{{Mo}}", "{{Ncm}}")
+                        elif "{{1stm" in d.current.extra:
+                            d.current.extra += " {{Ncm}}"
+                        else:
+                            d.current.extra += " {{Nc}}"
+                return "non_canon"
+
+    if media and o.is_hyperspace_reprint():
+        return "links"
+    elif media and d and d.master.master_page == "Web/Repost":
+        return "links"
+    elif d and d.master.master_page in ["Web/Target", "Web/Publisher"]:
+        if not (not real and o.template == "SW" and o.url and o.url.startswith("films/")):
+            return "links"
+        return ""
+
+    if d:
+        if d.by_parent:
+            unknown.append(f"Parent: {o.original}")
+        elif d.current.unknown:
+            unknown.append(o)
+        return "found"
+    elif o.template == "WebCite" or o.template == "WP" or "{{WP" in o.original:
+        return "links"
+    else:
+        return "unknown"
+
+
 def build_item_ids_for_section(page: Page, real, media, name, original: List[Item], data: FullListData, other: FullListData,
                                remap: dict, unknown: List[Union[str, Item]], canon: bool,
                                infobox: str, collapse_audiobooks=True, log=True) -> SectionItemIds:
@@ -440,7 +512,9 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
     any_expanded = []
     unexpanded = 0
     other_extra = 0
-    is_source = name and "appearance" not in name.lower()
+    is_sources = name and "appearance" not in name.lower()
+    is_appearances = name and "appearance" in name.lower()
+    is_nc_section = name and name.startswith("Non-canon")
     already = set(o.target for o in original if o.target)
     for i, o in enumerate(original):
         o.index = i
@@ -472,78 +546,33 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
         if d:
             d.fix_fc_date(canon)
         if d and (o.is_card_or_mini() or o.template == FC):
-            if is_source or (not is_source and "scenario" in o.original):
+            if is_sources or (is_appearances and "scenario" in o.original):
                 handle_card_item(d, o, group_items, found, extra)
             else:
                 handle_card_item(d, o, wrong_group_items, wrong, extra)
+            continue
 
-        elif d and d.current.template in GROUP_IN_APPEARANCES:
-            (wrong_group_items if is_source else group_items)[d.master.target or d.master.parent].append(d)
-        elif d and d.current.template and d.current.template.startswith("FactFile") and d.master.target:
-            (group_items if is_source else wrong_group_items)[d.master.target].append(d)
-        elif d and d.current.ref_magazine and d.master.parent and not o.override_date:
-            (group_items if is_source else wrong_group_items)[d.master.parent].append(d)
-        elif d and d.current.template == "HomeVideoCite" and d.master.parent:
-            (group_items if is_source else wrong_group_items)[d.master.parent].append(d)
-        elif o.mode != "Toys" and (is_official_product_page(o, real) or is_external_link(d, o, unknown)):
-            if d:
-                o.master_text = d.master.original
-            if not (not real and o.template == "SW" and o.url and o.url.startswith("films/")):
-                links.append(o)
-        # elif d and d.current.template in KEEP_TEMPLATES:
-        #     found.append(d)
-        elif d and name == "Collections":
-            if not (d.master.collection_type or d.master.master_page == "Appearances/Collections") or d.current.unknown:
-                px = data.by_parent.get(d.master.target, []) + other.by_parent.get(d.master.target, [])
-                if infobox == "MagazineDepartment" and not px:
-                    pass
-                elif infobox not in VALID_COLLECTIONS and not any(page.title() == i.target for i in px) and not page.title().startswith(d.master.target):
-                    print(infobox, d.current.unknown, d.master.master_page, d.master.target, d.current.original)
-                    d.current.unknown = True
-                    unknown.append(o)
+        correct, key = handle_group_item(d, o, is_sources)
+        if correct is not None:
+            if correct:
+                group_items[key].append(d)
+            else:
+                wrong_group_items[key].append(d)
+            continue
+
+        decision = handle_item_result(d, o, name, is_appearances, is_sources, is_nc_section, infobox, page, real,
+                                      media, data, other, unknown, collapse_audiobooks)
+        if decision == "found":
             found.append(d)
-        elif d and name == "Appearances" and d.master.master_page == "Appearances/Collections" and d.master.has_content:
-            wrong.append(d)
-        elif d and d.master.unlicensed and name.startswith("Non-canon") == d.master.non_canon:
-            (found if name.startswith("Non-canon") == d.master.non_canon else non_canon).append(d)
-        elif d and d.from_other_data and "databank" not in (o.extra or '').lower() \
-                and not real and (d.master.is_reprint or not d.master.from_extra):
+        elif decision == "wrong":
             if log:
                 print(f"({name}) Listed in wrong section: {o.original} -> {d.master.is_appearance} {d.master.full_id()}")
             wrong.append(d)
-        elif d and not real and d.master.is_audiobook and not d.master.is_abridged and not d.master.german_ad and collapse_audiobooks:
-            continue    # ignore audiobooks
-        elif d and not real and d.master.non_canon and not name.startswith("Non-canon") and not o.canon_override \
-                and d.master.target != "Star Tours: The Adventures Continue" and not page.title().endswith("/LEGO"):
+        elif decision == "non_canon":
             non_canon.append(d)
-        elif d and not real and not d.master.non_canon and name.startswith("Non-canon") and not o.canon_override and not \
-                ("cameo" in d.current.extra or "{{C|" in d.current.extra or d.current.template == "TFU" or d.current.target == "Star Wars: The Force Unleashed II"):
-            # move listings out of NCA/NCS and tag them with the Nc/Ncm templates
-            if d.master.template not in ["JTC", "Tales", "TFU"] and "appearances" in name.lower():
-                if "{{Nc" not in d.current.extra:
-                    if "{{Mo}}" in d.current.extra:
-                        d.current.extra = d.current.extra.replace("{{Mo}}", "{{Ncm}}")
-                    elif "{{1stm" in d.current.extra:
-                        d.current.extra += " {{Ncm}}"
-                    else:
-                        d.current.extra += " {{Nc}}"
-            non_canon.append(d)
-        elif media and o.is_hyperspace_reprint():
+        elif decision == "links":
             links.append(o)
-        elif media and d and d.master.master_page == "Web/Repost":
-            links.append(o)
-        elif d and d.master.master_page in ["Web/Target", "Web/Publisher"]:
-            if not (not real and o.template == "SW" and o.url and o.url.startswith("films/")):
-                links.append(o)
-        elif d:
-            found.append(d)
-            if d.by_parent:
-                unknown.append(f"Parent: {o.original}")
-            elif d.current.unknown:
-                unknown.append(o)
-        elif o.template == "WebCite" or o.template == "WP" or "{{WP" in o.original:
-            links.append(o)
-        else:
+        elif decision == "unknown":
             if log:
                 print(f"Cannot find {o.unique_id()}: {o.original}")
             save = True
@@ -558,7 +587,7 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
 
             unknown.append(o)
             o.unknown = True
-            if save and not real and not name.startswith("Non-canon") and "star wars: visions" in o.original.lower():
+            if save and not real and not is_nc_section and "star wars: visions" in o.original.lower():
                 non_canon.append(ItemId(o, o, False))
             elif save:
                 found.append(ItemId(o, o, False))
@@ -1131,7 +1160,7 @@ def build_item_text(o: ItemId, d: str, sl: str, final_without_extra: list, final
     zt = re.sub(r"<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", zt)
     while zt.strip().startswith("*"):
         zt = zt[1:].strip()
-    if o.current.bold:
+    if o.current.bold and not (zt.startswith("'''") and zt.endswith("'''")):
         zt = f"'''{zt}'''"
     elif "audiobook" in o.master.original and is_extra(o, o.current.extra or ''):
         return None
@@ -1170,15 +1199,12 @@ def build_item_text(o: ItemId, d: str, sl: str, final_without_extra: list, final
         if section_name.startswith("Non-canon"):
             e = re.sub(r"\{\{[Nn]cm}}", "{{Mo}}", re.sub(r"\{\{[Nn]cs?(\|.*?)?}}", "", e))
         elif nc and nc.lower() not in e.lower():
-            if nc == "{{Nc}}" and ("{{mo}}" in o.current.extra.lower() or "{{1stm" in o.current.extra.lower()):
-                nc = "{{Ncm}}"
             e = f"{e} {nc}"
             if nc == "{{Ncm}}":
                 e = e.replace("{{Mo}}", "")
         if o.master.unlicensed and not unlicensed and "{{Un}}" not in e and "{{un}}" not in e:
             e += " {{Un}}"
-        e = e.strip()
-        z = swap_parameters(f"{zn} {e}").strip()
+        z = f"{zn} {e}".strip()
         if not is_file and o.master.date and o.master.date.startswith("Cancel") and "{{c|cancel" not in z.lower():
             z += " {{C|canceled}}"
         if (o.master.mode == "Minis" or o.master.template == "SWIA") and o.master.card:

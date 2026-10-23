@@ -3,7 +3,8 @@ from pywikibot import Page
 from typing import List, Tuple, Union, Dict, Optional, Set
 import re
 
-from c4de.common import sort_top_template, fix_redirects
+from c4de.common import fix_redirects
+from c4de.sources.cleanup import sort_top_template
 from c4de.sources.domain import FullListData, PageComponents, SectionLeaf, Item, SectionComponents
 
 NEW_APP_TEMPLATE = """{{IncompleteApp}}
@@ -357,7 +358,7 @@ def add_and_cleanup_sections(target: Page, results: PageComponents, sections: Di
         add_plot_summary(sections, results)
         add_sections_if_missing(sections, "Appearances", lines=NEW_APP_TEMPLATE)
 
-    elif results.infobox == "Audiobook" and not (listing and listing[0].extra):
+    elif results.infobox == "Audiobook" and not (listing and listing[0].from_extra):
         if "Plot Summary" not in sections:
             tx = detect_adaptation(sections, title, target.get(), appearances, sources)
             if tx:

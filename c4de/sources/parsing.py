@@ -750,6 +750,38 @@ def link_pattern(t):
     return r"^['\"]*\[\[" + prepare_title(t) + r"(\|.*?)?]][,'\"]*"
 
 
+def attempt_conversion(new_ref, page: Page, types, appearances: FullListData, sources: FullListData, remap: dict, canon: bool, log: bool):
+    z = re.search(r"^(<!--.*?)?['\"]*\[\[([^\n\[\]|]*?)(\|[^\n\[\]|]*?)?]]['\"]* ?(-|—|&.dash;) ?['\"]*\[\[(?!:File:)([^\n\[\]|]*?)(\|[^\n\[\]|]*?)?]]['\"]* ?((<small>\(|\{\{[Cc]\|)[Rr]eprinted.*?(}}|\)</small>))?", new_ref)
+    if not z:
+        return new_ref
+
+    attempt1 = extract_item("{{StoryCite|story=" + z.group(2) + "|book=" + z.group(5) + "}}", False, "reference", types)
+    attempt2 = extract_item("{{StoryCite|book=" + z.group(2) + "|story=" + z.group(5) + "}}", False, "reference", types)
+    o1 = determine_id_for_item(attempt1, page, appearances.unique, appearances.urls, appearances.target, sources.unique,
+                               sources.urls, sources.target, remap, canon, log)
+    o2 = determine_id_for_item(attempt2, page, appearances.unique, appearances.urls, appearances.target, sources.unique,
+                               sources.urls, sources.target, remap, canon, log)
+    found = None
+    if o1 and o2:
+        if o1.master.target == z.group(2) and o1.master.parent == z.group(5):
+            found = o1
+        elif o2.master.target == z.group(5) and o2.master.parent == z.group(2):
+            found = o1
+        elif o1.master.from_extra and not o2.master.from_extra:
+            found = o2
+        elif o2.master.from_extra and not o1.master.from_extra:
+            found = o1
+
+    elif o1 and not o1.master.from_extra:
+        found = o1
+    elif o2 and not o2.master.from_extra:
+        found = o2
+
+    if found:
+        return new_ref.replace(z.group(0), found.master.original)
+    return new_ref
+
+
 def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearances: FullListData, sources: FullListData,
                      remap: dict, disambigs: dict, redirects, canon: bool, media: bool, log: bool):
     try:
@@ -757,6 +789,8 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
         new_ref = re.sub(r"\|set=(.*?) \(.*?\)\|(sformatt?e?d?|stext)=.*?\|", "|set=\\1|", new_ref)
         new_ref = new_ref.replace(" {{Un}}", "")
         new_ref = convert_issue_to_template(new_ref).replace("{{=}}", "=")
+        new_ref = attempt_conversion(new_ref, page, types, appearances, sources, remap, canon, log)
+
         links = re.findall(r"(['\"]*\[\[(?!([Ww]:c:|[Ww]ikipedia:)).*?(\|.*?)?]]['\"]*)", new_ref)
         templates = re.findall(r"(\{\{[^{}\n]+}})", new_ref)
         templates += re.findall(r"(\{\{[^{}\n]+\{\{[^{}\n]+}}[^{}\n]+}})", new_ref)
