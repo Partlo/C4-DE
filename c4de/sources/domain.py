@@ -27,11 +27,11 @@ class Item:
 
     def __init__(self, original: str, mode: str, is_app: bool, *, invalid=False, target: str = None, text: str = None,
                  parent: str = None, template: str = None, url: str = None, issue: str = None, subset: str = None,
-                 card: str = None, special=None, protected_format=False, format_text: str = None, no_issue=False, ref_magazine=False,
-                 full_url: str = None, publisher_listing=False, check_both=False, date="", archivedate="", issue2=None,
-                 alternate_url=None, special_url=None):
+                 card: str = None, special=None, protected_format=False, format_text: str = None, no_issue=False,
+                 ref_magazine=False, issue2=None, publisher_listing=False, date="", archivedate="",
+                 check_both=False, full_url: str = None, alternate_url=None, special_url=None):
         self.master_page = None
-        self.mode = "General" if mode == "TV" else mode
+        self.mode = "General" if (mode == "TV" or mode == "Magazine") else mode
         self.sort_mode = SORT_MODES.get(self.mode, 5)
         self.invalid = invalid
         self.original = self.strip(original)
@@ -59,6 +59,7 @@ class Item:
         # media-type flags
         self.is_appearance = is_app
         self.ref_magazine = ref_magazine
+        self.magazine = mode == "Magazine"
         self.tv = mode == "TV"
         self.is_abridged = False
         self.is_audiobook = False
@@ -132,8 +133,13 @@ class Item:
         return ((self.canon_index if canon else self.legends_index) or self.index) or 100000
 
     def card_sort_text(self):
-        if self.card and "#" in self.card:
-            return re.sub(r"#([0-9])([):])", "#0\\1\\2", self.card.replace("''", "").replace('"', ''))
+        if self.card and ("-" in self.card or "#" in self.card):
+            cx = self.card.replace("''", "").replace('"', '')
+            for x in re.findall(r"((^[A-Z][A-Z]?[A-Z]?-)([0-9]+)): ", cx):
+                cx = cx.replace(x[0], x[1] + str.zfill(x[2], 3))
+            for x in re.findall(r"(#([0-9])([):]))", cx):
+                cx = cx.replace(x[0], "#" + str.zfill(x[1], 3) + x[2])
+            return cx
         elif self.card:
             return self.card.replace("''", "").replace('"', '')
         else:
@@ -242,6 +248,18 @@ class ItemId:
         elif master.template == "SWArchive" or master.template == "SW":
             if current.url and "_picview" in current.url:
                 self.replace_references = False
+
+    def set_index(self, i):
+        self.master.index = i
+        self.current.index = i
+
+    def set_canon_index(self, i):
+        self.master.canon_index = i
+        self.current.canon_index = i
+
+    def set_legends_index(self, i):
+        self.master.legends_index = i
+        self.current.legends_index = i
 
     def fix_fc_date(self, canon):
         if any(x.template == "ForceCollection" or x.target == "Star Wars: Force Collection" for x in [self.master, self.current]):

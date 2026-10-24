@@ -291,8 +291,8 @@ def load_source_lists(site, log, include_web=True):
             x = re.search(r"\*((?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? )?(?P<t>{{.*?)( {{C\|1?=?(original|alternate): (?P<a>.*?)}})?$", line)
             if x:
                 i += 1
-                data.append({"index": 0, "page": f"Web/{template}", "date": date, "item": x.group("t"),
-                             "extraDate": x.group("d"), "ref": x.group("r"), "alternate": x.group('a')})
+                data.append({"index": 0, "page": f"Web/{template}", "date": "2006-04-01" if "DB|updates|401/" in x.group("t") else date,
+                             "item": x.group("t"), "extraDate": x.group("d"), "ref": x.group("r"), "alternate": x.group('a')})
             else:
                 print(f"{p.title()}: Cannot parse line: {line}")
         if log:

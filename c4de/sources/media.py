@@ -681,6 +681,8 @@ def prepare_title_format(infobox: str, title: str, text: str, appearances: FullL
     fmt = "<b>" + re.sub(r" \(.*?\)$", "", fmt).replace("#", "<n>") + "<b>"
     if fmt.startswith('<b>"') and fmt.endswith('"<b>'):
         fmt = fmt.replace('<b>"', '<q><b>').replace('"<b>', '<b><q>')
+    elif "novella" in text and re.search("Category:([A-z ]+ )?e?[Nn]ovellas", text):
+        fmt = fmt
     elif infobox in QUOTES and not skip and not (title.startswith('"') and title.endswith('"')) \
             and not (fmt.startswith('"') and fmt.endswith('"')):
         fmt = "<q>" + fmt + "<q>"

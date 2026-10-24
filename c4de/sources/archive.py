@@ -462,10 +462,20 @@ def do_work(site, types=None):
                 data[t][k] = y
 
 
-def is_old_or_not_in_archive(original, x, archive):
+def prep_archive_value_for_comparison(s):
+    return "|".join(sorted(re.sub(r"\|archive[a-z]+=", "|", s).split("|")))
+
+
+def is_old_or_not_in_archive(template, original, x, archive):
     if "oldversion=" in original:
         return True
     if x.lower() in archive:
+        if f"={archive[x.lower()]}" not in original:
+            ax = re.split(r"\|archive[a-z]+=", original, maxsplit=1)[-1].rsplit("}}", 1)[0].split("|quote=")[0]
+            ax = prep_archive_value_for_comparison(ax)
+            rx = prep_archive_value_for_comparison(archive[x.lower()])
+            if ax != rx and ax not in rx:
+                print(f"{template}: (Found) {ax} --> {rx} (Expected)\t[{x}]")
         return False
     if "http" in x:
         z = x.lower().replace("http://", "").replace("https://", "").replace("www.", "")
@@ -505,6 +515,7 @@ def clean_archive_usages(page: Page, text, archive_data: dict, redo=False) -> Tu
         return text, archive_data
 
     text = text.replace("\n|archivedate=", "|archivedate=").replace("\n|archiveurl=", "|archiveurl=").replace("\n|archivefile", "|archivefile")
+    text = re.sub(r"\|(url|username)=/([^\n|{}[\]]+)/?(\|.*?)?}}", "|\\1=\\2\\3}}", text)
     text = re.sub(r"(\|quote=[^|{}\n]+?)\n", "\\1<br />", text)
     text = re.sub(r"(\|quote=[^|{}\n]+?)\n", "\\1<br />", text)
     text = re.sub(r"(\|quote=[^|{}\n]+?)\n", "\\1<br />", text)
@@ -527,11 +538,11 @@ def clean_archive_usages(page: Page, text, archive_data: dict, redo=False) -> Tu
         for c in chunks:
             if archive and t == "Rebelscum":
                 for x in re.findall(r"(\{\{" + t + r"\|(.*?\|)?(url|id|a?l?t?link|video)=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if is_old_or_not_in_archive(x[0], x[3], archive) or x[3].lower() in YEARLY:
+                    if is_old_or_not_in_archive(t, x[0], x[3], archive) or x[3].lower() in YEARLY:
                         continue
                     text = text.replace(x[5], "")
                 for x in re.findall(r"(\{\{KennerCite\|(.*?\|)?link=(h?t?t?.*?rebelscum\.com/)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?\|archive(date|url|file)=([^\n{}|]+?) ?)(\|[^\n{}]*?)?}})", c):
-                    if is_old_or_not_in_archive(x[0], x[3], archive):
+                    if is_old_or_not_in_archive(t, x[0], x[3], archive):
                         continue
                     text = text.replace(x[5], "").replace(f"link={x[2]}{x[3]}", f"link={x[3]}")
                 for x in re.findall(r"(\{\{[A-z0-9 _]+\|(.*?\|)?(url|a?l?t?link)=([^\n{}|]*?rebelscum[^\n{}|]*?)/?(\|[^\n{}]*?)?( ?\|archive(date|url|file)=[^\n{}|]*? ?)(\|[^\n{}]*?)?}})", c):
@@ -552,35 +563,35 @@ def clean_archive_usages(page: Page, text, archive_data: dict, redo=False) -> Tu
                     blogs.append((x[0], f"{x[2]}.{tx.lower()}.com", x[4]))
 
                 for o1, o2, o3 in blogs:
-                    if is_old_or_not_in_archive(o1, o2, archive):
+                    if is_old_or_not_in_archive(t, o1, o2, archive):
                         continue
                     text = text.replace(o3, "")
             elif archive and t == "Twitch":
                 for x in re.findall(r"(\{\{" + t + r"\|video=(videos/)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if is_old_or_not_in_archive(x[0], f"videos/{x[2]}", archive):
+                    if is_old_or_not_in_archive(t, x[0], f"videos/{x[2]}", archive):
                         continue
                     text = text.replace(x[4], "")
                 for x in re.findall(r"(\{\{" + t + r"\|url=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if is_old_or_not_in_archive(x[0], x[1], archive):
+                    if is_old_or_not_in_archive(t, x[0], x[1], archive):
                         continue
                     text = text.replace(x[3], "")
                 for x in re.findall(r"(\{\{" + t + r"\|(channel=)([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if is_old_or_not_in_archive(x[0], x[2], archive) or "video=" in x[0]:
+                    if is_old_or_not_in_archive(t, x[0], x[2], archive) or "video=" in x[0]:
                         continue
                     text = text.replace(x[4], "")
             elif archive and "YouTube" in t:
                 for x in re.findall(r"(\{\{.*?\|(url|video)=([^\n{}|]*?)/?(&t=[0-9]+s)?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if is_old_or_not_in_archive(x[0], x[2], archive):
+                    if is_old_or_not_in_archive(t, x[0], x[2], archive):
                         continue
                     if x[3] and x[2].lower() in archive and f"{x[2]}{x[3]}".lower() not in archive:
                         text = text.replace(x[3], "")
                     text = text.replace(x[5], "").replace("video=videos/", "video=")
                 for x in re.findall(r"(\{\{.*?YouTube\|(channel=)([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if is_old_or_not_in_archive(x[0], x[2], archive) or "video=" in x[0]:
+                    if is_old_or_not_in_archive(t, x[0], x[2], archive) or "video=" in x[0]:
                         continue
                     text = text.replace(x[4], "")
                 for x in re.findall(r"(\{\{(.*?YouTube|ThisWeek|StarWarsShow|HighRepublicShow)\|(video=)?([^\n{}|]*?)/?(&t=[0-9]+s)?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if is_old_or_not_in_archive(x[0], x[3], archive):
+                    if is_old_or_not_in_archive(t, x[0], x[3], archive):
                         continue
                     if x[4] and x[3].lower() in archive and f"{x[3]}{x[4]}".lower() not in archive:
                         text = text.replace(x[4], "")
@@ -588,31 +599,31 @@ def clean_archive_usages(page: Page, text, archive_data: dict, redo=False) -> Tu
             elif archive and t == "SWE":
                 for x in re.findall(r"(\{\{" + t + r"\|(url=)?([^\n{}|]*?)/?\|([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]*?) ?)(\|[^\n{}]*?)? ?}})", c):
                     z = f"{x[2]}/{x[3]}"
-                    if is_old_or_not_in_archive(x[0], z, archive):
+                    if is_old_or_not_in_archive(t, x[0], z, archive):
                         continue
                     text = text.replace(x[5], "")
             elif archive and t == "Databank":
                 for x in re.findall(r"(\{\{" + t + r"\|(url=)?([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]*?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if is_old_or_not_in_archive(x[0], x[2], archive):
+                    if is_old_or_not_in_archive(t, x[0], x[2], archive):
                         continue
                     text = text.replace(x[4], "")
             elif archive:
                 for x in re.findall(r"(\{\{" + t + r"\|(.*?\|)?(subdomain=|username=)([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if is_old_or_not_in_archive(x[0], x[3], archive) or "|url=" in x[0]:
+                    if "|url=" in x[0] or is_old_or_not_in_archive(t, x[0], x[3], archive):
                         continue
                     text = text.replace(x[5], "")
                 for x in re.findall(r"(\{\{" + t + r"\|(.*?\|)?(url|full_url|id|a?l?t?link|video)=([^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                    if is_old_or_not_in_archive(x[0], x[3], archive) or x[3].lower() in YEARLY:
+                    if is_old_or_not_in_archive(t, x[0], x[3], archive) or x[3].lower() in YEARLY:
                         continue
                     text = text.replace(x[5], "")
                 if t in ["Bluesky", "Twitter", "Threads", "TikTok"]:
                     for x in re.findall(r"(\{\{" + t + r"\|[^\n{}|]*?\|((post|statuse?s?|video|photo)/[^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+?)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                        if is_old_or_not_in_archive(x[0], x[1], archive) or x[1].lower() in YEARLY:
+                        if is_old_or_not_in_archive(t, x[0], x[1], archive) or x[1].lower() in YEARLY:
                             continue
                         text = text.replace(x[4], "")
                 else:
                     for x in re.findall(r"(\{\{" + t + r"\|((?!(url|id|full_url|a?l?t?link)=)[^\n{}|]*?)/?(\|[^\n{}]*?)?( ?(\|archivedate=[0-9]+-[0-9-]+?)? ?\|archive(url|date|file[0-9]?)=([^\n{}|]+?) ?)(\|[^\n{}]*?)? ?}})", c):
-                        if is_old_or_not_in_archive(x[0], x[1], archive) or x[1].lower() in YEARLY:
+                        if is_old_or_not_in_archive(t, x[0], x[1], archive) or x[1].lower() in YEARLY:
                             continue
                         text = text.replace(x[4], "")
     return text, archive_data

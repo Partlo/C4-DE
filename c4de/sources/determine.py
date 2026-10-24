@@ -203,7 +203,20 @@ def match_issue_item(o: Item, data, site, by_target: ItemListDict, other_targets
         if follow_redirect(o, site, True):
             o.followed_redirect = True
             x = match_issue_target(o, by_target, other_targets, False)
-    if not x or (x and x.master.issue != o.issue and o.parent in by_target):
+    if x and x.master.master_page and not x.master.template and x.current.template and (x.master.target in by_target or x.master.target in other_targets):
+        print(f"Suspect issue match, retrying with target match {o.original} --> {x.master.original}")
+        y = match_target(o, by_target, other_targets, False)
+        if y and y.master.template == y.current.template and y.master.master_page:
+            print(f"Target match found: {y.current.original} --> {y.master.original}")
+            return y
+
+    if not x and o.template == "HomeVideoCite" and ("scene=" in o.original or "episode=" in o.original) and o.parent:
+        if by_target.get(o.parent):
+            return ItemId(o, by_target[o.parent][0], True, False, by_parent=True)
+        elif other_targets.get(o.parent):
+            return ItemId(o, other_targets[o.parent][0], True, True, by_parent=True)
+
+    if not x or (x and x.master.issue != o.issue and (o.parent in by_target or o.parent in other_targets)):
         targets = [(t, False) for t in get_possible_targets(o, by_target)]
         targets += [(t, True) for t in get_possible_targets(o, other_targets)]
         print(f"Found unrecognized {o.target} listing for {o.parent} --> {len(targets)} possible matches")

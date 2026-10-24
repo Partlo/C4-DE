@@ -88,7 +88,7 @@ def handle_ab_first(a: ItemId, audiobook_date):
     elif re.search(r"\{\{1stID\|[^\[{|]+}}", a.current.extra) and audiobook_date != a.master.date:
         a.current.extra = re.sub(r"(\{\{1stID\|[^\[{|]+)}}", "\\1|in book}}", a.current.extra)
 
-    if any(f"{{{{1st{x}|" in a.current.extra for x in ("", "m", "p", "c", "cm")):
+    if any(f"{{{{1st{x}|" in a.current.extra for x in ("", "m", "p", "c", "cm", "r", "mr")):
         z = re.search(r"\{\{1stc?[mp]*\|(.*?)}}", a.current.extra)
         t = remove_audiobook_from_1st(z.group(1), audiobook_date == a.master.date, a.master.target)
         if t:
@@ -186,11 +186,9 @@ def augment_appearances(new_apps: SectionItemIds, appearances: FullListData, col
         audiobooks += find_matching_parent_audiobook(a, app_targets, appearances)
         for b in audiobooks:
             if b.is_abridged:
-                # print(f"Skipping abridged audiobook: {b.target}")
                 if b.target not in app_targets:
                     abridged.append(b.target)
-            elif "(audio drama)" in b.target or (
-                    not collapse_audiobooks and (b.parent if b.parent else b.target) not in app_targets):
+            elif "(audio drama)" in b.target or (not collapse_audiobooks and (b.parent if b.parent else b.target) not in app_targets):
                 if not index:
                     print(f"Adding missing audiobook: {b.target} at {i}, {a.current.index}, {a.current.canon_index}, {a.current.legends_index}")
                 z = ItemId(b, b, False, False, False)
@@ -199,25 +197,20 @@ def augment_appearances(new_apps: SectionItemIds, appearances: FullListData, col
                     extra = re.sub(r"\{\{1stm.*?}}", "{{Mo}}", extra)
                 z.current.extra = re.sub(r" ?\{\{1st[A-z]*\|.*?}}", "", extra)
                 if a.master.index is not None:
-                    z.master.index = a.master.index + 0.1
+                    z.set_index(a.master.index + 0.1)
                     z.current.index = a.master.index + 0.1
 
                 if a.master.canon_index is not None:
-                    z.master.canon_index = a.master.canon_index + 0.1
-                    z.current.canon_index = a.master.canon_index + 0.1
+                    z.set_canon_index(a.master.canon_index + 0.1)
                 elif a.master.legends_index is not None:
-                    z.master.legends_index = a.master.legends_index + 0.1
-                    z.current.legends_index = a.master.legends_index + 0.1
+                    z.set_legends_index(a.master.canon_index + 0.1)
                 new_indexes.append((z, i))
             elif match_audiobook_name(a.master.target, b.target):
                 handle_ab_first(a, b.date)
-                continue
             elif a.master.ab and f"{{{{Ab|{b.target}" in a.master.ab:
                 handle_ab_first(a, b.date)
-                continue
             elif a.master.template == "StoryCite" and "|audiobook=1" in a.master.original:
                 handle_ab_first(a, b.date)
-                continue
             elif "(script)" not in b.target:
                 print(f"Unmatched audiobook {b.target} not found in {a.master.original}")
     o = 1
@@ -1267,7 +1260,7 @@ def compile_found(section: SectionItemIds, mode, canon):
             elif "|oldversion=" in o.master.original:
                 u += re.search(r"(\|oldversion=.*?)(\||}|$)", o.master.original).group(1)
 
-            if u == "TORweb|holonet/galactic history":
+            if u == "TORweb|holonet/galactic-history":
                 pass
             elif u in urls and "|oldversion=" in u:
                 print(f"Flagging duplicate old-version entry: {u}")

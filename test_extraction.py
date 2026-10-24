@@ -30,15 +30,11 @@ def remove_the(x):
 
 
 def flatten(x):
-    z = (x.replace("ncomplete list", "ncompleteList").replace("ncomplete_list", "ncompleteList")
-         .replace("–", "&ndash;").replace("—", "&mdash;").replace("theruses|title=", "theruses|")
-         .replace("|nolive=1", "").replace("|from=1", "").replace("Journal|", "JournalCite|").replace("{{IU_media", "{{InUniverseMedia")
-         .replace("FFGweb", "FantasyFlightGames").replace("AMGweb", "AtomicMassGames").replace("TOMCite", "GermanFanCite")
-         .replace("{{Scroll_box", "{{ScrollBox").replace("{{Scroll box", "{{ScrollBox").replace("{{Title_infobox", "{{TitlePosition")
-         .replace("{{Canon Imperial Era}}", "{{CanonImperialEraNav}}").replace("{{Canon_Imperial_Era}}", "{{CanonImperialEraNav}}")
-         .replace("{{Republic Era}}", "{{RepublicEraNav}}").replace("{{Republic_Era}}", "{{RepublicEraNav}}")
-         .replace("{{New Republic Era}}", "{{NewRepublicEraNav}}").replace("{{New_Republic_Era}}", "{{NewRepublicEraNav}}")
-         .replace("'' unabridged audiobook]]", "'' audiobook]]").replace("'' abridged audiobook]]", "'' audiobook]]")
+    z = (x.replace("–", "&ndash;").replace("—", "&mdash;").replace("theruses|title=", "theruses|")
+         .replace("|nolive=1", "").replace("|from=1", "").replace("|notoc=1", "")
+         .replace("{{Scroll_box", "{{ScrollBox").replace("{{Scroll box", "{{ScrollBox")
+         .replace("set=Star Wars: Imperial Assault Core Set|text=Core Set", "set=Core Set")
+         .replace("set=Star Wars: Imperial Assault Core Set", "set=Core Set")
          .replace("=Collections=", "=Collected in=").replace("]]\n{{RelatedCategories", "]]\n\n{{RelatedCategories"))
     z = re.sub(r"(\{\{[A-Z][a-z]+)[ _]([A-z])([A-z _]+)([ _]?Nav)?(\n|}})", lambda a: a.group(1) + a.group(2).upper() + a.group(3) + a.group(5), z)
     z = re.sub(r"(\{\{[A-Z][a-z]+)[ _]([A-z])([A-z _]+)([ _]?Nav)?(\n|}})", lambda a: a.group(1) + a.group(2).upper() + a.group(3) + a.group(5), z)
@@ -49,15 +45,9 @@ def prep(text, old_text):
     z1 = re.sub(r"(\|[A-z _0-9]+=.*?(\n.+?)?)}}(\n((The |A )?'''|\{\{Quote))", "\\1\n}}\\3",
                 re.sub(r"(\|.*?=)}}\n", "\\1\n}}\n", text.replace("{{!}}", "|")))
     z2 = re.sub(r"(\|[A-z _0-9]+=.*?(\n.+?)?)}}(\n((The |A )?'''|\{\{Quote))", "\\1\n}}\\3",
-                re.sub(r"(\|.*?=)}}\n", "\\1\n}}F",
-                       re.sub(r"(\|book=[^\n}]*?)(\|story=[^\n}]*?)(\|.*?)?}}", "\\2\\1\\3}}",
-                              old_text.replace("text=SWCC 2022", "text=SWCA 2022").replace("{{!}}", "|"))))
+                re.sub(r"(\|.*?=)}}\n", "\\1\n}}\n", old_text.replace("{{!}}", "|")))
+    z2 = re.sub(r"(\|book=[^\n}]*?)(\|story=[^\n}]*?)(\|.*?)?}}", "\\2\\1\\3}}", z2)
     z2 = re.sub(r"(\{\{1st.*?\|\[\[(.*?) \(.*?audiobook\)\|)''\\2'' (.*?audiobook)", "\\1\\3", z2)
-
-    for ix in re.findall(r"((\{\{(BuildFalconCite|BuildR2Cite|BuildXWingCite|BustCollectionCite|DarthVaderCite|FalconCite|FigurineCite|HelmetCollectionCite|ShipsandVehiclesCite|StarshipsVehiclesCite)\|S?[0-9]+\|[^|\[{}]+?)(\|((?!reprint).)*?)}})", text):
-        text = text.replace(ix[0], ix[1] + "}}")
-        if ix[1] + "}}" in old_text:
-            z1 = z1.replace(ix[0], ix[1] + "}}")
     return text, z1, z2
 
 
@@ -189,7 +179,7 @@ def analyze(*args, to_save):
             old_text = f"{before}"
 
             old_revision = None
-            if redo and redo >= page.title(with_ns=False): #and "audiobook" in old_text:
+            if redo and redo >= page.title(with_ns=False):
                 for r in page.revisions(total=10, content=True):
                     old_revision = r['text']
                     if r['timestamp'] < since or (r['user'] != 'C4-DE Bot'):
@@ -243,10 +233,8 @@ def analyze(*args, to_save):
                 to_save.append(page.title())
                 continue
 
-            # showDiff(old_text, text, context=1)
-            z1 = re.sub(r"\|stext=.*?(\|.*?)?}}", "\\1}}", z1).replace("Journal|", "JournalCite|").replace("=Collections=", "=Collected in=") + "\n"
-            z2 = re.sub(r"\|stext=.*?(\|.*?)?}}", "\\1}}", z2).replace("Journal|", "JournalCite|").replace("=Collections=", "=Collected in=") + "\n"
-
+            z1 = z1 + "\n"
+            z2 = z2 + "\n"
             if include_date:
                 showDiff(z2, z1, context=1)
             else:
@@ -314,7 +302,9 @@ if __name__ == "__main__":
     to_save = []
     try:
         analyze(sys.argv, to_save=to_save)
-    except KeyboardInterrupt:
+    except KeyboardInterrupt as e:
+        traceback.print_exc()
+        print(e)
         if to_save:
             with codecs.open(f"{PROJECT_DIR}/c4de/protocols/review.txt", mode="a", encoding="utf-8") as f:
                 f.writelines("\n".join(to_save))

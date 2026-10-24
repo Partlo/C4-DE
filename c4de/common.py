@@ -308,7 +308,7 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
                     text = re.sub(r"\[\[" + x + r"(\|.*?)]](s)?", f"[[{t}\\1\\2]]", text)
             if "/" not in r:
                 try:
-                    text = re.sub(r"(\{\{(?!(WP|1stID|Vision|EncyclopediaCite))[A-Za-z0-9]+\|)" + x + "}}", "\\1    " + t + "}}", text).replace("    ", "")
+                    text = re.sub(r"(\{\{(?!(WP|1stID|Vision|EncyclopediaCite|Otheruses))[A-Za-z0-9]+\|)" + x + "}}", "\\1    " + t + "}}", text).replace("    ", "")
                 except Exception as e:
                     print(e, x, t)
             if r.split(" (")[0] != t.split(" (")[0]:

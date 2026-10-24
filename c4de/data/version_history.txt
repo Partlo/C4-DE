@@ -283,3 +283,7 @@
 **Exempted collections from SeriesListing flagging on real-world person pages (no I'm not building a RWP sweep)
 **Unified handling of MultipleIssues; previously there were two inconsistent implementations overlapping and eating stuff
 **Fixed RepeatedRef flagging, and replacements of VisualEditor unnamed/duplicate references
+*'''4.8.3''': October 24, 2026
+**Further cleanup of legacy logic
+**Enabled replacement for short stories/episodes/etc. in references to replace italicized links instead of quote-enclosed
+**Optimized ref replacement logic to eliminate stubborn decade-old pipelinks

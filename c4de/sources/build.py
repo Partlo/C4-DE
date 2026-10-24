@@ -63,7 +63,7 @@ def build_subpage_and_section(section: SectionComponents, items: FinishedSection
     if log and items.text:
         print(f"Creating {items.name} section with {items.rows} / {len(items.text.splitlines())} items")
     elif not items.text:
-        return
+        return "", "", False
 
     subpage_pieces = [items.name, items.text]
     important_items = []

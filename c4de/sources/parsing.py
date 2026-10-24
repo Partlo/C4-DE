@@ -38,7 +38,7 @@ MASTER_STRUCTURE = {
 }
 
 DO_NOT_SPLIT = ["TFU", "ExclusiveTrailerCite", "CelebrationTrailer", "SliceRegion", "GalaxyMapHyperlanes"]
-TEMPLATE_SKIPS = ["'}}", "'s}}" , "Blogspot", "Cite", "PageNumber", "UnlinkedRef", "C|", "SWG", "TORcite", "TCWA", "SliceRegion", "GalaxyMapHyperlanes"]
+TEMPLATE_SKIPS = ["'}}", "'s}}", "Blogspot", "Cite", "PageNumber", "UnlinkedRef", "C|", "SWG", "TORcite", "TCWA", "SliceRegion", "GalaxyMapHyperlanes", "Planetnamia", "Battlenamia"]
 
 
 def is_number(d):
@@ -72,14 +72,21 @@ def check_format_text(o: ItemId, x: Item):
 
 
 def _clean_simple(t):
-    return t.replace("''", "").strip().lower().replace("novelization", "novel")
+    return t.replace("''", "").strip().lower().replace("novelization", "novel").replace("comic series", "comics")
+
+
+def _full_clean(t, y):
+    x = _clean_simple(t).replace(":", "").replace("(", "").replace(")", "")
+    z = _clean_simple(y).replace(":", "").replace("(", "").replace(")", "")
+    if x.startswith("star wars ") and not z.startswith("star wars "):
+        return x.replace("star wars ", "") in z
+    elif x.startswith("the ") and not z.startswith("the "):
+        return x.split("the ", maxsplit=1)[1] in z
+    return x in z
 
 
 def _check_format_text(t, y):
-    return t and y and "(" in t and (
-            _clean_simple(t.split("(")[0]) not in _clean_simple(y) and
-            _clean_simple(t.replace(":", "").replace("(", "").replace(")", "")) not in _clean_simple(y)
-    )
+    return t and y and "(" in t and (not _full_clean(t.split("(")[0], y) and not _full_clean(t, y))
 
 
 def fix_template_redirects(target: Page, manual: str = None):
@@ -599,7 +606,6 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
 
     while z.startswith("*") or z.startswith("#"):
         z = z[1:].strip()
-    z = re.sub(r"(\{\{InsiderCite\|[0-9]{2}\|)Ask Lobot.*?}}", "\\1Star Wars Q&A}}", z)
     if "SWGTCG" in s and "scenario" in z:
         z = re.sub(r"(\{\{SWGTCG.*?)}} \{\{C\|(.*?scenario)}}", "\\1|scenario=\\2}}", z)
     if "Wikipedia:" in z and " language" in z:
@@ -683,7 +689,7 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
             pass
         elif invalid:
             unknown.append(s)
-            other2.append(re.sub(r"^(\*(<!--.*?-->)?)?(.*?)$", "\\1{{UnknownListing}} \\3", s))
+            other2.append(re.sub(r"^(\*(<!--.*?-->)?)?( ?\{\{UnknownListing.*?}} ?)?(.*?)$", "\\1{{UnknownListing}} \\4", s))
         elif "audiobook" not in s and not attempt:
             unknown.append(s)
             other2.append(s)
@@ -782,6 +788,33 @@ def attempt_conversion(new_ref, page: Page, types, appearances: FullListData, so
     return new_ref
 
 
+STORY_TEMPLATES = ["StoryCite", "WEGCite", "LivingForce", "CWACite", "Tales"]
+
+
+def is_plain_short_story_link(o: ItemId, link: str, ref_length):
+    if not (o.master.magazine or o.master.tv or o.master.template in STORY_TEMPLATES):
+        return False
+    elif (ref_length - len(link)) < 5:
+        return False
+
+    z = link.replace("''", "").replace('"', "")
+    if " (" in o.master.target:
+        x, p = o.master.target.split(" (", 1)
+        if f"[[{x} ({p}|{x}]]" == z:
+            return True
+
+    expected = f"[[{o.master.target}]]"
+    if expected == z:
+        return True
+    elif link == f"''{expected}''":
+        return True
+    elif link == f'"{expected}"':
+        return False
+    elif link.startswith(f"[[{o.master.target}|''") and link.endswith("'']]"):
+        return True
+    return False
+
+
 def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearances: FullListData, sources: FullListData,
                      remap: dict, disambigs: dict, redirects, canon: bool, media: bool, log: bool):
     try:
@@ -802,14 +835,18 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
             x = extract_item(link[0], False, "reference", types)
             if x:
                 o = determine_id_for_item(x, page, appearances.unique, appearances.urls, appearances.target, sources.unique, sources.urls, sources.target, remap, canon, log)
-                if o and not o.use_original_text and o.replace_references:
+                if o and not o.use_original_text and o.replace_references and o.master.original != link[0]:
                     found.append(o)
-                    if o.master.template and not x.template and x.target and not re.search(link_pattern(x.target) + r"$", new_ref):
+                    if is_plain_short_story_link(o, link[0], len(ref)):
+                        simple_link = f'"[[' + re.sub(r"^(.*?)( \(.*?\))$", "\\1\\2|\\1", x.target) + ']]"'
+                        if simple_link != link[0]:
+                            new_links.append((link[0], simple_link))
+                    elif o.master.template and not x.template and x.target and not re.search(link_pattern(x.target) + r"$", new_ref):
                         if o.master.template != "Film" and re.sub(r"\[\[(.*?)( \(.*?\))]]", "[[\\1\\2|\\1]]", f'"[[{x.target}]]') not in new_ref:
                             print(f"Skipping {link[0]} due to extraneous text")
                     elif link[0].startswith('"') and link[0].endswith('"') and (len(ref) - len(link[0])) > 5:
-                        if o.master.template != "StoryCite" and o.master.template != "InsiderCite":
-                            print(f"Skipping quote-enclosed link {link[0]} (likely an episode name)")
+                        if o.master.template != "StoryCite" and o.master.mode != "TV" and o.master.mode != "Magazine":
+                            print(f"Skipping quote-enclosed link {link[0]} in longer reference (likely an episode name)")
                     elif "{{" in o.master.original and len(templates) > 0:
                         print(f"Skipping {link[0]} due to presence of other templates in ref note")
                     elif o.master.original.isnumeric():

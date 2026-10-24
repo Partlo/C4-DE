@@ -136,7 +136,7 @@ PREFIXES = {
     "Tales": "Star Wars Tales <x>",
     "IDWAdventuresCite-2017": "Star Wars Adventures (2017) <x>",
     "IDWAdventuresCite-2020": "Star Wars Adventures (2020) <x>",
-    "MandoAdventures": "Star Wars: The Mandalorian Adventures - ",
+    "MandoAdventures": "Star Wars: The Mandalorian Adventures - <x>",
     "VisionsFocus": "Star Wars Visions: Filmmaker Focus#<y>",
 }
 
@@ -244,7 +244,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     for i, (k, ix) in REFERENCE_MAGAZINES.items():
         if i.split('\\', 1)[0].lower() in s.lower():
             m = re.search(r"\{\{" + i + r"\|([0-9]+)(\|(.*?))?(\|(.*?))?}}", s)
-            mode = types.get(i, "General")
+            mode = "Magazine"
             zx = re.sub(r"'*?(\{\{(?!FactFile)[A-z0-9]+\|[0-9]+\|.*?)(\|.*?(\{\{'s?}})?.*?)?}}'*?", "\\1}}", s)
             if m:
                 target = k.replace("<x>", m.group(1))
@@ -271,6 +271,8 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     elif template in IGNORE_TEMPLATES:
         print(f"Skipping ignored {mode} template: {template}: {z}")
         return None
+    elif template in types["Magazine"]:
+        mode = "Magazine"
 
     # # # Template-specific logic
     result = handle_special_template(template, s, z, mode, a, types)
@@ -317,7 +319,7 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
         x = parse_card_line(s, z, template, mode, a)
         if x:
             return x
-    elif template in types.get("Magazine", []):
+    elif mode == "Magazine":
         m = re.search(r"\{\{([^A-z0-9 _]+)\|([0-9]+)}}", s)
         if m:
             return Item(z, mode, a, target=f"{types['Magazine'][template]} {m.group(1)}", template=template)
@@ -645,7 +647,7 @@ def extract_fact_file(z: str, s: str, a: bool):
     x = re.search(r"\{\{(FactFile(201[34])?)\|([0-9]+)\|?}}", s)
     if x:
         issue = decide_ff_issue(x.group(2), x.group(3))
-        return Item(z, "General", a, template=x.group(1), target=f"The Official Star Wars Fact File {issue}")
+        return Item(z, "Magazine", a, template=x.group(1), target=f"The Official Star Wars Fact File {issue}")
 
     x = re.search(r"(FactFile(201[34])?)\|(?P<i>[0-9]+)\|(German Edition - )?(?P<p>(?P<a>[0-9]* ?[A-Z]+)[ -]?(?P<n>[0-9]+) ?(-|–|—|&mdash;|&ndash;)? ?\7?(?P<m>[0-9]*)?)(?P<s>[|,])? ?(?P<t>.*?)$", s)
     if x:
@@ -660,7 +662,7 @@ def extract_fact_file(z: str, s: str, a: bool):
         if y:
             num3, num4 = y.group(1), y.group(2)
             text = text.replace(y.group(0), "")
-        item = Item(z, "General", a, target=f"The Official Star Wars Fact File {issue}", template=x.group(1),
+        item = Item(z, "Magazine", a, target=f"The Official Star Wars Fact File {issue}", template=x.group(1),
                     issue=issue, text=f"{abbr} {num1} {text.split('}')[0]}")
         item.ff_data = {"page": page, "abbr": abbr, "num1": num1, "num2": num2, "num3": num3, "num4": num4, "text": text, "legacy": x.group('s') == ","}
         return item
@@ -668,7 +670,7 @@ def extract_fact_file(z: str, s: str, a: bool):
     x = re.search(r"(FactFile(201[34])?)\|([0-9]+)\|'*(.*?)'*}}", s)
     if x:
         issue = decide_ff_issue(x.group(2), x.group(3))
-        item = Item(z, "General", a, target=f"The Official Star Wars Fact File {issue}", template=x.group(1),
+        item = Item(z, "Magazine", a, target=f"The Official Star Wars Fact File {issue}", template=x.group(1),
                     issue=issue, text=x.group(4))
         item.ff_data = {"page": None, "abbr": None, "num1": None, "num2": None, "num3": None, "num4": None, "text": x.group(4), "legacy": True}
         return item
