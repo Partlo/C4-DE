@@ -163,6 +163,14 @@ SIMPLE_REPLACEMENTS = [
 ]
 
 
+def is_nav_or_date_template(template, types: dict):
+    return types.get(template.lower().replace("_", " ")) in IGNORED_MODES
+
+
+def is_nav_template(template, types: dict):
+    return types.get(template.lower().replace("_", " ")) == "Nav"
+
+
 def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     """ Extracts an Item object from the given source/appearance line, parsing out the target article and all other
     relevant information.

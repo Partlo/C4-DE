@@ -15,7 +15,8 @@ from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, Sect
 from c4de.sources.extract import extract_item
 from c4de.sources.index import create_index
 from c4de.sources.media import MEDIA_STRUCTURE, prepare_media_infobox_and_intro
-from c4de.sources.parsing import build_initial_components, build_page_sections, MASTER_STRUCTURE, build_card_text
+from c4de.sources.parsing import build_initial_components, build_page_sections, MASTER_STRUCTURE
+from c4de.sources.reference import build_card_text
 
 STATUS = ["Category:Wookieepedia Featured articles", "Category:Wookieepedia Good articles", "Category:Wookieepedia Comprehensive articles"]
 

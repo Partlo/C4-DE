@@ -18,6 +18,14 @@ PRODUCT_CHECKS = {
 COMMERCIAL_TO_BE_REMOVED = ["Amazon", "Previews"]
 
 
+def is_official_link(o: Item):
+    if o:
+        return o.template == "OfficialSite" or o.mode == "Official" or (
+                o.mode in ["Basic", "External"] and o.original and "official" in o.original.lower() and
+                re.search(r"official .*?(site|home ?page)", o.original.lower()))
+    return False
+
+
 def prepare_official_link(o: Item):
     if o.full_url:
         ad = f"|archivedate={o.archivedate}" if o.archivedate else ""

@@ -13,7 +13,6 @@ from c4de.common import build_redirects, fix_redirects, log as _log
 
 
 SUBPAGES = [
-    # "Canon/General", "Legends/General/1977-2000", "Legends/General/2000s", "Legends/General/2010s",
     "Canon/General", "Legends/General",
     "Canon/Toys", "Legends/Toys", "Canon/RefMagazine", "Legends/RefMagazine", "Canon/CardSets", "Legends/CardSets",
     "Canon/Miniatures", "Legends/Miniatures", "Reprint", "Soundtracks", "CardTrader", "LEGO"
@@ -27,58 +26,11 @@ ISSUE_REPRINTS = ["A Certain Point of View", "Classic Moment", "Behind the Magic
                   "My Star Wars", "Retro", "Red Five", "Rogues Gallery",
                   "Set Piece", "Second Trooper", "The Star Wars Archive", "The Wonder Column"]
 
-EXPANSION = {
-    "Star Wars Technical Journal": [
-        "Star Wars Technical Journal of the Planet Tatooine", "Star Wars Technical Journal of the Imperial Forces", "Star Wars Technical Journal of the Rebel Forces"
-    ],
-    "The Haunted Village (film)": [
-        "The Haunted Village", "The Cries of the Trees", "Rampage of the Phlogs", "Sunstar vs. Shadowstone"
-    ],
-    "The Pirates and the Prince": [
-        "The Lost Prince", "The New King", "The Pirates of Tarnoonga", "The Revenge of Kybo Ren"
-    ],
-    "Treasure of the Hidden Planet": [
-        "Tail of the Roon Comets", "The Roon Games", "Across the Roon Sea", "The Frozen Citadel"
-    ],
-    "The Clone Wars: Grievous Attacks!": [
-        "Rookies (short story)", "Downfall of a Droid (short story)", "Lair of Grievous (short story)"
-    ],
-    "Path of the Jedi: A Star Wars Rebels Cinestory Comic": [
-        "Call to Action (comic story)", "Empire Day (comic story)", "Gathering Forces (comic story)",
-        "Path of the Jedi (comic story)", "Vision of Hope (comic story)"
-    ],
-    "Maul: A Star Wars Rebels Cinestory Comic": [
-        "Twilight of the Apprentice (comic story)", "The Holocrons of Fate (comic story)", "Visions & Voices (comic story)", "Twin Suns (comic story)"
-    ],
-    "Young Jedi Adventures: My First Comic Reader Level 1": [
-        "¡Que Empiece el Entrenamiento!", "Una Nueva Perspectiva", "Pord Recibe una Lección",
-        "La Visita del Maestro Yoda", "Entrenando Con Remotos", "La Carrera Contra Taborr"
-    ]
-}
 
-MANGA = {
-    "Star Wars Rebels (webcomic)": {
-        "Star Wars Rebels, Vol. 1": ["Star Wars Rebels: Spark of Rebellion"],
-        "Star Wars Rebels, Vol. 2": ["Rise of the Old Masters", "Empire Day (episode)", "Gathering Forces"],
-        "Star Wars Rebels, Vol. 3": ["Path of the Jedi", "Call to Action", "Rebel Resolve", "Fire Across the Galaxy"]
-    },
-    "Star Wars: The Mandalorian: The Manga": {
-        "The Mandalorian: The Manga, Vol. 1": ["Chapter 1: The Mandalorian"],
-        "The Mandalorian: The Manga, Vol. 2": ["Chapter 2: The Child", "Chapter 3: The Sin"],
-        "The Mandalorian: The Manga, Vol. 3": ["Chapter 4: Sanctuary", "Chapter 5: The Gunslinger", "Chapter 6: The Prisoner"],
-        "The Mandalorian: The Manga, Vol. 4": ["Chapter 6: The Prisoner", "Chapter 7: The Reckoning", "Chapter 8: Redemption"],
-    }
-}
-
-
-def list_templates(site, cat, data, template_type, recurse=False, web=False):
+def list_templates(site, cat, data, template_type, recurse=False):
     for p in Category(site, cat).articles(recurse=recurse):
         if "/" not in p.title() and p.title(with_ns=False).lower() not in data:
             data[p.title(with_ns=False).lower()] = template_type
-            # if web:
-            #     x = re.search(r"on \[\[(.*?)(\|.*?)?]].*?\[.*?official w?e?b?site",  p.get())
-            #     if x:
-            #         data["WebsiteNames"][p.title(with_ns=False).lower()] = x.group(1)
 
 
 def build_template_types(site):
@@ -86,8 +38,8 @@ def build_template_types(site):
     results = {"db": "DB", "databank": "DB", "swe": "DB", "swboards": "External"}
 
     list_templates(site, "Category:StarWars.com citation templates", results, "Web")
-    list_templates(site, "Category:Internet citation templates", results, "Web", web=True)
-    list_templates(site, "Category:Publisher internet citation templates", results, "Publisher", web=True)
+    list_templates(site, "Category:Internet citation templates", results, "Web")
+    list_templates(site, "Category:Publisher internet citation templates", results, "Publisher")
     list_templates(site, "Category:Commercial and product listing internet citation templates", results, "Commercial")
     list_templates(site, "Category:Internet citation templates for use in External Links", results, "External")
     list_templates(site, "Category:Social media citation templates", results, "Social")
@@ -371,23 +323,18 @@ def store_data(x: Item, i: dict, old: str, extra: str, parenthetical: str, alter
 
 
 def check_for_both_continuities(x: Item, targets: ItemListDict, both_continuities: set):
-    # if x.target not in targets:
-    #     targets[x.target] = []
     targets[x.target].append(x)
     if len(targets[x.target]) > 1:
         d = set(i.canon for i in targets[x.target])
         if True in d and False in d:
             both_continuities.add(x.target)
             x.both_continuities = True
-            # TODO: is this still necessary?
 
 
 def record_reprints(reprints, x: Item):
     if x.target.replace(" (department)", "") in ISSUE_REPRINTS:
         if "Caroline" not in (x.format_text or ""):
             print(f"{x.parent} {x.target} -> {x.format_text} fell through logic")
-        # if f"{x.target.replace(' (department)', '')}|{x.issue}" not in reprints:
-        #     reprints[f"{x.target.replace(' (department)', '')}|{x.issue}"] = []
         reprints[f"{x.target.replace(' (department)', '')}|{x.issue}"].append(x)
     elif x.target and x.target not in reprints:
         reprints[x.target] = [x]
@@ -408,10 +355,7 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
         x = re.search(r"\[['\"](.*?)['\"]] ?= ?\"('*)?\[\[(.*?)]]('*)?\"", ln)
         if x and "|Core Set" not in ln:
             link, _, fmt = x.group(3).partition("|")
-            if fmt:
-                set_formatting[link] = fmt
-            else:
-                set_formatting[link] = x.group(2) + link + x.group(4)
+            set_formatting[link] = fmt if fmt else (x.group(2) + link + x.group(4))
 
     italic_templates = []
     for z in re.findall(r"([ \t]+([A-z]+) = \{[ \t]*((\n.*?)+?)\n[ \t]+},)",  Page(site, "Module:CardGameCite/data").get()):
@@ -432,7 +376,6 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
     target_sources = defaultdict(list)
     both_continuities = set()
     today = datetime.now().strftime("%Y-%m-%d")
-    ff_data = defaultdict(list)
     reprints = defaultdict(list)
     card_suffixes = defaultdict(dict)
     by_parent = defaultdict(list)
@@ -467,17 +410,11 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
                 x.extra_date = i.get('extraDate')
 
                 if x.parent:
-                    # if x.parent not in by_parent:
-                    #     by_parent[x.parent] = []
                     by_parent[x.parent].append(x)
                 for y in [x.url, x.special_url, x.alternate_url, *x.alternate_urls]:
                     if y:
-                        # if y not in urls:
-                        #     urls[y] = []
                         urls[y].append(x)
                         if y != y.lower():
-                            # if y.lower() not in urls:
-                            #     urls[y.lower()] = [x]
                             urls[y.lower()].append(x)
 
                 if x.target in set_formatting:
@@ -497,15 +434,11 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
                     check_for_both_continuities(x, target_sources, both_continuities)
 
                 if x.ff_data:
-                    # if x.issue not in ff_data:
-                    #     ff_data[x.issue] = []
-                    ff_data[x.issue].append(x)
+                    target_sources[f"FFData|{x.issue}"].append(x)
 
                 if x.target and x.issue and f"{x.target.replace(' (department)', '')}|{x.issue}" in all_departments:
                     zx = x.target.replace(' (department)', '')
                     for v in all_departments[f"{zx}|{x.issue}"]:
-                        # if f"{zx}|{v}" in department_map:
-                        #     department_map[f"{zx}|{v}"] = []
                         department_map[f"{zx}|{v}"].append(x)
                 elif x.target and x.parent and is_reprint and f"{x.target.replace(' (department)', '')}|{x.parent}" in department_map:
                     zx = x.target.replace(' (department)', '')
@@ -515,8 +448,6 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
                         targets = tx or targets
 
                     if targets:
-                        # if f"{zx}|{targets[0].issue}" not in reprints:
-                        #     reprints[f"{zx}|{targets[0].issue}"] = []
                         reprints[f"{zx}|{targets[0].issue}"].append(x)
                         x.original_printing = targets[0]
 
@@ -528,8 +459,6 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
                 count += 1
         except Exception as e:
             print(f"{type(e)}: {e} -> {item}")
-    for k, v in ff_data.items():
-        target_sources[f"FFData|{k}"] = v
     for k, v in reprints.items():
         if k is None:
             print(k, v)
@@ -612,13 +541,9 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 full_appearances[x.full_id()] = x
                 unique_appearances[x.unique_id()] = x
                 if x.parent:
-                    # if x.parent not in by_parent:
-                    #     by_parent[x.parent] = []
                     by_parent[x.parent].append(x)
                 for y in [x.url, x.special, x.alternate_url, *x.alternate_urls]:
                     if y:
-                        # if y not in urls:
-                        #     urls[y] = []
                         urls[y].append(x)
                 if "Crossover" in i['page'] or "LEGO" in i['page']:
                     x.non_canon = True

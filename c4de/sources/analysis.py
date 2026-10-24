@@ -10,12 +10,13 @@ from c4de.dates import convert_date_str
 from c4de.sources.determine import determine_id_for_item
 from c4de.sources.domain import Item, ItemId, ItemIdListDict, ItemIdDict, FullListData, PageComponents, \
     AnalysisResults, SectionItemIds, FinishedSection, NewComponents, UnknownItems
-from c4de.sources.engine import AUDIOBOOK_MAPPING, MANGA, LIST_AT_START, LIST_AT_END, EXPANSION
-from c4de.sources.external import is_external_link, prepare_basic_url, prepare_official_link, determine_link_order, \
-    COMMERCIAL_TO_BE_REMOVED, is_official_product_page
+from c4de.sources.engine import AUDIOBOOK_MAPPING, LIST_AT_START, LIST_AT_END
+from c4de.sources.expansion import handle_expansion, VALID_COLLECTIONS
+from c4de.sources.external import is_external_link, prepare_basic_url, prepare_official_link, is_official_link, \
+    COMMERCIAL_TO_BE_REMOVED, determine_link_order, is_official_product_page
 from c4de.sources.extract import swap_parameters
-from c4de.sources.parsing import BY_INDEX, BY_DATE, UNCHANGED, is_official_link, build_card_text, \
-    build_initial_components, build_page_sections
+from c4de.sources.parsing import BY_INDEX, BY_DATE, UNCHANGED, build_initial_components, build_page_sections
+from c4de.sources.reference import build_card_text
 
 
 GROUP_IN_APPEARANCES = {
@@ -380,37 +381,6 @@ def _cards() -> ItemIdListDict:
     return defaultdict(list)
 
 
-def add_to_list(items, key, item):
-    if key not in items:
-        items[key] = []
-    items[key].append(item)
-
-
-TEMP_REMAP = {
-    "Empire Day (episode)": "Empire Day (comic story)",
-    "Gathering Forces": "Gathering Forces (comic story)",
-    "Path of the Jedi": "Path of the Jedi (comic story)",
-    "Vision of Hope": "Vision of Hope (comic story)",
-    "Call to Action": "Call to Action (comic story)",
-    "Rookies (episode)": "Rookies (short story)",
-    "Downfall of a Droid": "Downfall of a Droid (short story)",
-    "Duel of the Droids": "Downfall of a Droid (short story)",
-    "Lair of Grievous": "Lair of Grievous (short story)"
-}
-VALID_COLLECTIONS = ["MagazineArticle", "ComicStory", "ShortStory", "Adventure"]
-
-
-def expand_listing(target: str, o: Item, data: FullListData, expanded: int):
-    x = data.target[target][0].copy()
-    x.index = o.index
-    x.extra = o.extra
-    if expanded:
-        x.extra = re.sub(r"\{\{1stm.*?}}", "{{Mo}}", x.extra).strip()
-        x.extra = re.sub(r"\{\{1st.*?}}", "", x.extra).strip()
-    x.extra_date = o.extra_date
-    return ItemId(x, data.target[target][0], False)
-
-
 def handle_group_item(d: ItemId, o: Item, is_sources):
     if d and d.current.template in GROUP_IN_APPEARANCES:
         return not is_sources, d.master.target or d.master.parent
@@ -599,48 +569,6 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
             if x.current.target not in targets:
                 found.append(x)
     return SectionItemIds(name, found, wrong, non_canon, links, len(any_expanded) > 0 or other_extra, group_items, group_ids, wrong_group_items, wrong_group_ids)
-
-
-def handle_expansion(d: ItemId, o: Item, page: Page, page_links: list, data, already, any_expanded, unexpanded, other_extra):
-    if not d:
-        return False, unexpanded, other_extra
-
-    to_check = {}
-    if d.master.target and d.master.target in EXPANSION:
-        to_check = {d.master.target: EXPANSION[d.master.target]}
-    elif d.master.target and d.master.target.replace(" (trade paperback)", "") in MANGA:
-        to_check = MANGA[d.master.target.replace(" (trade paperback)", "")]
-
-    elif d.master.from_extra and not d.master.is_reprint and not d.master.non_canon and not d.master.collection_type:
-        other_extra += 1
-
-    should_skip = False
-    if to_check:
-        if not page_links:
-            for p in page.getReferences(namespaces=0):
-                if p.title() in TEMP_REMAP:
-                    if TEMP_REMAP[p.title()] not in page_links:
-                        page_links.append(TEMP_REMAP[p.title()])
-                page_links.append(p.title())
-
-        expanded, existing = 0, 0
-        for vol, parts in to_check.items():
-            if any(p in already for p in parts):
-                existing += 1
-            else:
-                for p in parts:
-                    if p in page_links:
-                        any_expanded.append(expand_listing(p, o, data, expanded))
-                        expanded += 1
-        if expanded or existing:
-            print(f"Expanded series/arc listing of {d.master.target} to {expanded} new / {existing} existing")
-            should_skip = True
-        else:
-            print(f"Unable to expand series/arc listing of {d.master.target} on {page.title()}")
-            unexpanded += 1
-            if d and d.master.target and d.master.target in EXPANSION:
-                should_skip = True
-    return should_skip, unexpanded, other_extra
 
 
 def handle_groups(groups: ItemIdListDict, data: FullListData, other: FullListData, found: List[ItemId],
