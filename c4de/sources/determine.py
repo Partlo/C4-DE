@@ -112,11 +112,11 @@ def determine_id_for_item(
             if alt:
                 return ItemId(o, alt[-1], False, other)
 
-    elif o.template == "CalendarCite":
-        for other, d in data_sets:
-            for s, x in d.items():
-                if x.target == o.target:
-                    return ItemId(o, x, True, other)
+    # elif o.template == "CalendarCite":
+    #     for other, d in data_sets:
+    #         for s, x in d.items():
+    #             if x.target == o.target:
+    #                 return ItemId(o, x, True, other)
 
     elif o.template and o.template.startswith("FactFile"):
         return match_fact_file(o, by_target, other_targets)
@@ -802,7 +802,8 @@ def match_by_url(o: Item, url: str, data: ItemDict, urls: ItemListDict, replace_
 
     z = check_matches(o, ad, old_versions, new_versions, possible, partial_matches)
     if z:
-        print(f"URL {url} fell through exact URL matching ({len(urls.get(url, []))}): {o.original}")
+        if "|oldversion=" not in o.original:
+            print(f"URL {url} fell through exact URL matching ({len(urls.get(url, []))}): {o.original}")
         return z
 
     for k, d in data.items():
@@ -815,7 +816,8 @@ def match_by_url(o: Item, url: str, data: ItemDict, urls: ItemListDict, replace_
 
     z = check_matches(o, ad, old_versions, new_versions, possible, partial_matches)
     if z:
-        print(f"URL {url} fell through second exact URL matching ({len(urls.get(url, []))}): {o.original}")
+        if "|oldversion=" not in o.original:
+            print(f"URL {url} fell through second exact URL matching ({len(urls.get(url, []))}): {o.original}")
         return z
     return None
 

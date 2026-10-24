@@ -66,6 +66,8 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, infobox_log=T
     before = before.replace(r"\u202c", "")
     before = re.sub(r"(\{\{WebCite[^\n}]*?)\|title=(.*?}})", "\\1|text=\\2", before)
     before = before.replace("\n}}</ref>", "}}</ref>")
+    before = re.sub(r"(\{\{(BookCite).*?)\|date=", "\\1|BOOKDATE=", before)
+    before = re.sub(r"(\{\{(BookCite)[^}]*?)\n?\|date=", "\\1|BOOKDATE=", before)
     before = re.sub(r"(\{\{(SWGcite|TORcite).*?)\|type=", "\\1|TORTYPE=", before)
     before = re.sub(r"(\{\{(SWGcite|TORcite)[^}]*?)\n?\|type=", "\\1|TORTYPE=", before)
     before = re.sub(r"((\{\{Top(\|.*?)?}})(\n.*?)*?)\n\{\{Top}}", "\\1", before)    # Duplicate {{Top}}
@@ -112,6 +114,8 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, infobox_log=T
     before = re.sub(r"(\[\[[^|\[\]\n]+?\|[^|\[\]\n]+?) ?(\{\{C\|.*?}})]]", "\\1]] \\2", before)
     before = re.sub(r"(\{\{([A-z _0-9]+)\|.*?}}) (\{\{1st[a-z]*)\|\{\{\2.*?}}( \{.*?)?\n", "\\1 \\3}}\\4\n", before)
     before = re.sub(r" ?\{\{(1st[A-z]*|[Mm]o)}}</ref>", "</ref>", before)
+    before = re.sub(r"(\[\[[^\n[\]{}|]+\|[^\n[\]{}|]+)\{\{[Cc]\|(.*?)}}(.*?]])", "\\1(\\2)\\3", before)
+    before = re.sub(r"(\[\[[^\n[\]{}|]+\|[^\n[\]{}|]+)<small>(\(.*?\))</small>(.*?]])", "\\1\\2\\3", before)
     # missing newline between listings or templates
     before = re.sub(r"(\n\*[^\n]*?[\[{]+[^\n]*?[]}]+[^\n]*?)(\*[^\n]*?[\[{]+[^\n]*?[]}]+[^\n]*?\n)", "\\1\n\\2", before)
     before = re.sub(r"(\{\{Quote\|[^\n{}]+?(\{\{[^\n{}]+?}})?[^\n{}]+?}})(?!\n)", "\\1\n", before)
@@ -163,7 +167,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, infobox_log=T
     b3 = re.sub(r"\n?(\|(c-|l-)?(characters|organisms|droids|events|locations|organizations|species|vehicles|technology|miscellanea)=)\*", "\n\\1\n*", b3)
     before = f"{b1}{b2}{b3}"
 
-    before = re.sub(r"\[\[([^\n\[{|]+)\|(an?) ([^\n|\[{]+?)]]", "\\2 [[\\1|\\3]]", before)
+    before = re.sub(r"(an? )?\[\[([^\n\[{|]+)\|(an?) ([^\n|\[{]+?)]]", "\\3 [[\\2|\\4]]", before).replace(" a a ", " a ").replace(" an an ", " an ")
 
     # weird multi-link listings, legacy formatting from the 2000s
     before = re.sub(r"\*('*?)\[\[([^\n\]|{]*?)]]('*?) '*?\[\[(\2\([^\n\]{]*?)\|(.*?)]]'*", "*[[\\4|\\1\\2\\3 \\5]]", before)
@@ -175,6 +179,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, infobox_log=T
     before = re.sub(r"(\{\{([A-z_ ]+)\|(set=)?[^|=\n}]+?)(\|link=[^|\n}]+?)(\|cardname=[^|\n}]+?)(\|[^\n}]*?)?}}", "\\1\\5\\4\\6}}", before)
 
     before = re.sub(r"( \{\{(C\|Hologram|1st|[MmPpCcVv]o).*?}})\1+", "\\1", before)
+    before = re.sub(r"( \{\{(Reprint|Ab)\|.*?}})\1+", "\\1", before)
 
     # Visual Editor fix, can't remove
     before = re.sub(r"\[\[(.*?) (.*?)\|('*\1'*)]] \[\[\1 \2\|\2]]", "[[\\1 \\2|\\3 \\2]]", before)
@@ -192,12 +197,12 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, infobox_log=T
     before = re.sub(r">'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \1'*]]'*", ">{{Rebels|\\1}}", before)
     before = re.sub(r"'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \1'*]]'*", "\"[[\\1]]\"", before)
 
-    before = re.sub(r"\[\[(Star Wars: (A New Hope|The Empire Strikes Back|Return of the Jedi|Revenge of the Sith) \(novelization\))\|'*Star Wars[: ']+Episode [IV]+[: ']+\2'* novel[a-z]*]]", "[[\\1|''Star Wars: \\2'' novelization]]", before)
+    before = re.sub(r"\[\[(Star Wars: (A New Hope|The Empire Strikes Back|Return of the Jedi|Revenge of the Sith) \(novelization\))\|'*Star Wars[: ']+Episode [IV]+[: ']+\2'*( \(?novel[a-z]*\)?)?]]", "[[\\1|''Star Wars: \\2'' novelization]]", before)
     before = re.sub(r"\[\[((Star Wars: Shadows of the Empire) \(([a-z ]+?)\))\|'*(Star Wars: )?Shadows of the Empire'*( [a-z ]+)?]]", "[[\\1|''\\2'' \\3]]", before)
     before = re.sub(r"\[\[[Ee]Book\|(.*?)]]", "\\1", before)
     before = re.sub(r"\[\[([Ee]Book)]]", "\\1", before)
     before = re.sub(r"'*\[\[Star.Wars:.X-Wing.vs..TIE.Fighter#Expansion.pack\|.*?]]'*", "''[[Star Wars: X-Wing vs. TIE Fighter: Balance of Power]]''", before)
-
+    before = re.sub(r"\[\[The Official Star Wars Fact File Part ([0-9]+)(\|.*?)?]]'* \{\{C\|(([0-9]+ )?[A-Z0-9]{2}[A-Z0-9]? .*?}})", "{{FactFile2014|\\1|\\3", before)
     before = re.sub(r"\{\{SWIA\|set=Star Wars: Imperial Assault Core Set(\|text=Core Set)?(\|.*?)?}}", "{{SWIA|set=Core Set\\2}}", before)
 
     while re.search(r"\[\[Category:[^\n|\]_]+_", before):
@@ -271,6 +276,7 @@ def regex_cleanup(before: str) -> str:
 def do_final_replacements(new_txt, replace, is_status):
     new_txt = remove_links_from_quotes(new_txt)
     new_txt = new_txt.replace("TORTYPE", "type")
+    new_txt = new_txt.replace("BOOKDATE", "date")
     new_txt = re.sub(r"(==(Sources|Appearances)==)\n\n(===Non-canon (appearances|sources)===)", "\\1\n\\3", new_txt)
 
     while replace:
@@ -289,6 +295,7 @@ def do_final_replacements(new_txt, replace, is_status):
         new_txt2 = new_txt2.replace("{{'}}s", "{{'s}}")
         new_txt2 = new_txt2.replace("{{'}}\n", "{{'}}")
         new_txt2 = new_txt2.replace("\n\n*{{ISBN", "\n*{{ISBN")
+        new_txt2 = new_txt2.replace(" </ref>", "</ref>")
         if "'''s " in new_txt2:
             new_txt2 = re.sub(r"( ''[^'\n]+'')'s ", "\\1{{'s}} ", new_txt2)
 

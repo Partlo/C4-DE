@@ -177,7 +177,6 @@ def sort_categories(pieces, namespace_id, bad_categories) -> str:
         else:
             final.append(line)
 
-    # TODO: augment with auto-gen categories
     if regular == 0 and not has_bad:
         categories.append("[[Category:Pages without categories]]")
 
@@ -219,10 +218,6 @@ def add_parsed_section(pieces: list, component: SectionComponents, finished: Fin
         t, added = build_section_from_pieces(component, finished, log, media_cat if (mcs_name == finished.name or real) else None)
     pieces.append(t)
     return None if added else media_cat
-
-
-MAINTENANCE = ["catneeded", "citation", "cleanup", "cleanup-context", "confirm", "contradict", "disputed", "expand",
-               "image", "moresources", "oou", "plot", "redlink", "stayontarget", "tense", "update"]
 
 
 def format_update_contents(ln, page: Page, results: PageComponents, appearances: FullListData, sources: FullListData, types):
@@ -378,7 +373,6 @@ def build_final_text(pieces, otx, page: Page, results: PageComponents, disambigs
             if key not in results.redirects_fixed:
                 text = fix_redirects(redirects, text, f"Final-{key}", disambigs, remap, canon=results.canon)
 
-            # pieces.append(do_final_replacements(text, True))
             pieces.append(text)
             pieces.append("")
 
@@ -427,7 +421,7 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
         new_txt, _ = clean_archive_usages(page, new_txt, sources.archive_data, redo)
 
     if results.is_iu():
-        has_notoc = "notoc=1" in new_txt
+        has_notoc = "notoc=" in new_txt
         iu_sections = new_txt.count("==History==") + new_txt.count("==Biography==")
         oou_sections = 0
         for sx in ["Behind the scenes", "Appearances", "Sources", "Notes and references", "External links"]:

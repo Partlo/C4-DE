@@ -303,19 +303,19 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
     now = datetime.now()
     new_src = build_item_ids_for_section(
         target, results.real, results.media, "Sources", results.src.items, sources, appearances, remap,
-        unknown_src, results.canon, results.infobox, collapse_audiobooks, log)
+        unknown_src, results.canon, results.non_canon, results.infobox, collapse_audiobooks, log)
     new_ncs = build_item_ids_for_section(
         target, results.real, results.media, "Non-canon sources", results.ncs.items, sources, appearances, remap,
-        unknown_src, results.canon, results.infobox, collapse_audiobooks, log)
+        unknown_src, results.canon, results.non_canon, results.infobox, collapse_audiobooks, log)
     new_apps = build_item_ids_for_section(
         target, results.real, results.media, "Appearances", results.apps.items, appearances, sources, remap,
-        unknown_apps, results.canon, results.infobox, collapse_audiobooks, log)
+        unknown_apps, results.canon, results.non_canon, results.infobox, collapse_audiobooks, log)
     new_nca = build_item_ids_for_section(
         target, results.real, results.media, "Non-canon appearances", results.nca.items, appearances, sources, remap,
-        unknown_apps, results.canon, results.infobox, collapse_audiobooks, log)
+        unknown_apps, results.canon, results.non_canon, results.infobox, collapse_audiobooks, log)
     new_col = build_item_ids_for_section(
         target, results.real, results.media, "Collections", results.collections.items, sources, appearances, remap,
-        unknown_src, results.canon, results.infobox, collapse_audiobooks, log)
+        unknown_src, results.canon, results.non_canon, results.infobox, collapse_audiobooks, log)
     log_time("item IDs", now)
 
     handle_non_canon_items(results, new_apps, new_nca, new_src, new_ncs, log)
@@ -344,19 +344,19 @@ def analyze_section_results(target: Page, results: PageComponents, appearances: 
         *new_apps.found, *new_src.found, *(new_nca.found if new_nca else []), *(new_ncs.found if new_ncs else [])
     ] if t.current.target and not t.master.is_reprint]
     new_apps, final_apps = build_new_section(
-        target.title(), "==Appearances==", new_apps, results, results.app_mode, include_date, log,
+        "==Appearances==", new_apps, results, results.app_mode, include_date, log,
         use_index, mismatch, both_continuities, unknown_final, targets, collapse_audiobooks)
     new_nca, final_nca = build_new_section(
-        target.title(), "===Non-canon appearances===", new_nca, results, BY_DATE, True, log,
+        "===Non-canon appearances===", new_nca, results, BY_DATE, True, log,
         use_index, mismatch, both_continuities, unknown_final, targets, collapse_audiobooks)
     new_src, final_sources = build_new_section(
-        target.title(), "==Sources==", new_src, results, BY_DATE, True, log,
+        "==Sources==", new_src, results, BY_DATE, True, log,
         use_index, mismatch, both_continuities, unknown_final, targets, collapse_audiobooks)
     new_ncs, final_ncs = build_new_section(
-        target.title(), "===Non-canon sources===", new_ncs, results, BY_DATE, True, log,
+        "===Non-canon sources===", new_ncs, results, BY_DATE, True, log,
         use_index, mismatch, both_continuities, unknown_final, targets, collapse_audiobooks)
     new_col, final_col = build_new_section(
-        target.title(), "===Collected in===", new_col, results, BY_DATE, True, log,
+        "===Collected in===", new_col, results, BY_DATE, True, log,
         use_index, mismatch, both_continuities, unknown_final, targets, collapse_audiobooks)
 
     reprints = prepare_reprints(appearances, sources, [*final_apps, *final_ncs, *final_ncs, *final_sources])
@@ -501,9 +501,9 @@ def handle_item_result(d: ItemId, o: Item, name, is_appearances, is_sources, is_
         return "unknown"
 
 
-def build_item_ids_for_section(page: Page, real, media, name, original: List[Item], data: FullListData, other: FullListData,
-                               remap: dict, unknown: List[Union[str, Item]], canon: bool,
-                               infobox: str, collapse_audiobooks=True, log=True) -> SectionItemIds:
+def build_item_ids_for_section(page: Page, real, media, name, original: List[Item], data: FullListData,
+                               other: FullListData, remap: dict, unknown: List[Union[str, Item]], canon: bool,
+                               page_is_nc: bool, infobox: str, collapse_audiobooks=True, log=True) -> SectionItemIds:
 
     found, wrong, links, non_canon = [], [], [], []
     group_items, wrong_group_items = _cards(), _cards()
@@ -514,7 +514,7 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
     other_extra = 0
     is_sources = name and "appearance" not in name.lower()
     is_appearances = name and "appearance" in name.lower()
-    is_nc_section = name and name.startswith("Non-canon")
+    is_nc_section = (name and name.startswith("Non-canon")) or page_is_nc
     already = set(o.target for o in original if o.target)
     for i, o in enumerate(original):
         o.index = i
@@ -940,7 +940,7 @@ def prepare_date_string(s):
     return None
 
 
-def build_new_section(title, name, section: SectionItemIds, results: PageComponents, mode: str, include_date: bool,
+def build_new_section(name, section: SectionItemIds, results: PageComponents, mode: str, include_date: bool,
                       log: bool, use_index: bool, mismatch: list, both_continuities: set,
                       unknown_final: list, targets: list, collapse_audiobooks: bool) \
         -> Tuple[FinishedSection, List[ItemId]]:
@@ -1186,14 +1186,16 @@ def build_item_text(o: ItemId, d: str, sl: str, final_without_extra: list, final
         e = " " + re.sub(r"<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", o.current.extra).strip()
         if not collapse_audiobooks:
             e = e.replace("|audiobook=1", "")
-        if o.master.repr:
+        if o.master.repr and o.master.repr not in e:
             e = e.replace(" " + o.master.repr, "")
             e = f"{o.master.repr} {e}".strip()
-        if o.master.ab:
+        if o.master.ab and o.master.ab not in e:
             e = e.replace(" " + o.master.ab, "")
             e = f"{o.master.ab} {e}".strip()
         if "{{Reprint|" in e and "{{Ab|" in e:
             e = re.sub(r"(\{\{Reprint\|.*?}}) (\{\{Ab\|.*?}})$", "\\2 \\1", e)
+        if e.count("{{Reprint|") > 1 or e.count("{{Ab|") > 1:
+            e = re.sub(r"( \{\{(Reprint|Ab)\|.*?}})\1+", "\\1", e)
         if o.master.crp and "{{crp}}" not in e.lower() and "{{crp}}" not in zn.lower():
             e = "{{Crp}} " + e
         if section_name.startswith("Non-canon"):

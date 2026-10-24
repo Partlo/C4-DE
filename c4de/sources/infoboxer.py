@@ -305,8 +305,6 @@ REMAP = {
 
 
 def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None, add=False, log=True):
-    extract = True
-
     original_text = f"{text}"
     text = text.replace("|coord=", "|coordinates=")
     data, pre, post, found, original, scroll_box = parse_infobox(text, all_infoboxes)
@@ -350,7 +348,6 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
     extra = [k for k in optional if k not in infobox.params]
     params = [*extra, *infobox.params]
     i = -1
-    intro_only = text.split("==", 1)[0]
     iu_media = found.lower().replace("_", " ") in ["iu media", "inuniversemedia"]
     for f in params:
         i += 1
@@ -359,39 +356,10 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
             if f == "title":
                 v = data.get("name") or page.title()
             if f in REMAP.keys():
-                # if data.get(REMAP[f]) != "new":
                 v = data.get(REMAP[f]) or v
             if f in REMAP.values() and not v:
-                # x = [k for k, v in REMAP.items() if v == f and data.get(k) and data.get(k) != "new"]
                 x = [k for k, v in REMAP.items() if v == f and data.get(k)]
                 v = data.get(x[0] if x else '') or v
-            # if f == "release date" and not iu_media:
-            #     x = re.search(r"([Pp]ublished|[Rr]eleased|[Ii]ncluded|from) (in|on)? ?((\[*(January|February|March|April|May|June|July|August|September|October|November|December|fall|spring|winter|autumn)/?]* ?)*?([0-9\[\], ]*)?(of )?\[*?[0-9]{4}]*)",
-            #                   intro_only)
-            #     if x:
-            #         v = x.group(3)
-            # if f == "author" and not v:
-            #     x = re.search(r"([Ww]ritten|article|interview) by (?P<t>\[\[.*?]])", intro_only)
-            #     if not x:
-            #         x = re.search(r"(?P<t>\[\[.*?]]) interviews", intro_only)
-            #     if not x:
-            #         x = re.search(r"article (in \[\[.*?]] )?by (?P<t>\[\[.*?]])", intro_only)
-            #     if x:
-            #         v = x.group('t')
-            # if f == "published in" and not v and not iu_media:
-            #     v = data.get("issue") or ''
-            #     if re.search(r"\[\[(.*?) ([0-9]+)\|\2( of .*?)?]]", v):
-            #         v = re.sub(r"\[\[(.*?) ([0-9]+)\|\2( of .*?)?]]", "[[\\1 \\2|''\\1'' \\2]]", v)
-            #     elif extract:
-            #         x = re.search(
-            #             "(published|adventure|released|article|supplement|appearing|appeare?[sd]|included|feature|department) (w?i?t?h?in|of|from) (\[\[(Fantasy Flight Games|De ?Agostini)]]'?s? )?(the )?(magazine )?(?P<t>'*\[\[.*?]]'*)",
-            #             intro_only)
-            #         if not x:
-            #             x = re.search(
-            #                 "written.* for (\[\[(Fantasy Flight Games|De ?Agostini)]]'?s? )?(the )?(magazine )?(?P<t>'*\[\[.*? [0-9]+(\|.*? [0-9]+'*?)?]]'*)",
-            #                 intro_only)
-            #         if x:
-            #             v = x.groupdict()['t']
             if f in optional and f not in data and not v:
                 continue
             elif f in infobox.combo and (data.get(infobox.combo[f]) or not any(data.get(i) for i in infobox.groups[infobox.combo[f]])):
