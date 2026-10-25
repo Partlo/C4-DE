@@ -655,6 +655,7 @@ def analyze_body(page: Page, text, types, appearances: FullListData, sources: Fu
     references = [(i[0], i[2]) for i in re.findall(r"(<ref name=((?!<ref).)*?[^/]>(((?!<ref).)*?)</ref>)", text)]
     references += [(i[0], i[1]) for i in re.findall(r"(<ref>(((?!<ref).)*?)</ref>)", text)]
     new_text = text
+    page_links = []
     for full_ref, ref in references:
-        new_text = handle_reference(full_ref, ref, page, new_text, types, appearances, sources, remap, disambigs, redirects, results.canon, results.media, log)
+        new_text = handle_reference(full_ref, ref, page, new_text, types, appearances, sources, page_links, remap, disambigs, redirects, results.canon, results.media, log)
     return new_text

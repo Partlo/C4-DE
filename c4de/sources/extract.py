@@ -179,8 +179,8 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     """
     for x, y in SIMPLE_REPLACEMENTS:
         z = z.replace(x, y)
-    if "SeriesListing" in z or "UnknownListing" in z:
-        z = re.sub(r"\{\{(Series|Unknown)Listing.*?}} ?", "", z)
+    if "SeriesListing" in z or "UnknownListing" in z or "SeriesRef" in z:
+        z = re.sub(r"\{\{(Series|Unknown)(Listing|Ref).*?}} ?", "", z)
     z = re.sub(r"{{([A-z]+)]]", "{{\\1}}", re.sub(r"\|[a-z ]+=\|", "|", z))
     while re.search(r"\[\[([^]|\n]+)_", z):
         z = re.sub(r"\[\[([^]|\n]+)_", "[[\\1 ", z)

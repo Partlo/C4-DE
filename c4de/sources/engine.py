@@ -391,6 +391,8 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
             x = extract_item(remove_templates(item), False, i['page'], types, master=True)
             if x and not x.invalid:
                 store_data(x, i, old, extra, parenthetical, i.get('alternate'), is_reprint, today)
+                x.index = i['index']
+                x.extra_date = i.get('extraDate')
 
                 if i['page'] == "Web/External" or i["page"] == "Web/Target":
                     x.external = True
@@ -406,16 +408,6 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
                 elif "Crossover" in i['page'] or "LEGO" in i['page']:
                     x.non_canon = True
                     x.both_continuities = True
-                x.index = i['index']
-                x.extra_date = i.get('extraDate')
-
-                if x.parent:
-                    by_parent[x.parent].append(x)
-                for y in [x.url, x.special_url, x.alternate_url, *x.alternate_urls]:
-                    if y:
-                        urls[y].append(x)
-                        if y != y.lower():
-                            urls[y.lower()].append(x)
 
                 if x.target in set_formatting:
                     x.set_format_text = set_formatting[x.target]
@@ -430,6 +422,13 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
 
                 full_sources[x.full_id()] = x
                 unique_sources[x.unique_id()] = x
+                if x.parent:
+                    by_parent[x.parent].append(x)
+                for y in [x.url, x.special_url, x.alternate_url, *x.alternate_urls]:
+                    if y:
+                        urls[y].append(x)
+                        if y != y.lower():
+                            urls[y.lower()].append(x)
                 if x.target:
                     check_for_both_continuities(x, target_sources, both_continuities)
 
@@ -537,6 +536,9 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 x.index = i['index']
                 if x.template == "SchAdv" or x.template == "EpIAdv":
                     x.original = f"''[[{x.target}]]''"
+                if "Crossover" in i['page'] or "LEGO" in i['page']:
+                    x.non_canon = True
+                    x.both_continuities = True
 
                 full_appearances[x.full_id()] = x
                 unique_appearances[x.unique_id()] = x
@@ -545,9 +547,8 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
                 for y in [x.url, x.special, x.alternate_url, *x.alternate_urls]:
                     if y:
                         urls[y].append(x)
-                if "Crossover" in i['page'] or "LEGO" in i['page']:
-                    x.non_canon = True
-                    x.both_continuities = True
+                        if y != y.lower():
+                            urls[y.lower()].append(x)
 
                 if x.target:
                     c, l = determine_index(x, f"{x.issue}-{x.target}" if x.target == "Galaxywide NewsNets" else x.target, i, canon, legends, c_unknown, l_unknown, log_match)

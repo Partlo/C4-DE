@@ -21,14 +21,13 @@ REPLACEMENTS = [
 
     ("{{C|variant cover only}}", "{{Vco}}"), ("{{C|Variant cover only}}", "{{Vco}}"), ("*{{Indexpage", "{{Indexpage"),
     ("{{InvalidCategory}}", ""), ("{{IntroMissingTitle}} ", ""), ("{{IntroMissingTitle}}\n", ""),
-    ("{{App|characters=", "{{App\n|characters="), ("PenguinRandomHouse|old=1", "RandomHouseOld"),
+    ("{{App|characters=", "{{App\n|characters="),
     ("<onlyinclude>\n{{Incomplete_app}}", "{{IncompleteApp}}\n<onlyinclude>"),
     ("<onlyinclude>\n{{IncompleteApp}}", "{{IncompleteApp}}\n<onlyinclude>"),
     ("{{C|non-canon|reprint=1}}", ""),
 
     ("The Empire Strike Back", "The Empire Strikes Back"),
     ("[[Black]]", "[[Color/Legends|Black]]"), ("[[black]]", "[[Color/Legends|black]]"),
-    ("parent=Riddell mini-helmet", "parent=Riddell"),
 
     ("''[[Order 66: A Republic Commando Novel]]''", "''[[Republic Commando: Order 66]]''"),
     ("''[[Republic Commando]]''", "[[Star Wars: Republic Commando (novel series)|''Star Wars: Repbulic Commando'']]"),
@@ -158,7 +157,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, infobox_log=T
         before = re.sub(r"\[\[(?!File:)([^\[\]{}\n]+?)&ndash;([^\[\]{}\n]+?)]]", "[[\\1–\\2]]", before)
         before = re.sub(r"\[\[(?!File:)([^\[\]{}\n]+?)&mdash;([^\[\]{}\n]+?)]]", "[[\\1—\\2]]", before)
 
-    before = re.sub(r"(\{\{(Unknown|Series)Listing.*?}})\{\{", "\\1 {{", before)
+    before = re.sub(r"(\{\{(Unknown|Series)(Listing|Ref).*?}})\{\{", "\\1 {{", before)
     before = re.sub(r"({{[Ss]croll[_ ]?[Bb]ox\|)\*", "{{ScrollBox|\n*", before)
     before = re.sub(r"<small>\((.*?)\)</small>", "{{C|\\1}}", before)
 
@@ -231,7 +230,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, infobox_log=T
         before = re.sub(r"\|work='*?\[\[Wikipedia:(The A\.V\. Club|The Daily Telegraph|The Guardian|The Hollywood Reporter|The Huffington Post|The Independent|The New York Times|The New Yorker|The Times|The Verge|The Washington Post|Time|TIME|USA Today|Universal Music Group)( \(.*?\))?\|.*?]]'*", "", before)
         before = re.sub(r"\|work='*?(TheForce\.net|Valnet#Collider|Valnet#Screen_Rant|Vanity Fair|Variety|VentureBeat|Wired|WIRED|Yahoo)'*(\|.*?)?}}", "\\2}}", before)
         before = re.sub(r"\|work='*?\[\[Wikipedia:(Valnet#Collider|Valnet#Screen_Rant|Vanity Fair|Variety|VentureBeat|Wired|WIRED|Yahoo)( \(.*?\))?\|.*?]]'*", "", before)
-        before = re.sub(r"(url=.*?//(.*?\.)?(ew|collider|aiptcomics|npr|rollingstonaveleyman|ign|cbr|theforce|nerdist|gameinformer|latimes|inverse|starwarsinterviews|jedi-bibliothek|swtor\.jedipedia)\..*?)\|work=.*?(\|[a-z ]+=.*?)?}}", "\\1\\4}}", before)
+        before = re.sub(r"(url=.*?//(.*?\.)?(ew|planetdagobah|telegraph|biography|britannica|io9\.gizmodo|nypost|yahoo|abcnews|starwarsinterviews|cinemablend|metacritic|collider|jedinews|aiptcomics|npr|rollingstonaveleyman|ign|cbr|theforce|nerdist|gameinformer|latimes|inverse|starwarsinterviews|jedi-bibliothek|swtor\.jedipedia)\..*?)\|work=.*?(\|[a-z ]+=.*?)?}}", "\\1\\4}}", before)
 
     before = re.sub(r"(\{\{[A-z0-9 _]+\|.*?\|(.*?) \(.*?\))\|\2}}", "\\1}}", before)
 
@@ -309,9 +308,9 @@ def do_final_replacements(new_txt, replace, is_status):
         if "''{{Film|" in new_txt2:
             new_txt2 = re.sub(r"(?<!')''(\{\{Film\|.*?}})'*", "\\1", new_txt2)
 
-        new_txt2 = re.sub(r"(\{\{SWMiniCite\|set=[^\n}]+?\|)cardname=", "\\1pack=", new_txt2)
         new_txt2 = new_txt2.replace("[[Ochi]] of Bestoon", "[[Ochi|Ochi of Bestoon]]")
         new_txt2 = new_txt2.replace("[[Battle station/Legends|battlestation", "[[Battle station/Legends|battle station")
+        new_txt2 = new_txt2.replace("[[Battle station/Legends|Battlestation", "[[Battle station/Legends|Battle station")
         if "{{more" in new_txt2.lower():
             new_txt2 = re.sub(r"\{\{[Mm]ore[Ss]ources}}\n+}}", "}}\n{{MoreSources}}", new_txt2)
         replace = new_txt != new_txt2

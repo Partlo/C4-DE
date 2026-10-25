@@ -11,7 +11,7 @@ from c4de.sources.determine import determine_id_for_item
 from c4de.sources.domain import Item, ItemId, ItemIdListDict, ItemIdDict, FullListData, PageComponents, \
     AnalysisResults, SectionItemIds, FinishedSection, NewComponents, UnknownItems
 from c4de.sources.engine import AUDIOBOOK_MAPPING, LIST_AT_START, LIST_AT_END
-from c4de.sources.expansion import handle_expansion, VALID_COLLECTIONS
+from c4de.sources.expansion import handle_expansion
 from c4de.sources.external import is_external_link, prepare_basic_url, prepare_official_link, is_official_link, \
     COMMERCIAL_TO_BE_REMOVED, determine_link_order, is_official_product_page
 from c4de.sources.extract import swap_parameters
@@ -26,6 +26,7 @@ GROUP_IN_APPEARANCES = {
     "GSAttr": "[[Star Wars: Galactic Starcruiser|''Star Wars'': Galactic Starcruiser]]",
     "GalacticStarcruiser": "[[Star Wars: Galactic Starcruiser|''Star Wars'': Galactic Starcruiser]]",
 }
+VALID_COLLECTIONS = ["MagazineArticle", "ComicStory", "ShortStory", "Adventure"]
 
 FC = "ForceCollection"
 
@@ -502,7 +503,9 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
             wrong.append(d)
             continue
 
-        should_skip, unexpanded, other_extra = handle_expansion(d, o, page, page_links, data, already, any_expanded, unexpanded, other_extra)
+        expanded, should_skip, unexpanded, other_extra = handle_expansion(d, o, page, page_links, data, other, already, unexpanded, other_extra)
+        if expanded:
+            any_expanded += expanded
         if should_skip:
             continue
 

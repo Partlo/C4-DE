@@ -37,14 +37,6 @@ def follow_redirect(o: Item, site, log):
     return False
 
 
-def do_card_templates_match(set_name, o: Item, x: Item):
-    if o.template == x.template:
-        return True
-    if set_name == "Star Wars: The Power of the Force (1995 toy line)":
-        return (o.template == "KennerCite" and x.template == "HasbroCite") or (o.template == "HasbroCite" and x.template == "KennerCite")
-    return False
-
-
 def check_targets(o: Item, target, by_target: ItemListDict, other_targets: ItemListDict,
                   use_original_text=False, by_parent=False):
     if by_target and by_target.get(target):
@@ -162,7 +154,6 @@ def determine_id_for_item(
         return x
 
     if o.parent and "|story=" not in o.original and "|adventure=" not in o.original:
-        # print(f"Parent: {o.full_id()}")
         t = f"{o.mode}|None|{o.parent}|None|None|None|None|None"
         if t in data:
             return ItemId(o, data[t], o.protected_format or o.card is not None, False)
@@ -243,6 +234,10 @@ def match_issue_item(o: Item, data, site, by_target: ItemListDict, other_targets
     return None
 
 
+def flatten(s):
+    return s.replace("&", "and").replace("-", "").replace("–", "").replace("—", "").replace("&mdash;", "").replace("&ndash;", "").replace("'", "").replace("German Edition - ", "").replace("(German Edition)", "").replace("  ", " ").lower().strip()
+
+
 def flatten_card(s, x=False):
     return (s.split("&mdash;")[0].split("—")[0] if x else s).replace("''", "").replace('"', "").replace("The ", "").replace("0", "O").replace("1", "I").lower()
 
@@ -269,7 +264,7 @@ def match_card_or_mini(o, data_sets: List[Tuple[bool, ItemDict]], canon, ref, da
         if set_name is not None:
             for other, d in data_sets:
                 for s, x in d.items():
-                    if do_card_templates_match(set_name, o, x) and x.canon == canon:
+                    if o.template == x.template and x.canon == canon:
                         m = match_cards(o, x, set_name, other, exact, start)
                         if m:
                             return m
@@ -329,7 +324,7 @@ def match_miniatures(o: Item, set_name, data_sets: List[Tuple[bool, ItemDict]], 
     exact, other_set, close = [], [], []
     for other, d in data_sets:
         for s, x in d.items():
-            if do_card_templates_match(set_name, o, x) and x.card:
+            if o.template == x.template and x.card:
                 for t in [x.target, x.parent]:
                     if t and (t == set_name or t.replace(" - ", " ") == set_name.replace(" - ", " ") or t.startswith(set_name)):
                         m, c = match_individual_miniature(o, oc, x)
@@ -404,10 +399,6 @@ def match_fact_file(o: Item, by_target: ItemListDict, other_targets: ItemListDic
     return ItemId(o, o, True, False)
 
 
-def flatten(s):
-    return s.replace("&", "and").replace("-", "").replace("–", "").replace("—", "").replace("&mdash;", "").replace("&ndash;", "").replace("'", "").replace("German Edition - ", "").replace("(German Edition)", "").replace("  ", " ").lower().strip()
-
-
 def match_fact_file_issue(o: Item, entries: list[Item], other: bool, log_missing=True):
     if not o.ff_data:
         return None
@@ -443,15 +434,6 @@ def match_fact_file_issue(o: Item, entries: list[Item], other: bool, log_missing
 
 def to_int(x: str):
     return int(x) if x and x.isnumeric() else None
-
-
-def get_possible_targets(o: Item, by_target: ItemListDict):
-    targets = by_target.get(o.target, [])
-    if not targets and o.template == "InsiderCite":
-        targets = by_target.get(f"{o.target} (Star Wars Insider)", [])
-    if not targets and o.template == "InsiderCite":
-        targets = by_target.get(f"{o.target} (article)", [])
-    return targets
 
 
 def match_by_set_name(o: Item, mode: str, template: Optional[str], set_name: str, data: ItemDict, other_data: ItemDict):
@@ -506,9 +488,7 @@ def match_issue_target(o: Item, by_target: ItemListDict, other_targets: ItemList
                 return match
 
     if o.target and o.parent and o.target.startswith(f"{o.parent}#"):
-        m = check_targets(o, o.parent, by_target, other_targets, use_original_text=True)
-        if m:
-            return m
+        return check_targets(o, o.parent, by_target, other_targets, use_original_text=True)
     return None
 
 
@@ -531,8 +511,7 @@ def match_parent_target(o: Item, parent, target, by_target: ItemListDict, other_
                 x = match_by_parent_target(o, parent, target, by_target, other_targets)
         if not x and o.template == "StoryCite" and "(short story)" not in o.target:
             x = match_by_parent_target(o, parent, f"{target} (short story)", by_target, other_targets)
-        if x:
-            return x
+        return x
     return None
 
 
@@ -571,42 +550,53 @@ TV_SUFFIXES = {
 }
 
 
+# build list of possible target matches; template-specific remaps and simple mistakes
+def build_possible_target_names(target, o: Item, by_target: ItemListDict):
+    if not target:
+        return []
+
+    targets = [target.replace("_", " ").replace("Game Book ", "")]
+    if "&hellip;" in target:
+        targets.append(target.replace("&hellip;", "..."))
+    if "..." in target:
+        targets.append(target.replace("...", "&hellip;"))
+    if "(" not in target and o.tv:
+        targets.append(f"{target} (episode)")
+        targets.append(f"{target} (short film)")
+        if o.template in TV_SUFFIXES and TV_SUFFIXES[o.template] not in target:
+            targets.append(f"{target} ({TV_SUFFIXES[o.template]})")
+    if "(" not in target and o.template in TEMPLATE_SUFFIXES:
+        for i in TEMPLATE_SUFFIXES[o.template]:
+            targets.append(f"{target} ({i})")
+    if "ikipedia:" in target:
+        targets.append(target.split("ikipedia:", 1)[-1])
+    if o.template in ["Tales", "TCWComicCite", "IDWAdventuresCite-2017"] and "(" not in target and target not in by_target:
+        targets.append(f"{target} (comic story)")
+
+    # m = re.search(r"^(Polyhedron|Challenge|Casus Belli|Valkyrie|Inphobia) ([0-9]+)$", target)
+    # if m:
+    #     x = m.group(1).replace(" ", "") + "Cite"
+    #     for dct in [by_target, other_targets or {}]:
+    #         for t, d in dct.items():
+    #             for i in d:
+    #                 if i.parent == target:
+    #                     return ItemId(o, i, False, False)
+    #                 elif i.template == x and i.issue == m.group(2):
+    #                     return ItemId(o, i, False, False)
+    return target
+
+
+def get_possible_targets(o: Item, by_target: ItemListDict):
+    target_names = build_possible_target_names(o.target, o, by_target)
+    return [x for t in target_names for x in by_target.get(t, [])]
+
+
 def match_target(o: Item, by_target: ItemListDict, other_targets: ItemListDict, log):
     return match_specific_target(o, o.target, by_target, other_targets, log)
 
 
 def match_specific_target(o: Item, target: str, by_target: ItemListDict, other_targets: ItemListDict, log):
-    targets = []
-    if target:  # build list of possible target matches; template-specific remaps and simple mistakes
-        targets.append(target.replace("_", " ").replace("Game Book ", ""))
-        if "&hellip;" in target:
-            targets.append(target.replace("&hellip;", "..."))
-        if "..." in target:
-            targets.append(target.replace("...", "&hellip;"))
-        if "(" not in target and o.tv:
-            targets.append(f"{target} (episode)")
-            targets.append(f"{target} (short film)")
-            if o.template in TV_SUFFIXES and TV_SUFFIXES[o.template] not in target:
-                targets.append(f"{target} ({TV_SUFFIXES[o.template]})")
-        if "(" not in target and o.template in TEMPLATE_SUFFIXES:
-            for i in TEMPLATE_SUFFIXES[o.template]:
-                targets.append(f"{target} ({i})")
-        if "ikipedia:" in target:
-            targets.append(target.split("ikipedia:", 1)[-1])
-        if o.template in ["Tales", "TCWUKCite", "IDWAdventuresCite-2017"] and "(" not in target and target not in by_target:
-            targets.append(f"{target} (comic story)")
-
-        # m = re.search(r"^(Polyhedron|Challenge|Casus Belli|Valkyrie|Inphobia) ([0-9]+)$", target)
-        # if m:
-        #     x = m.group(1).replace(" ", "") + "Cite"
-        #     for dct in [by_target, other_targets or {}]:
-        #         for t, d in dct.items():
-        #             for i in d:
-        #                 if i.parent == target:
-        #                     return ItemId(o, i, False, False)
-        #                 elif i.template == x and i.issue == m.group(2):
-        #                     return ItemId(o, i, False, False)
-
+    targets = build_possible_target_names(target, o, by_target)
     for t in targets:
         x = match_by_target(t, o, by_target, other_targets, log)
         if x:
@@ -709,7 +699,7 @@ def do_urls_match(url, template, d: Item, replace_page, log=False):
         return 1
     elif template == "SWArchive" and d_url.lower().replace(".html", "").startswith(url.lower().replace(".html", "")):
         return 2
-    elif not d_url.startswith("content.jsp?page=") and matches_up_to_string(d_url.lower(), url.lower(), "?page=", False):
+    elif template != "SonyCite" and "?page=" in d_url and matches_up_to_string(d_url.lower(), url.lower(), "?page=", False):
         return 2
     elif template == "SonyCite" and d.template == "SonyCite" and (url.startswith("players/") or url.startswith("en_US/players/")):
         nu = url.replace("en_US/players/", "").replace("players/", "")

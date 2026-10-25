@@ -49,7 +49,6 @@ TEMP_REMAP = {
     "Duel of the Droids": "Downfall of a Droid (short story)",
     "Lair of Grievous": "Lair of Grievous (short story)"
 }
-VALID_COLLECTIONS = ["MagazineArticle", "ComicStory", "ShortStory", "Adventure"]
 
 
 def expand_listing(target: str, o: Item, data: FullListData, expanded: int):
@@ -63,9 +62,10 @@ def expand_listing(target: str, o: Item, data: FullListData, expanded: int):
     return ItemId(x, data.target[target][0], False)
 
 
-def handle_expansion(d: ItemId, o: Item, page: Page, page_links: list, data, already, any_expanded, unexpanded, other_extra):
+def handle_expansion(d: ItemId, o: Item, page: Page, page_links: list, data: FullListData, other: FullListData,
+                     already, unexpanded, other_extra, is_reference=False):
     if not d:
-        return False, unexpanded, other_extra
+        return [], False, unexpanded, other_extra
 
     to_check = {}
     if d.master.target and d.master.target in EXPANSION:
@@ -77,6 +77,7 @@ def handle_expansion(d: ItemId, o: Item, page: Page, page_links: list, data, alr
         other_extra += 1
 
     should_skip = False
+    expanded = []
     if to_check:
         if not page_links:
             for p in page.getReferences(namespaces=0):
@@ -85,21 +86,26 @@ def handle_expansion(d: ItemId, o: Item, page: Page, page_links: list, data, alr
                         page_links.append(TEMP_REMAP[p.title()])
                 page_links.append(p.title())
 
-        expanded, existing = 0, 0
+        existing = 0
         for vol, parts in to_check.items():
             if any(p in already for p in parts):
                 existing += 1
             else:
                 for p in parts:
-                    if p in page_links:
-                        any_expanded.append(expand_listing(p, o, data, expanded))
-                        expanded += 1
-        if expanded or existing:
-            print(f"Expanded series/arc listing of {d.master.target} to {expanded} new / {existing} existing")
+                    if p in page_links and p in data.target:
+                        expanded.append(expand_listing(p, o, data, len(expanded)))
+                    elif p in page_links and p in other.target:
+                        expanded.append(expand_listing(p, o, other, len(expanded)))
+        if is_reference and expanded:
+            print(f"Converted series/arc reference of {d.master.target} to {expanded[0].master.target}")
+        elif is_reference:
+            print(f"Unable to expand series/arc reference of {d} on {page.title()}")
+        elif expanded or existing:
+            print(f"Expanded series/arc listing of {d.master.target} to {len(expanded)} new / {existing} existing")
             should_skip = True
         else:
             print(f"Unable to expand series/arc listing of {d.master.target} on {page.title()}")
             unexpanded += 1
             if d and d.master.target and d.master.target in EXPANSION:
                 should_skip = True
-    return should_skip, unexpanded, other_extra
+    return expanded, should_skip, unexpanded, other_extra

@@ -6,6 +6,7 @@ from pywikibot import Page
 from c4de.common import fix_redirects, prepare_title
 from c4de.sources.determine import determine_id_for_item
 from c4de.sources.domain import Item, ItemId, FullListData
+from c4de.sources.expansion import handle_expansion
 from c4de.sources.external import prepare_basic_url
 from c4de.sources.extract import extract_item, convert_issue_to_template, swap_parameters, is_nav_or_date_template
 
@@ -84,7 +85,7 @@ STORY_TEMPLATES = ["StoryCite", "WEGCite", "LivingForce", "CWACite", "Tales"]
 def is_plain_short_story_link(o: ItemId, link: str, ref_length):
     if not (o.master.magazine or o.master.tv or o.master.template in STORY_TEMPLATES):
         return False
-    elif (ref_length - len(link)) < 5:
+    elif ref_length < 5:
         return False
 
     z = link.replace("''", "").replace('"', "")
@@ -105,12 +106,35 @@ def is_plain_short_story_link(o: ItemId, link: str, ref_length):
     return False
 
 
+def determine_id_for_reference(x: Item, page: Page, appearances: FullListData, sources: FullListData, page_links: list,
+                               canon: bool, log: bool):
+    o = determine_id_for_item(x, page, appearances.unique, appearances.urls, appearances.target, sources.unique,
+                              sources.urls, sources.target, {}, canon, log, ref=True)
+    if o:
+        expanded, _, _, _ = handle_expansion(o, x, page, page_links, appearances, sources, set(), 0, 0, is_reference=True)
+        if len(expanded) == 1:
+            return expanded[0]
+    return o
+
+
+def should_flag_series(o: ItemId, is_iu, ref_length):
+    if o and o.master.from_extra and is_iu:
+        if o.current.is_exception or o.current.override or o.master.future or o.master.has_content:
+            return ""
+        return "{{SeriesRef}} " if ref_length < 5 else ""
+    return ""
+
+
+REMOVE = ["{{PageNumber}}", "{{UnlinkedRef}}", "{{Un}}", "{{SeriesRef}}"]
+
+
 def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearances: FullListData, sources: FullListData,
-                     remap: dict, disambigs: dict, redirects, canon: bool, media: bool, log: bool):
+                     page_links, remap: dict, disambigs: dict, redirects, canon: bool, media: bool, log: bool):
     try:
-        new_ref = re.sub(r"<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", ref).replace("{{PageNumber}} ", "").replace("{{UnlinkedRef}} ", "")
+        new_ref = re.sub(r"<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", ref)
         new_ref = re.sub(r"\|set=(.*?) \(.*?\)\|(sformatt?e?d?|stext)=.*?\|", "|set=\\1|", new_ref)
-        new_ref = new_ref.replace(" {{Un}}", "")
+        for t in REMOVE:
+            new_ref = new_ref.replace(f" {t}", "").replace(t, "").strip()
         new_ref = convert_issue_to_template(new_ref).replace("{{=}}", "=")
         new_ref = attempt_conversion(new_ref, page, types, appearances, sources, remap, canon, log)
 
@@ -123,18 +147,20 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
         found = []
         for link in links:
             x = extract_item(link[0], False, "reference", types)
+            ref_length = len(ref) - len(link[0])
             if x:
-                o = determine_id_for_item(x, page, appearances.unique, appearances.urls, appearances.target, sources.unique, sources.urls, sources.target, remap, canon, log)
+                o = determine_id_for_reference(x, page, appearances, sources, page_links, canon, log)
+                flag = should_flag_series(o, not media, ref_length)
                 if o and not o.use_original_text and o.replace_references and o.master.original != link[0]:
                     found.append(o)
-                    if is_plain_short_story_link(o, link[0], len(ref)):
+                    if is_plain_short_story_link(o, link[0], ref_length):
                         simple_link = f'"[[' + re.sub(r"^(.*?)( \(.*?\))$", "\\1\\2|\\1", x.target) + ']]"'
                         if simple_link != link[0]:
                             new_links.append((link[0], simple_link))
                     elif o.master.template and not x.template and x.target and not re.search(link_pattern(x.target) + r"$", new_ref):
                         if o.master.template != "Film" and re.sub(r"\[\[(.*?)( \(.*?\))]]", "[[\\1\\2|\\1]]", f'"[[{x.target}]]') not in new_ref:
                             print(f"Skipping {link[0]} due to extraneous text")
-                    elif link[0].startswith('"') and link[0].endswith('"') and (len(ref) - len(link[0])) > 5:
+                    elif link[0].startswith('"') and link[0].endswith('"') and ref_length > 5:
                         if o.master.template != "StoryCite" and o.master.mode != "TV" and o.master.mode != "Magazine":
                             print(f"Skipping quote-enclosed link {link[0]} in longer reference (likely an episode name)")
                     elif "{{" in o.master.original and len(templates) > 0:
@@ -150,7 +176,12 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                         if not link_match and o.current.original_target:
                             link_match = re.search(link_pattern(o.current.original_target), new_ref)
                         if link_match and link[0] != o.master.original.replace("|audiobook=1", "").split(" {{Ab|")[0]:
-                            new_links.append((link[0], o.master.original.replace("|audiobook=1", "").split(" {{Ab|")[0]))
+                            new_links.append((link[0], flag + o.master.original.replace("|audiobook=1", "").split(" {{Ab|")[0]))
+                        elif flag:
+                            new_links.append((link[0], flag + link[0]))
+                elif o and flag:
+                    found.append(o)
+                    new_links.append((link[0], flag + link[0]))
                 elif o:
                     found.append(o)
                 elif x.mode == "Basic":
@@ -167,7 +198,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
             if x:
                 if x.template and is_nav_or_date_template(x.template, types):
                     continue
-                o = determine_id_for_item(x, page, appearances.unique, appearances.urls, appearances.target, sources.unique, sources.urls, sources.target, {}, canon, log, ref=True)
+                o = determine_id_for_reference(x, page, appearances, sources, page_links, canon, log)
                 if o and o.current.is_card_or_mini():
                     new_templates.append((t, o, []))
                 elif o:
@@ -209,7 +240,11 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
 
         new_ref = fix_redirects(redirects, new_ref, "Reference", disambigs, remap, canon=canon)
         if not media and new_ref.count('[') == 0 and new_ref.count("]") == 0 and new_ref.count("{") == 0:
-            new_ref = "{{UnlinkedRef}} " + new_ref
+            match = match_unlinked(new_ref.replace('"', "").replace("''", ""), appearances, sources)
+            if match:
+                new_ref = match
+            else:
+                new_ref = "{{UnlinkedRef}} " + new_ref
 
         final_ref = re.sub(r"\{\{[Aa]b\|.*?}}", "", full_ref.replace(">" + ref, ">" + new_ref))
         if "<ref>" in final_ref:
