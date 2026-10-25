@@ -273,8 +273,8 @@ def extract_item(z: str, a: bool, page, types, master=False) -> Optional[Item]:
     if mode == "Interwiki" or (mode == "External" and "url=" not in s):
         return Item(z, mode, a, template=template)
     elif mode in IGNORED_MODES:
-        if mode != "Skip":
-            print(f"Skipping {mode.lower()} template: {template}: {z}")
+        if mode != "Skip" and page != "reference":
+            print(f"Skipping {mode.lower()} template in {page}: {template}: {z}")
         return None
     elif template in IGNORE_TEMPLATES:
         print(f"Skipping ignored {mode} template: {template}: {z}")

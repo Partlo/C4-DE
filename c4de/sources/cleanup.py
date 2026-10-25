@@ -172,10 +172,8 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, infobox_log=T
     before = f"{b1}{b2}{b3}"
 
     before = re.sub(r"(an? )?\[\[([^\n\[{|]+)\|(an?) ([^\n|\[{]+?)]]", "\\3 [[\\2|\\4]]", before).replace(" a a ", " a ").replace(" an an ", " an ")
-
     before = re.sub(r"\|story=\[\[(.*?)(\|.*?)?]]", "|story=\\1", before)
     before = re.sub(r"(\|set=(.*?))\|sformatted=''\2''", "\\1", before)
-
     before = re.sub(r"( \{\{(C\|Hologram|1st|[MmPpCcVv]o).*?}})\1+", "\\1", before)
     before = re.sub(r"( \{\{(Reprint|Ab)\|.*?}})\1+", "\\1", before)
 

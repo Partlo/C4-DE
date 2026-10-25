@@ -108,13 +108,7 @@ def build_fields_for_infobox(page) -> InfoboxInfo:
 
 
 NEW_NAMES = {
-    "comic story arc": "ComicArc",
-    "magazine": "MagazineIssue",
     "oou event": "RealEvent",
-    "oou company": "RealCompany",
-    "rpg adventure": "Adventure",
-    "title infobox": "TitleOrPosition",
-    "iu media": "InUniverseMedia"
 }
 
 
@@ -159,6 +153,10 @@ def separate_template_parameters(text):
     return lines
 
 
+def balanced_count(string: str, c1, c2):
+    return string.count(c1) - string.count(c2)
+
+
 def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List[str], str, str, bool]:
     found, original = None, None
     done, intro_started = False, False
@@ -176,7 +174,7 @@ def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List
         elif found:
             contents.append(line)
         else:
-            m = re.search(r"^[ ]*(\{\{[^{}]+?}})?(\{\{[^{}]+?}})?(\{\{[^{}]+?}})?(\{\{([A-Za-z _]+).*?)(\|[a-z]+=.*?)?$", line)
+            m = re.search(r"^ *(\{\{[^{}]+?}})?(\{\{[^{}]+?}})?(\{\{[^{}]+?}})?(\{\{([A-Za-z _]+).*?)(\|[a-z]+=.*?)?$", line)
             if m:
                 if m.group(1):
                     pre.append(m.group(1))
@@ -225,15 +223,13 @@ def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List
                 post.append(line)
             continue
 
-        oc += line.count("{")
-        oc -= line.count("}")
+        oc += balanced_count(line, "{", "}")
         if oc == 0 and line.strip() == "}}":
             done = True
             continue
 
         continuation = oc2 > 0 and line.count("}") > line.count("{")
-        oc2 += line.count("{")
-        oc2 -= line.count("}")
+        oc2 += balanced_count(line, "{", "}")
         if continuation:
             data[field] += f" {line}"
             continue
@@ -260,8 +256,7 @@ def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List
             data[field] = ""
             cx = 0
             while n:
-                cx += n.group(1).count("{")
-                cx -= n.group(1).count("}")
+                cx += balanced_count(n.group(1), "{", "}")
                 if n.group(1):
                     data[field] += n.group(1).replace("<NL>", "\n")
                 if cx > 0:
@@ -398,7 +393,7 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
             continue
         elif f in infobox.groups and any(data.get(i) for i in infobox.groups[f] if i != f):
             continue
-        elif f in optional and not v and f not in data:
+        elif f in optional and not v and f not in data and f not in ["other date", "other_date"]:
             continue
         else:
             new_infobox.append(f"|{f}={v or ''}")

@@ -287,3 +287,5 @@
 **Further cleanup of legacy logic
 **Enabled replacement for short stories/episodes/etc. in references to replace italicized links instead of quote-enclosed
 **Optimized ref replacement logic to eliminate stubborn decade-old pipelinks
+**Reference naming logic now handles TORcite, and drops parentheticals if possible
+**Series and story arcs used in references are flagged with {{Tl|SeriesRef}}

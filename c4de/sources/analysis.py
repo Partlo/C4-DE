@@ -824,7 +824,8 @@ def build_new_external_links(page: Page, results: PageComponents, original: List
                 found.append((o.mode, d.master, z))
                 done.append(z)
         else:
-            print("External Link:", o.mode, o.template, o.original)
+            if o.mode != "Interwiki":
+                print("External Link:", o.mode, o.template, o.original)
             if o.template not in ["WP"] and o.mode not in ["Interwiki", "Social", "Profile"]:
                 unknown.append(f"{o.mode}: {o.original}")
             zn = re.sub(r"\{\{[Ss]eriesListing.*?}} ?", "", o.original)

@@ -449,9 +449,6 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
     other1, other2, extra, navs = [], [], [], []
     start, succession_box, scroll_box = True, False, False
     cs = 0
-    # TODO: remove after sweep
-    section = re.sub(r"({{CardGameSet\|set=.*?)\n\|cards=", "\\1|cards=\n", section)
-    section = re.sub(r"({{SourceContents\|issue=.*?)\n\|contents=", "\\1|contents=\n", section)
 
     section = re.sub(r"\n\*\n((<!--.*?)?['\"]*[\[{]+)", "\n*\\1", section)
     section = re.sub(r"\n\*\n\n", "\n\n", section)
@@ -464,12 +461,6 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
             continue
         elif "{{SourcesPage" in s:
             continue
-        # TODO: remove after sweep
-        if "CardGameSet" in s:
-            s = re.sub(r"^.*?{{CardGameSet\|(set=)?(\{\{.*?)}}( \{\{.*?}}.*?)\|cards=", "*\\2|parent=1}}\\3", s)
-            s = re.sub(r"^.*?{{CardGameSet\|(set=)?(.*?)\|cards=", "", s)
-            s = re.sub(r"\|parent=1(.*?)\|parent=1", "|parent=1\\1", s)
-            cs += 1
 
         if "SourceContents-start" in s:
             s = re.sub(r"^.*?{{SourceContents-start\|(set=|parent=|issue=)?(\{\{.*?)}}( \{\{.*?}}.*?)}}", "*\\2|parent=1}}\\3", s)
@@ -481,12 +472,6 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
             if cs > 0:
                 cs -= 1
             continue
-        elif "SourceContents|" in s:
-            s = re.sub(r"^.*?{{SourceContents\|(parent=|issue=)?(\{\{.*?)}}( \{\{.*?}}.*?)\|contents=", "*\\2|parent=1}}\\3", s)
-            s = re.sub(r"^.*?{{SourceContents\|(parent=|issue=)?('*\[\[.*?]]'*)( \{\{.*?}}.*?)\|contents=", "*\\2}}\\3", s)
-            s = re.sub(r"^.*?{{SourceContents\|(parent=|issue=)?(.*?)\|contents=", "", s)
-            s = re.sub(r"\|parent=1(.*?)\|parent=1", "|parent=1\\1", s)
-            cs += 1
 
         if name.startswith("File:"):
             s = re.sub(r"\*'*\[+(Canon|Legends(?! of)|Star Wars Legends(?!( Epic|:)))(\|.*?)?]+[':]*", "*", s).strip()
@@ -657,5 +642,5 @@ def analyze_body(page: Page, text, types, appearances: FullListData, sources: Fu
     new_text = text
     page_links = []
     for full_ref, ref in references:
-        new_text = handle_reference(full_ref, ref, page, new_text, types, appearances, sources, page_links, remap, disambigs, redirects, results.canon, results.media, log)
+        new_text = handle_reference(full_ref, ref, page, new_text, types, appearances, sources, page_links, remap, disambigs, redirects, results.canon, results.real, results.media, log)
     return new_text

@@ -316,6 +316,11 @@ def is_special_empty(c: Category, cat_name, *expected):
     return False
 
 
+def is_empty_category(c: Category):
+    ci = c.categoryinfo
+    return sum(ci[k] for k in ['files', 'pages']) == 0
+
+
 def clean_up_archive_categories(site):
     done = []
 
@@ -326,7 +331,7 @@ def clean_up_archive_categories(site):
             if c.title() in done or c.title().endswith("/Empty"):
                 continue
             done.append(c.title())
-            if not c.isEmptyCategory():
+            if not is_empty_category(c):
                 if is_special_empty(c, "Category:Pages with script errors", "Template:RandomStatus"):
                     continue
                 text = mark_as_non_empty(c.get())
@@ -337,7 +342,7 @@ def clean_up_archive_categories(site):
             if c.title() in done or c.title().endswith("/Empty"):
                 continue
             done.append(c.title())
-            if c.isEmptyCategory():
+            if is_empty_category(c):
                 text = mark_as_empty(c.get())
                 if text != c.get():
                     c.put(text, "Marking as empty")

@@ -40,7 +40,7 @@ def build_section_from_pieces(section: SectionComponents, items: FinishedSection
 
     remove_scroll = False
     if items.rows <= 20 and any("{{scroll" in i.lower() for i in pieces):
-        pieces = [ln for ln in pieces if not "{{scroll" in ln.lower()]
+        pieces = [ln for ln in pieces if "{{scroll" not in ln.lower()]
         remove_scroll = True
 
     if items.text:
@@ -442,7 +442,7 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
 
     new_txt = re.sub(r"(\{\{DEFAULTSORT:.*?}})\n\n+\[\[[Cc]ategory", "\\1\n[[Category", new_txt)
     new_txt = re.sub(r"(?<![\n=}])\n==", "\n\n==", re.sub(r"\n\n+", "\n\n", new_txt)).strip()
-    new_txt = re.sub(r"(stub|Endgame)}}\n==", "\\1}}\n\n==", new_txt)
+    new_txt = re.sub(r"(stub|End[Gg]ame)}}\n==", "\\1}}\n\n==", new_txt)
     new_txt = re.sub(r"(\{\{Quote\|[^\n]+}})\n\n", "\\1\n", new_txt)
     new_txt = new_txt.replace("\n\n}}", "\n}}").replace("\n\n{{More", "\n{{More")
     if "{{Multiple" in new_txt:
