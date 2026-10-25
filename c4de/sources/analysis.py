@@ -8,8 +8,8 @@ from typing import List, Tuple, Union, Dict, Optional
 from c4de.common import is_redirect, log_time
 from c4de.dates import convert_date_str
 from c4de.sources.determine import determine_id_for_item
-from c4de.sources.domain import Item, ItemId, ItemIdListDict, ItemIdDict, FullListData, PageComponents, \
-    AnalysisResults, SectionItemIds, FinishedSection, NewComponents, UnknownItems
+from c4de.sources.domain import Item, ItemId, FullListData, PageComponents, AnalysisResults, SectionItemIds, \
+    FinishedSection, NewComponents, UnknownItems
 from c4de.sources.engine import AUDIOBOOK_MAPPING, LIST_AT_START, LIST_AT_END
 from c4de.sources.expansion import handle_expansion
 from c4de.sources.external import is_external_link, prepare_basic_url, prepare_official_link, is_official_link, \
@@ -378,7 +378,7 @@ def prepare_reprints(appearances: FullListData, sources: FullListData, items: Li
     return reprints
 
 
-def _cards() -> ItemIdListDict:
+def _cards() -> Dict[str, List[ItemId]]:
     return defaultdict(list)
 
 
@@ -574,7 +574,7 @@ def build_item_ids_for_section(page: Page, real, media, name, original: List[Ite
     return SectionItemIds(name, found, wrong, non_canon, links, len(any_expanded) > 0 or other_extra, group_items, group_ids, wrong_group_items, wrong_group_ids)
 
 
-def handle_groups(groups: ItemIdListDict, data: FullListData, other: FullListData, found: List[ItemId],
+def handle_groups(groups: Dict[str, List[ItemId]], data: FullListData, other: FullListData, found: List[ItemId],
                   group_ids: dict, extra: dict, unknown, canon: bool):
     unknown_sets = {}
     already_found = {}
@@ -635,7 +635,7 @@ def handle_groups(groups: ItemIdListDict, data: FullListData, other: FullListDat
                 unknown.append(i.current)
 
 
-def handle_card_item(d: ItemId, o: Item, cards: ItemIdListDict, found: List[ItemId], extra: ItemIdDict):
+def handle_card_item(d: ItemId, o: Item, cards: Dict[str, List[ItemId]], found: List[ItemId], extra: Dict[str, ItemId]):
     if d.current.card and d.current.card == d.master.card and d.master.has_date() and not d.master.is_card_or_mini():
         found.append(d)
         return

@@ -1,16 +1,16 @@
 import re
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 
 from pywikibot import Page
-from c4de.sources.domain import Item, ItemId, ItemListDict, ItemDict
+from c4de.sources.domain import Item, ItemId
 from c4de.sources.extract import GAME_TEMPLATES
 
 
-def data_and_other(a: ItemDict, b: ItemDict, ref=False):
+def data_and_other(a: Dict[str, Item], b: Dict[str, Item], ref=False):
     return [(True if ref else False, a), (False if ref else True, b)]
 
 
-def data_list_and_other(a: ItemListDict, b: ItemListDict, ref=False):
+def data_list_and_other(a: Dict[str, List[Item]], b: Dict[str, List[Item]], ref=False):
     return [(True if ref else False, a), (False if ref else True, b)]
 
 
@@ -37,7 +37,7 @@ def follow_redirect(o: Item, site, log):
     return False
 
 
-def check_targets(o: Item, target, by_target: ItemListDict, other_targets: ItemListDict,
+def check_targets(o: Item, target, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]],
                   use_original_text=False, by_parent=False):
     if by_target and by_target.get(target):
         return ItemId(o, by_target[target][0], use_original_text, False, by_parent=by_parent)
@@ -50,8 +50,8 @@ SPECIAL_REMAP = ["Star Wars Kids Answer Quest"]
 
 
 def determine_id_for_item(
-        o: Item, page: Page, data: ItemDict, urls: ItemListDict, by_target: ItemListDict,
-        other_data: ItemDict, other_urls: ItemListDict, other_targets: ItemListDict,
+        o: Item, page: Page, data: Dict[str, Item], urls: Dict[str, List[Item]], by_target: Dict[str, List[Item]],
+        other_data: Dict[str, Item], other_urls: Dict[str, List[Item]], other_targets: Dict[str, List[Item]],
         remap: dict, canon: bool, log: bool, ref=False):
     """ :rtype: ItemId """
 
@@ -183,7 +183,7 @@ def determine_id_for_item(
     return x
 
 
-def match_issue_item(o: Item, data, site, by_target: ItemListDict, other_targets: ItemListDict):
+def match_issue_item(o: Item, data, site, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]]):
     t = f"{o.mode}|None|{o.target}|None|None|None|None|None"
     if t in data:
         return ItemId(o, data[t], o.protected_format, False)
@@ -242,7 +242,7 @@ def flatten_card(s, x=False):
     return (s.split("&mdash;")[0].split("—")[0] if x else s).replace("''", "").replace('"', "").replace("The ", "").replace("0", "O").replace("1", "I").lower()
 
 
-def match_card_or_mini(o, data_sets: List[Tuple[bool, ItemDict]], canon, ref, data: ItemDict, other_data: ItemDict, urls, other_urls):
+def match_card_or_mini(o, data_sets: List[Tuple[bool, Dict[str, Item]]], canon, ref, data: Dict[str, Item], other_data: Dict[str, Item], urls, other_urls):
     is_tracked_mini = o.template == "SWIA" or (o.mode == "Minis" and o.template not in ["Shatterpoint", "NewLegion"])
     set_name = o.parent or o.target
     set_name = "Star Wars: The Legacy Collection" if set_name == "Star Wars: Legacy Collection" else set_name
@@ -319,7 +319,7 @@ def match_individual_miniature(o: Item, oc: str, x: Item):
     return False, close
 
 
-def match_miniatures(o: Item, set_name, data_sets: List[Tuple[bool, ItemDict]], canon, ref, is_tracked_mini):
+def match_miniatures(o: Item, set_name, data_sets: List[Tuple[bool, Dict[str, Item]]], canon, ref, is_tracked_mini):
     oc = flatten_card(o.card or '', True)
     exact, other_set, close = [], [], []
     for other, d in data_sets:
@@ -383,7 +383,7 @@ def match_card(o: Item, x: Item, other: bool, matches: list):
         matches.append(x)
 
 
-def match_fact_file(o: Item, by_target: ItemListDict, other_targets: ItemListDict):
+def match_fact_file(o: Item, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]]):
     targets = [(False, by_target), (True, other_targets)]
     for is_other, data in targets:
         if f"FFData|{o.issue}" in data:
@@ -436,7 +436,7 @@ def to_int(x: str):
     return int(x) if x and x.isnumeric() else None
 
 
-def match_by_set_name(o: Item, mode: str, template: Optional[str], set_name: str, data: ItemDict, other_data: ItemDict):
+def match_by_set_name(o: Item, mode: str, template: Optional[str], set_name: str, data: Dict[str, Item], other_data: Dict[str, Item]):
     m = find_matching_set(mode, template, set_name, data)
     if m:
         return ItemId(o, m, True, False)
@@ -447,7 +447,7 @@ def match_by_set_name(o: Item, mode: str, template: Optional[str], set_name: str
     return None
 
 
-def find_matching_set(mode, template, set_name, data: ItemDict):
+def find_matching_set(mode, template, set_name, data: Dict[str, Item]):
     t = f"{'Cards' if template == 'SWIA' else mode}|{template}|{set_name}"
     for x in ["", "None"]:
         if f"{t}|None|None|None|None|{x}" in data:
@@ -474,7 +474,7 @@ def find_matching_issue(items, issue, text, template):
     return items[0]
 
 
-def match_issue_target(o: Item, by_target: ItemListDict, other_targets: ItemListDict, use_original):
+def match_issue_target(o: Item, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]], use_original):
     match = match_target_issue_name(o, o.target, by_target, other_targets, use_original)
     if match:
         return match
@@ -492,7 +492,7 @@ def match_issue_target(o: Item, by_target: ItemListDict, other_targets: ItemList
     return None
 
 
-def match_target_issue_name(o, target, by_target: ItemListDict, other_targets: ItemListDict, use_original):
+def match_target_issue_name(o, target, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]], use_original):
     if target and by_target and target in by_target:
         return ItemId(o, find_matching_issue(by_target[target], o.issue, o.original, o.template), use_original, False)
     elif target and other_targets and target in other_targets:
@@ -500,7 +500,7 @@ def match_target_issue_name(o, target, by_target: ItemListDict, other_targets: I
     return None
 
 
-def match_parent_target(o: Item, parent, target, by_target: ItemListDict, other_targets: ItemListDict,
+def match_parent_target(o: Item, parent, target, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]],
                         site, save=True) -> Optional[ItemId]:
     if parent and target:
         x = match_by_parent_target(o, parent, target, by_target, other_targets, True)
@@ -515,7 +515,7 @@ def match_parent_target(o: Item, parent, target, by_target: ItemListDict, other_
     return None
 
 
-def match_by_parent_target(o: Item, parent, target, by_target: ItemListDict, other_targets: ItemListDict, single=False):
+def match_by_parent_target(o: Item, parent, target, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]], single=False):
     for from_other, targets in data_list_and_other(by_target, other_targets):
         if targets and target in targets and len(targets[target]) > (0 if single else 1):
             for t in targets[target]:
@@ -551,7 +551,7 @@ TV_SUFFIXES = {
 
 
 # build list of possible target matches; template-specific remaps and simple mistakes
-def build_possible_target_names(target, o: Item, by_target: ItemListDict):
+def build_possible_target_names(target, o: Item, by_target: Dict[str, List[Item]]):
     if not target:
         return []
 
@@ -583,19 +583,19 @@ def build_possible_target_names(target, o: Item, by_target: ItemListDict):
     #                     return ItemId(o, i, False, False)
     #                 elif i.template == x and i.issue == m.group(2):
     #                     return ItemId(o, i, False, False)
-    return target
+    return targets
 
 
-def get_possible_targets(o: Item, by_target: ItemListDict):
+def get_possible_targets(o: Item, by_target: Dict[str, List[Item]]):
     target_names = build_possible_target_names(o.target, o, by_target)
     return [x for t in target_names for x in by_target.get(t, [])]
 
 
-def match_target(o: Item, by_target: ItemListDict, other_targets: ItemListDict, log):
+def match_target(o: Item, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]], log):
     return match_specific_target(o, o.target, by_target, other_targets, log)
 
 
-def match_specific_target(o: Item, target: str, by_target: ItemListDict, other_targets: ItemListDict, log):
+def match_specific_target(o: Item, target: str, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]], log):
     targets = build_possible_target_names(target, o, by_target)
     for t in targets:
         x = match_by_target(t, o, by_target, other_targets, log)
@@ -616,7 +616,7 @@ def match_specific_target(o: Item, target: str, by_target: ItemListDict, other_t
     return None
 
 
-def match_by_target(t, o: Item, by_target: ItemListDict, other_targets: ItemListDict, log):
+def match_by_target(t, o: Item, by_target: Dict[str, List[Item]], other_targets: Dict[str, List[Item]], log):
     for from_other, d in data_list_and_other(by_target, other_targets):
         targets = d.get(t)
         if not targets:
@@ -784,7 +784,7 @@ def evaluate_match(x: int, url, o: Item, d: Item, ad, is_old, check_sw, merge: s
     return None
 
 
-def match_by_url(o: Item, url: str, data: ItemDict, urls: ItemListDict, replace_page: bool):
+def match_by_url(o: Item, url: str, data: Dict[str, Item], urls: Dict[str, List[Item]], replace_page: bool):
     check_sw = o.template == "SW" and url.startswith("video/")
     url = prep_url(url)
     merge = {"SW", "SWArchive", "Hyperspace", "SideshowCite", "IronStudiosCite", "HotToysCite", "SWYouTube"}

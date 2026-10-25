@@ -7,7 +7,7 @@ from typing import Tuple, Optional, List, Dict
 
 from c4de.sources.cleanup import EXTRA
 from pywikibot import Page, Category
-from c4de.sources.domain import Item, ItemListDict, FullListData
+from c4de.sources.domain import Item, FullListData
 from c4de.sources.extract import extract_item, TEMPLATE_MAPPING
 from c4de.common import build_redirects, fix_redirects, log as _log
 
@@ -322,7 +322,7 @@ def store_data(x: Item, i: dict, old: str, extra: str, parenthetical: str, alter
         x.target = f"{x.target} ({parenthetical})"
 
 
-def check_for_both_continuities(x: Item, targets: ItemListDict, both_continuities: set):
+def check_for_both_continuities(x: Item, targets: Dict[str, List[Item]], both_continuities: set):
     targets[x.target].append(x)
     if len(targets[x.target]) > 1:
         d = set(i.canon for i in targets[x.target])

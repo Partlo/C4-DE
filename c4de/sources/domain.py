@@ -1,4 +1,4 @@
-from typing import List, Dict, Tuple
+from typing import List, Dict
 import re
 import copy
 
@@ -285,22 +285,16 @@ class ItemId:
             .replace('"', '').replace("|", " |").replace("]]", "").replace("}}", " }}").lower().split(" (novel")[0]
 
 
-type ItemDict = dict[str, Item]
-type ItemIdDict = dict[str, ItemId]
-type ItemListDict = dict[str, list[Item]]
-type ItemIdListDict = dict[str, List[ItemId]]
-type MainAndOtherDict = List[Tuple[bool, ItemDict]]
-type MainAndOtherList = List[Tuple[bool, ItemListDict]]
-
-
 class AnalysisConfig:
     def __init__(self):
         pass
 
 
 class FullListData:
-    def __init__(self, unique: ItemDict, full: ItemDict, urls: ItemListDict, target: ItemListDict, by_parent: ItemListDict,
-                 parentheticals: set, both_continuities: set, reprints: ItemListDict, no_canon_index: List[Item]=None, no_legends_index: List[Item]=None):
+    def __init__(self, unique: Dict[str, Item], full: Dict[str, Item], urls: Dict[str, List[Item]],
+                 target: Dict[str, List[Item]], by_parent: Dict[str, List[Item]], parentheticals: set,
+                 both_continuities: set, reprints: Dict[str, List[Item]], no_canon_index: List[Item] = None,
+                 no_legends_index: List[Item] = None):
         self.unique = unique
         self.full = full
         self.urls = urls
@@ -363,7 +357,7 @@ class PageComponents:
 
 
 class AnalysisResults:
-    def __init__(self, apps: List[ItemId], nca: List[ItemId], src: List[ItemId], ncs: List[ItemId], canon: bool, abridged: list, mismatch: List[ItemId], reprints: ItemListDict):
+    def __init__(self, apps: List[ItemId], nca: List[ItemId], src: List[ItemId], ncs: List[ItemId], canon: bool, abridged: list, mismatch: List[ItemId], reprints: Dict[str, List[Item]]):
         self.apps = apps
         self.nca = nca
         self.src = src
