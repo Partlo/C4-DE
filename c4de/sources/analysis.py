@@ -1057,7 +1057,7 @@ def build_flags(o: ItemId, sl, section_name, is_file=False, person=False):
             return ""
         elif "{{c|cut}}" in (o.current.extra or "").lower():
             return ""
-        elif o.master.collection_type and (person or "{{crawl}}" in (o.current.extra or "").lower()):
+        elif o.master.collection_type and (person or "{{crawl" in (o.current.extra or "").lower()):
             return ""
         elif "Weekly" in o.master.target and re.search("(Wars|Back|Jedi) Weekly [0-9]+", o.master.target):
             return ""

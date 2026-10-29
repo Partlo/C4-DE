@@ -31,10 +31,13 @@ def remove_the(x):
 
 def flatten(x):
     z = (x.replace("–", "&ndash;").replace("—", "&mdash;").replace("theruses|title=", "theruses|")
-         .replace("|nolive=1", "").replace("|from=1", "").replace("|notoc=1", "")
+         .replace("|nolive=1", "").replace("|from=1", "").replace("|notoc=1\n", "|notoc=1").replace("|notoc=1", "")
          .replace("{{Scroll_box", "{{ScrollBox").replace("{{Scroll box", "{{ScrollBox")
          .replace("set=Star Wars: Imperial Assault Core Set|text=Core Set", "set=Core Set")
          .replace("set=Star Wars: Imperial Assault Core Set", "set=Core Set")
+         .replace("[A Crash of Fate]", "[Galaxy's Edge: A Crash of Fate]").replace("|A Crash of Fate", "|Galaxy's Edge: A Crash of Fate")
+         .replace("{{GEAttr|", "{{GalaxysEdge|").replace("{{GSAttr|", "{{GalacticStarcruiser|")
+         .replace("Star Wars Complete Vehicles, New Edition", "Star Wars: Complete Vehicles, New Edition")
          .replace("=Collections=", "=Collected in=").replace("]]\n{{RelatedCategories", "]]\n\n{{RelatedCategories"))
     z = re.sub(r"(\{\{[A-Z][a-z]+)[ _]([A-z])([A-z _]+)([ _]?Nav)?(\n|}})", lambda a: a.group(1) + a.group(2).upper() + a.group(3) + a.group(5), z)
     z = re.sub(r"(\{\{[A-Z][a-z]+)[ _]([A-z])([A-z _]+)([ _]?Nav)?(\n|}})", lambda a: a.group(1) + a.group(2).upper() + a.group(3) + a.group(5), z)
@@ -46,7 +49,11 @@ def prep(text, old_text):
                 re.sub(r"(\|.*?=)}}\n", "\\1\n}}\n", text.replace("{{!}}", "|")))
     z2 = re.sub(r"(\|[A-z _0-9]+=.*?(\n.+?)?)}}(\n((The |A )?'''|\{\{Quote))", "\\1\n}}\\3",
                 re.sub(r"(\|.*?=)}}\n", "\\1\n}}\n", old_text.replace("{{!}}", "|")))
+    z1 = re.sub(r"(\|book=[^\n}]*?)(\|story=[^\n}]*?)(\|.*?)?}}", "\\2\\1\\3}}", z1)
     z2 = re.sub(r"(\|book=[^\n}]*?)(\|story=[^\n}]*?)(\|.*?)?}}", "\\2\\1\\3}}", z2)
+
+    z2 = re.sub(r"(\{\{Top.*?\|notoc=1)\n}}\n", "\\1}}\n", z2)
+    z2 = re.sub(r"(\{\{Top.*?\|notoc=1.*?}}\n\{\{[A-z]+\|.*?)\n(}}\n''')", "\\1\\2", z2)
     z2 = re.sub(r"(\{\{1st.*?\|\[\[(.*?) \(.*?audiobook\)\|)''\\2'' (.*?audiobook)", "\\1\\3", z2)
     return text, z1, z2
 
@@ -224,6 +231,7 @@ def analyze(*args, to_save):
             #     override = "RelatedCategories" in text and "RelatedCategories" not in old_text
             # if override:
             #     continue
+            # override = old_text.count("{{UnknownRef}}") < text.count("{{UnlinkedRef}}")
 
             if match and (old_text.count("{{ID|") + old_text.count("{{1st")) < (text.count("{{ID|") + text.count("{{1st")):
                 match = False
@@ -303,8 +311,8 @@ if __name__ == "__main__":
     try:
         analyze(sys.argv, to_save=to_save)
     except KeyboardInterrupt as e:
-        traceback.print_exc()
-        print(e)
+        # traceback.print_exc()
+        # print(e)
         if to_save:
             with codecs.open(f"{PROJECT_DIR}/c4de/protocols/review.txt", mode="a", encoding="utf-8") as f:
                 f.writelines("\n".join(to_save))

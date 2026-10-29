@@ -27,7 +27,7 @@ def check_format_text(o: ItemId, x: Item):
 
 
 def _clean_simple(t):
-    return t.replace("''", "").strip().lower().replace("novelization", "novel").replace("comic series", "comics")
+    return t.replace("''", "").strip().lower().replace("paperback novel", "junior novelization").replace("novelization", "novel").replace("comic series", "comics")
 
 
 def _full_clean(t, y):
@@ -83,10 +83,12 @@ def attempt_conversion(new_ref, page: Page, types, appearances: FullListData, so
 STORY_TEMPLATES = ["StoryCite", "WEGCite", "LivingForce", "DoD", "CWACite", "Tales"]
 
 
-def is_plain_short_story_link(o: ItemId, link: str, ref_length):
+def is_plain_short_story_link(o: ItemId, link: str, ref: str, ref_length):
     if not (o.master.magazine or o.master.tv or o.master.template in STORY_TEMPLATES):
         return False
     elif ref_length < 5:
+        return False
+    elif ref.startswith(f"{link} {{{{AD|"):
         return False
 
     z = link.replace("''", "").replace('"', "")
@@ -114,13 +116,15 @@ def determine_id_for_reference(x: Item, page: Page, appearances: FullListData, s
     if o:
         expanded, _, _, _ = handle_expansion(o, x, page, page_links, appearances, sources, set(), 0, 0, is_reference=True)
         if len(expanded) == 1:
-            return expanded[0]
-    return o
+            return expanded[0], True
+    return o, False
 
 
 def should_flag_series(o: ItemId, is_iu, ref_length):
     if o and o.master.from_extra and is_iu:
         if o.current.is_exception or o.current.override or o.master.future or o.master.has_content:
+            return ""
+        elif "Weekly" in o.master.target and re.search("(Wars|Back|Jedi) Weekly [0-9]+", o.master.target):
             return ""
         return "{{SeriesRef}} " if ref_length < 5 else ""
     return ""
@@ -130,42 +134,57 @@ REMOVE = ["{{PageNumber}}", "{{UnlinkedRef}}", "{{Un}}", "{{SeriesRef}}"]
 
 
 def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearances: FullListData, sources: FullListData,
-                     page_links, remap: dict, disambigs: dict, redirects, canon: bool, real: bool, media: bool, log: bool):
+                     page_links, remap: dict, disambigs: dict, redirects, canon: bool, real_or_bts: bool, media: bool, log: bool):
     try:
-        new_ref = re.sub(r"<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", ref)
-        new_ref = re.sub(r"\|set=(.*?) \(.*?\)\|(sformatt?e?d?|stext)=.*?\|", "|set=\\1|", new_ref)
+        new_ref = f"{ref}"
         for t in REMOVE:
             new_ref = new_ref.replace(f" {t}", "").replace(t, "").strip()
+        original_length = len(new_ref)
+        new_ref = re.sub(r"<!--( ?Unknown ?|[ 0-9/X-]+)-->", "", new_ref)
+        new_ref = re.sub(r"\|set=(.*?) \(.*?\)\|(sformatt?e?d?|stext)=.*?\|", "|set=\\1|", new_ref)
         new_ref = convert_issue_to_template(new_ref).replace("{{=}}", "=")
         new_ref = attempt_conversion(new_ref, page, types, appearances, sources, remap, canon, log)
 
-        links = re.findall(r"(['\"]*\[\[(?!([Ww]:c:|[Ww]ikipedia:)).*?(\|.*?)?]]['\"]*),?(\"?)", new_ref)
+        links = re.findall(r"(['\"]*\[\[(?!([Ww]:c:|[Ww]ikipedia:)).*?(\|.*?)?]]['\"]*)[,.]?(\"?)", new_ref)
         templates = re.findall(r"(\{\{[^{}\n]+}})", new_ref)
         templates += re.findall(r"(\{\{[^{}\n]+\{\{[^{}\n]+}}[^{}\n]+}})", new_ref)
         templates += re.findall(r"(\{\{[^{}\n]+\{\{[^{}\n]+}}[^{}\n]+\{\{[^{}\n]+}}[^{}\n]+}})", new_ref)
 
+        other_templates = [t for t in templates if not t.startswith("{{C|") and not t.startswith("{{AD|")]
         new_links = []
         found = []
+        remove = []
+        rename = {}
         for link in links:
             x = extract_item(link[0], False, "reference", types)
-            ref_length = len(ref) - len(link[0])
+            ref_length = original_length - len(link[0])
             if x:
                 link_w_quotes = link[0] + link[3]
-                o = determine_id_for_reference(x, page, appearances, sources, page_links, canon, log)
-                flag = should_flag_series(o, not real, ref_length)
+                o, expanded = determine_id_for_reference(x, page, appearances, sources, page_links, canon, log)
+                flag = should_flag_series(o, not real_or_bts, ref_length)
                 if o and not o.use_original_text and o.replace_references and o.master.original != link_w_quotes:
                     found.append(o.master)
-                    if is_plain_short_story_link(o, link[0], ref_length):
+                    if expanded and ref_length < 5:
+                        new_links.append((link[0], flag + o.master.original.replace("|audiobook=1", "").split(" {{Ab|")[0]))
+                        if f"name=\"{x.target}\"" in full_ref:
+                            rename[f"name=\"{x.target}\""] = f"name=\"{o.master.target}\""
+                    elif is_plain_short_story_link(o, link[0], ref, ref_length):
                         simple_link = f'"[[' + re.sub(r"^(.*?)( \(.*?\))$", "\\1\\2|\\1", x.target) + ']]"'
+                        if x.target == "Star Wars Rebels: Spark of Rebellion":
+                            simple_link = '"[[Star Wars Rebels: Spark of Rebellion|Spark of Rebellion]]"'
                         if simple_link != link_w_quotes and not ("EwoksDate" in ref and f"|{link_w_quotes}}}}}" in ref):
-                            new_links.append((link[0], simple_link))
-                    elif o.master.template and not x.template and x.target and not re.search(link_pattern(x.target) + r"$", new_ref):
+                            new_links.append((link[0], flag + simple_link))
+                            if "''" in link[0]:
+                                xz = re.sub(r"('*)\[\[(.*?\|)?(.*?)]]('*)", "\\1\\3\\4", link[0])
+                                tx = x.target.split(' (')[0]
+                                new_links.append((xz, f'"{tx}"'))
+                    elif o.master.template and not x.template and x.target and not re.search(link_pattern(x.target) + r"$", new_ref.split(" {{AD|", 1)[0]):
                         if o.master.template != "Film" and re.sub(r"\[\[(.*?)( \(.*?\))]]", "[[\\1\\2|\\1]]", f'"[[{x.target}]]') not in new_ref:
                             print(f"Skipping {link[0]} due to extraneous text ({ref_length} more characters)")
                     elif link_w_quotes.startswith('"') and link_w_quotes.endswith('"') and ref_length > 5:
                         if o.master.template != "StoryCite" and o.master.mode != "TV" and o.master.mode != "Magazine":
                             print(f"Skipping quote-enclosed link {link[0]} in longer reference (likely an episode name)")
-                    elif "{{" in o.master.original and len(templates) > 0:
+                    elif "{{" in o.master.original and len(other_templates) > 0:
                         print(f"Skipping {link[0]} due to presence of other templates in ref note")
                     elif o.master.original.isnumeric():
                         print(f"Skipping {link[0]} due to numeric text")
@@ -195,18 +214,28 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
 
         new_templates, unknown_templates = [], []
         for t in templates:
+            if t.startswith("{{Ab|"):
+                remove.append(t)
+                continue
+
             if "bypass=1" in t or types.get(t) == "Dates" or any(t.lower().startswith("{{" + i.lower()) for i in TEMPLATE_SKIPS):
                 continue
             x = extract_item(t, False, "reference", types)
             if x:
                 if x.template and is_nav_or_date_template(x.template, types):
                     continue
-                o = determine_id_for_reference(x, page, appearances, sources, page_links, canon, log)
+                o, expanded = determine_id_for_reference(x, page, appearances, sources, page_links, canon, log)
                 if o and o.current.is_card_or_mini():
-                    new_templates.append((t, o, []))
+                    flag = "{{UnknownRef}}" if o.current.unknown else ""
+                    new_templates.append((t, flag, o, []))
                 elif o:
+                    flag = "{{UnknownRef}}" if o.current.unknown and o.current.mode not in ("Publisher", "External", "Profile", "Social", "Publisher") else ""
                     found.append(o.master)
-                    if o.use_original_text or o.current.protected_format:
+                    if o.current.protected_format:
+                        continue
+                    elif o.use_original_text:
+                        if flag:
+                            new_templates.append((t, flag, o, []))
                         continue
                     elif t != (o.master.original.replace(f"|int={page.title()}|", "|").replace(f"|int={page.title()}" + "}", "}") if media else o.master.original):
                         ex = []
@@ -216,17 +245,20 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                             ex += re.findall(r"(\|date=.*?)[|}]", t)
                         if "|quote=" in t:
                             ex += re.findall(r"(\|quote=.*?)[|}]", t)
-                        new_templates.append((t, o, ex))
+                        new_templates.append((t, flag, o, ex))
                 else:
                     unknown_templates.append(x)
 
-        for ot, ni, extra in new_templates:
-            if ni.master.is_card_or_mini():
+        for ot, flag, ni, extra in new_templates:
+            if ni.use_original_text:
+                z = swap_parameters(ni.current.original)
+            elif ni.master.is_card_or_mini():
                 z = build_card_text(ni, ni, replace_parent=page.title() != ni.master.target)
             elif ni.master.ref_magazine:
                 z = re.sub(r"'*?(\{\{(?!FactFile)[A-z0-9]+\|[0-9]+\|.*?)(\|.*?(\{\{'s?}})?.*?)?}}'*?", "\\1}}", ni.master.original)
             else:
                 z = swap_parameters(ni.master.original)
+            z = f"{flag} {z}".strip()
             z = z.replace(f"|int={page.title()}|", "|").replace(f"|int={page.title()}" + "}", "}")
             if extra:
                 to_use = []
@@ -279,39 +311,45 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
         if "series series" in final_ref:
             final_ref = re.sub(r" series( series)+", " series", final_ref)
         new_text = new_text.replace(full_ref, final_ref)
+        for k, v in rename.items():
+            new_text = new_text.replace(k, v)
     except Exception as e:
         traceback.print_exc()
         print(f"Encountered {e} while handling reference", type(e))
     return new_text
 
 
-def build_new_reference(new_text, ref, final_ref, found: List[Item], unknown_templates):
+def build_new_reference(full_text, ref, final_ref, found: List[Item], unknown_templates):
     if len(found) == 1 and "{{C|" in final_ref:
         return None
     if len(found) == 1 and found[0].target:
-        return ensure_unique_references(new_text, found[0].target)
+        return ensure_unique_references(full_text, found[0].target)
     elif len(found) == 1 and found[0].template and found[0].text:
-        return ensure_unique_references(new_text, f"{found[0].template}-{found[0].text}")
+        return ensure_unique_references(full_text, f"{found[0].template}-{found[0].text}")
     elif len(found) == 1:
         print(f"Cannot fix nameless reference to {found[0].target}: {ref}")
         return None
     elif "|cardname=" in final_ref:
         z = re.sub(r"^.*?\{\{(.*?)\|.*?cardname=(.*?)(\|.*?)?}}.*?$", "\\1-\\2", final_ref)
-        return ensure_unique_references(new_text, f"Card-{z}")
+        return ensure_unique_references(full_text, f"Card-{z}")
     elif len(unknown_templates) == 1 and unknown_templates[0].mode in ("Web", "External", "YT") and "WebCite" not in final_ref:
-        return ensure_unique_references(new_text, unknown_templates[0].template)
+        return ensure_unique_references(full_text, unknown_templates[0].template)
     elif re.search(r"\{\{[A-Z0-9]+[Dd]ates?[A-Z]?[A-Z]?(\|.*?)?}}", final_ref):
         zx = re.search(r"\{\{(.*?)\|([0-9]+)(\|.*?)?}}", final_ref)
         if zx:
-            return ensure_unique_references(new_text, f"{zx.group(1)}-{zx.group(2)}")
+            return ensure_unique_references(full_text, f"{zx.group(1)}-{zx.group(2)}")
         else:
-            return ensure_unique_references(new_text, unknown_templates[0].template)
+            return ensure_unique_references(full_text, unknown_templates[0].template)
     elif "TORcite" in final_ref:
-        x = re.search(r"TORcite\|.*?(TORTYPE|type)=(faction|class)\|.*?\|(.*?)(\|.*?)?}}", final_ref)
+        x = re.search(r"TORcite\|.*?(TORTYPE|type)=(faction|class|crewskill|conversation)\|.*?\|(.*?)(\|.*?)?}}", final_ref)
         if not x:
             x = re.search(r"TORcite\|.*?(TORTYPE|type)=([a-z]+)\|(.*?)(\|.*?)?}}", final_ref)
         if x:
-            return ensure_unique_references(new_text, ("TOR-" if f'"{x.group(3)}"' in new_text else "") + x.group(3))
+            return ensure_unique_references(full_text, ("TOR-" if f'"{x.group(3)}"' in full_text else "") + x.group(3))
+        else:
+            x = re.search(r"TORcite\|.*?exp=([a-z]+)\|chapter=([0-9]+)", final_ref)
+            if x:
+                return ensure_unique_references(full_text, f"{x.group(1).upper()} Chapter {x.group(2)}")
 
     if "WebCite" not in final_ref:
         print(f"Cannot fix nameless reference, due to {len(found)} links found in reference: {final_ref}")

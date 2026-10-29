@@ -157,7 +157,7 @@ def balanced_count(string: str, c1, c2):
     return string.count(c1) - string.count(c2)
 
 
-def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List[str], str, str, bool]:
+def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List[str], str, str, bool, dict]:
     found, original = None, None
     done, intro_started = False, False
     oc, oc2 = 0, 0
@@ -216,12 +216,19 @@ def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List
                     done = True
                 post.append(line)
 
+    replacements = {}
     for line in contents:
         if done:
             if line.strip() or intro_started:
                 intro_started = True
                 post.append(line)
             continue
+
+        if "<ref" in line:
+            for x in re.findall("(<ref( name=.*?)?>.*?</ref>)", line):
+                replacements[f"[ref{len(replacements)}]"] = x[0]
+            for k, v in replacements.items():
+                line = line.replace(v, k)
 
         oc += balanced_count(line, "{", "}")
         if oc == 0 and line.strip() == "}}":
@@ -269,7 +276,13 @@ def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List
                 if not n and nx:
                     data[field] += nx.replace("<NL>", "\n")
 
-    return data, pre, post, found or "", original, scroll_box
+    return data, pre, post, found or "", original, scroll_box, replacements
+
+
+def restore_references(line, replacements):
+    for k, v in replacements.items():
+        line = line.replace(k, v)
+    return line
 
 
 def extract_date(text):
@@ -302,7 +315,7 @@ REMAP = {
 def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None, add=False, log=True):
     original_text = f"{text}"
     text = text.replace("|coord=", "|coordinates=")
-    data, pre, post, found, original, scroll_box = parse_infobox(text, all_infoboxes)
+    data, pre, post, found, original, scroll_box, replacements = parse_infobox(text, all_infoboxes)
     if scroll_box:
         print(f"Scroll box found in infobox; cannot parse {page.title()}")
         return text, found, original
@@ -374,6 +387,7 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
 
     current = found.replace(" ", "_") if "{{" + found.lower().replace(" ", "_") in text.lower() else found
     new_infobox = ["{{" + current.replace(" ", "_")]
+    bc = 2
     i = -1
     added = []
     for f in params:
@@ -396,10 +410,13 @@ def handle_infobox_on_page(text, page: Page, all_infoboxes, template: str = None
         elif f in optional and not v and f not in data and f not in ["other date", "other_date"]:
             continue
         else:
+            if v:
+                bc += balanced_count(v, "{", "}")
+                v = restore_references(v, replacements)
             new_infobox.append(f"|{f}={v or ''}")
             added.append(f)
 
-    if sum(i.count("{") - i.count("}") for i in new_infobox) > 0:
+    if bc > 0:
         new_infobox.append("}}")
 
     new_text = "\n".join([*pre, *new_infobox, *post])

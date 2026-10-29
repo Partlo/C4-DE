@@ -295,7 +295,7 @@ def build_final_text(pieces, otx, page: Page, results: PageComponents, disambigs
         media_cat = None if results.media_cat == "Ignore" else results.media_cat
     elif results.infobox in NO_MEDIA or "{{Mediacat" in otx:
         media_cat = None
-    elif results.canon and not results.real and not results.media:
+    elif not results.real and not results.media:
         media_cat = None
     else:
         media_cat = find_media_categories(page, media=results.media, check_audio=results.infobox not in NO_AUDIO)

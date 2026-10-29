@@ -862,12 +862,12 @@ def check_title_formatting(text, title_regex, title):
 
 def clean_title(title):
     title = re.sub(r" ", " ", title).replace("<br>", "")
-    title = re.sub(r"<[ie]m?>( )?[ \n]*</[ie]m?>", r"\1", title)
-    title = re.sub(r"<[ie]m?><[ie]m?>( )?(.*?)( )?</[ie]m?>( )?</[ie]m?>", r"\1''\2''\3\4", title)
-    title = re.sub(r"<em.*?>( )?(.*?)( )?</em>", r"\1''\2''\3", title)
-    title = re.sub(r"<i( .*?)?>( )?(.*?)( )?</i>", r"\2''\3''\4", title)
-    title = re.sub(r"<span[^>]*?italic.*?>(.*?)( )?</span>", r"''\1''\2", title)
-    title = re.sub(r"<span[^>]*?>(.*?)( )?</span>", r"\1\2", title)
+    title = re.sub(r"<[ie]m?>( )?[ \n]*</[ie]m?>", "\\1", title)
+    title = re.sub(r"<[ie]m?><[ie]m?>( )?(.*?)( )?</[ie]m?>( )?</[ie]m?>", "\\1''\\2''\\3\\4", title)
+    title = re.sub(r"<em.*?>( )?(.*?)( )?</em>", "\\1''\\2''\\3", title)
+    title = re.sub(r"<i( .*?)?>( )?(.*?)( )?</i>", "\\2''\\3''\\4", title)
+    title = re.sub(r"<span[^>]*?italic.*?>(.*?)( )?</span>", "''\\1''\\2", title)
+    title = re.sub(r"<span[^>]*?>(.*?)( )?</span>", "\\1\\2", title)
     title = title.replace("“", '"').replace("”", '"').replace("’", "'").replace("‘", "'")
     title = title.replace("|", "&#124;").replace("–", "&ndash;").replace("—", "&mdash;")
     title = title.replace("[", "&#91;").replace("]", "&#93;")

@@ -29,7 +29,10 @@ ISSUE_REPRINTS = ["A Certain Point of View", "Classic Moment", "Behind the Magic
 
 def list_templates(site, cat, data, template_type, recurse=False):
     for p in Category(site, cat).articles(recurse=recurse):
-        if "/" not in p.title() and p.title(with_ns=False).lower() not in data:
+        if "/" in p.title():
+            if not (p.title(with_ns=False) == "ABY/BBY" or p.title(with_ns=False).startswith("ProductionBrief")):
+                continue
+        if p.title(with_ns=False).lower() not in data:
             data[p.title(with_ns=False).lower()] = template_type
 
 

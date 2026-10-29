@@ -315,7 +315,7 @@ class PageComponents:
     :type links: SectionComponents
     """
     def __init__(self, original: str, canon: bool, non_canon: bool, unlicensed: bool, real: bool, mode, media, person,
-                 infobox, original_infobox, flag: list, page_name, media_cat, stub=None):
+                 infobox, original_infobox, flag: list, page_name, media_cat, stub=None, has_sources_subpage=False):
         self.before = ""
         self.final = ""
         self.original = original
@@ -332,7 +332,7 @@ class PageComponents:
         self.page_name = page_name
         self.media_cat = media_cat
         self.stub = stub
-        self.has_sources_subpage = False
+        self.has_sources_subpage = has_sources_subpage
 
         self.ncs = SectionComponents([], [], [], '')
         self.src = SectionComponents([], [], [], '')

@@ -57,7 +57,7 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_c
         manual, redirects = fix_template_redirects(target, manual)
         log_time("template-redirects", now)
 
-    before, infobox, original = initial_cleanup(target, all_infoboxes, before=manual, infobox_log=log)
+    before, infobox, original, has_subpage = initial_cleanup(target, all_infoboxes, before=manual, infobox_log=log)
 
     log_time("cleanup", now)
     if "{{otheruses" in before.lower() or "{{youmay" in before.lower():
@@ -90,7 +90,7 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_c
         elif c.title(with_ns=False).startswith("Real-world") and c.title(with_ns=False) not in ["Real-world restaurants", "Real-world stores"]:
             real = True
 
-        if c.title() in bad_cats and c.title(with_ns=False) != "Legends locations with canon-only grid coordinates":
+        if c.title() in bad_cats and c.title(with_ns=False) not in ["Legends locations with canon-only grid coordinates", "Locations without grid coordinates/Legends"]:
             flag.append(c.title())
 
     media_cat, stub = None, None
@@ -110,6 +110,8 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_c
             before = before.replace(r"\n" + y.group(0), "").replace(y.group(0), "")
     elif real:
         media_cat = "Ignore"
+    else:
+        before = correct_header_templates(before, canon, non_canon)
 
     if real and media and before.count(r"\n==") > 3 and "==External links==\n{{Mediacat" in before:
         before = re.sub(r"(==External links==\n)\{\{Mediacat.*?\n", "\\1", before)
@@ -118,7 +120,34 @@ def build_initial_components(target: Page, disambigs: list, all_infoboxes, bad_c
         canon = True
         app_mode = BY_INDEX
     return before, redirects, PageComponents(manual or target.get(), canon, non_canon, unlicensed, real, app_mode,
-                                             media, person, infobox, original, flag, target.title(), media_cat, stub)
+                                             media, person, infobox, original, flag, target.title(), media_cat, stub,
+                                             has_subpage)
+
+
+HEADER_TEMPLATES = {
+    "Canon": ["}}", "|legends}}", ""],
+    "Conjecture": ["}}", "|legends}}", "|noncanon}}"],
+    "ConjectureCapitalization": ["}}", "|legends}}", "|noncanon}}"],
+    "ConjectureSpelling": ["}}", "|legends}}", "|noncanon}}"],
+    "Rankname": ["}}", "|legends=1}}", ""]
+}
+
+
+def correct_header_templates(text, canon, non_canon):
+    for t, (cx, lx, nx) in HEADER_TEMPLATES.items():
+        if f"{{{{{t}|" not in text and f"{{{{{t}}}}}" not in text:
+            continue
+        elif non_canon and not nx:
+            continue
+        elif non_canon:
+            expected = "{{" + t + nx
+        elif canon:
+            expected = "{{" + t + cx
+        else:
+            expected = "{{" + t + lx
+        if expected not in text:
+            text = re.sub(r"\{\{" + t + "(\|.*?)?}}", expected, text)
+    return text
 
 
 def match_iu_header(line):
@@ -280,12 +309,6 @@ def build_page_sections(target: Page, text: str, results: PageComponents, redire
     if x:
         text = x[0]
         final = "".join(x[1:])
-
-    if "{{SourcesPage" in text:
-        subpage = Page(target.site, f"{target.title()}/Sources")
-        if subpage.exists():
-            results.has_sources_subpage = True
-            text = re.sub(r"\{\{SourcesPage.*?}}", subpage.get(), text)
 
     by_section, intro, duplicates = split_by_section(text, results)
 
@@ -583,7 +606,7 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
                 print(f"Splitting multi-entry line: {s}")
             zs = [f"{x.group(1)}{x.group(3)}{x.group(5)}", f"{x.group(1)}{x.group(4)}{x.group(5)}"]
 
-    y = re.search(r"(?<!\|)(?P<p>[\"']*?\[\[.*?(\|.*?)?]][\"']*?) ?n?o?v?e?l? ?(and|\|) ?(?P<t>['\"]*\[\[.*?(\|.*?)?]]['\"]*?)", z)
+    y = re.search(r"(?<!\|)(?P<p>[\"']*?\[\[.*?(\|.*?)?]][\"']*?) ?n?o?v?e?l? ?(and|\||/) ?(?P<t>['\"]*\[\[.*?(\|.*?)?]]['\"]*?)", re.sub(r" ?\{\{Ab\|.*?}}", "", z))
     if not y and name.startswith("File:"):
         y = re.search(r"(?P<p>[\"']*?\[\[.*?(\|.*?)?]][\"']*?) via ?(?P<t>['\"]*\[\[(Star Wars Legends|Star Wars Omnibus).*?(\|.*?)?]]['\"]*?)", z)
     if y and not any(f"{{{{{x}|" in z for x in DO_NOT_SPLIT):
@@ -637,10 +660,18 @@ def handle_valid_line(s, is_appearances: bool, log: bool, types, data, other2, u
 
 
 def analyze_body(page: Page, text, types, appearances: FullListData, sources: FullListData, remap, disambigs, redirects, results: PageComponents, log: bool):
+    body, header, bts_and_rest = text.partition("==Behind the scenes==")
+    text = analyze_body_piece(page, text, body, types, appearances, sources, remap, disambigs, redirects, results, False, log)
+    if bts_and_rest:
+        text = analyze_body_piece(page, text, bts_and_rest, types, appearances, sources, remap, disambigs, redirects, results, True, log)
+    return text
+
+
+def analyze_body_piece(page: Page, full_text, text, types, appearances: FullListData, sources: FullListData, remap, disambigs, redirects, results: PageComponents, is_bts, log: bool):
     references = [(i[0], i[2]) for i in re.findall(r"(<ref name=((?!<ref).)*?[^/]>(((?!<ref).)*?)</ref>)", text)]
     references += [(i[0], i[1]) for i in re.findall(r"(<ref>(((?!<ref).)*?)</ref>)", text)]
-    new_text = text
+    new_text = f"{full_text}"
     page_links = []
     for full_ref, ref in references:
-        new_text = handle_reference(full_ref, ref, page, new_text, types, appearances, sources, page_links, remap, disambigs, redirects, results.canon, results.real, results.media, log)
+        new_text = handle_reference(full_ref, ref, page, new_text, types, appearances, sources, page_links, remap, disambigs, redirects, results.canon, results.real or is_bts, results.media, log)
     return new_text

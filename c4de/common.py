@@ -289,8 +289,9 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
                     text = text.replace(f"[[{r}]]", f"[[{t}]]s")
                 elif flatten(t) == flatten(r):
                     text = text.replace(f"[[{r}]]", f"[[{t}]]")
-                elif abs(len(r) - len(t)) and r.replace(" ", "") == t.replace(" ", ""):
+                elif (0 < abs(len(r) - len(t)) < 3) and r.replace(" ", "").replace("-", "").replace("'", "") == t.replace(" ", "").replace("-", "").replace("'", ""):
                     text = text.replace(f"[[{r}]]", f"[[{t}]]")
+                    text = text.replace(f"[[{r[0].lower()}{r[1:]}]]", f"[[{t[0].lower()}{t[1:]}]]")
 
                 text = text.replace(f"[[:{r}|", f"[[:{t}|")
                 text = re.sub(r"(''')?('')?\[\[" + x + r"\|('')?(" + prepare_title(t) + ")('')?]](s)?(''')?('')?", "\\1\\2\\3[[\\4]]\\6\\2\\3", text)

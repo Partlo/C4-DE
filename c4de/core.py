@@ -408,6 +408,10 @@ class C4DE_Bot(commands.Bot):
             except Exception as e:
                 await self.report_error(message.content, type(e), e)
 
+        match = self.is_user_eligibility_command(message.content)
+        if match:
+            await self.handle_user_eligibility_command(message, match)
+
         if message.author.id != CADE:
             return
 
