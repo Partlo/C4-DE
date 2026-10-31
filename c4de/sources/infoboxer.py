@@ -225,7 +225,7 @@ def parse_infobox(text: str, all_infoboxes: dict) -> Tuple[dict, List[str], List
             continue
 
         if "<ref" in line:
-            for x in re.findall("(<ref( name=.*?)?>.*?</ref>)", line):
+            for x in re.findall("(<ref( name=[^\n/>]+?)?>.*?</ref>)", line):
                 replacements[f"[ref{len(replacements)}]"] = x[0]
             for k, v in replacements.items():
                 line = line.replace(v, k)

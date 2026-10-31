@@ -18,7 +18,7 @@ UNCHANGED = "Leave As Is"
 BY_DATE = "Use Master Date"
 
 INDEX_AND_CATS = ["{{imagecat", "{{mediacat", "{{indexpage", "{{wq", "{{incomplete", "{{quote", "<div style=",
-                  "set in '''bold'''", "{{cleanup", "{{more", "{{coor title", "{{coor_title"]
+                  "set in '''bold'''", "{{cleanup", "{{more", "{{coor title", "{{coor_title", "'''Note:", "''mentioned'':"]
 
 
 MASTER_STRUCTURE = {

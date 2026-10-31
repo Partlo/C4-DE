@@ -13,6 +13,7 @@ COLLAPSE = {
     "GalaxyMapAppendix": "Star Systems of the Galaxy",
     "GalaxyMapPoster": "Star Wars Galaxy Map (poster)",
     "StarWarsGalaxyMap": "Star Wars Galaxy Map",
+    "TMAG-DE": "Star Wars: The Mandalorian and Grogu — The Director's Experience",
     "GalaxiesAED": "Star Wars Galaxies: An Empire Divided",
     "GalaxiesNGE": "Star Wars Galaxies",
 }
@@ -535,8 +536,6 @@ def handle_special_template(template, s, z, mode, a, types):
         if m:
             parent = f"FilmVideo|{m.group(2)}" if m.group(1) == "film=" else m.group(2)
             if "featurette=" in s and "nolink=1" not in s:
-                if m.group(5) == "The Director's Experience":
-                    return Item(z, mode, a, template=template, parent=parent, target="Star Wars: The Mandalorian and Grogu — The Director's Experience")
                 return Item(z, mode, a, template=template, parent=parent, target=m.group(5))
             else:
                 return Item(z, mode, a, template=template, parent=parent, issue=m.group(5), protected_format=True)

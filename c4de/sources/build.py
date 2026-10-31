@@ -76,7 +76,7 @@ def build_subpage_and_section(section: SectionComponents, items: FinishedSection
         pieces = []
     else:
         pieces = [items.name, "{{SourcesPage}}"]
-        if len(important_items) >= 20 and not any("{{scroll" in i.lower() for i in section.preceding):
+        if len(important_items) >= 25 and not any("{{scroll" in i.lower() for i in section.preceding):
             pieces.append("{{ScrollBox|content=")
 
     pieces += section.preceding

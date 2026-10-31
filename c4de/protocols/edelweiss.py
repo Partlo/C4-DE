@@ -593,8 +593,7 @@ def save_reprint(site, title, entries: List[dict]):
                 pass
             else:
                 build_new_media_section(text, lines, entries)
-                lines.append("===Cover gallery===")
-            new_text = "".join([before, "\n".join(lines), after])
+            new_text = "".join([before, "\n".join(lines), split, after])
             page.put(new_text, f"Creating Editions section and adding {len(entries)} new reprints", botflag=False)
 
         elif re.search(r"=+Appearances=+", text):
@@ -604,8 +603,7 @@ def save_reprint(site, title, entries: List[dict]):
                 pass
             else:
                 build_new_media_section(text, lines, entries)
-                lines.append("==Appearances==")
-            new_text = "".join([before, "\n".join(lines), after])
+            new_text = "".join([before, "\n".join(lines), split, after])
             page.put(new_text, f"Creating Editions section and adding {len(entries)} new reprints", botflag=False)
 
         else:

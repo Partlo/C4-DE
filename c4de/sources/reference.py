@@ -110,10 +110,10 @@ def is_plain_short_story_link(o: ItemId, link: str, ref: str, ref_length):
 
 
 def determine_id_for_reference(x: Item, page: Page, appearances: FullListData, sources: FullListData, page_links: list,
-                               canon: bool, log: bool):
+                               canon: bool, real_or_bts: False, log: bool):
     o = determine_id_for_item(x, page, appearances.unique, appearances.urls, appearances.target, sources.unique,
                               sources.urls, sources.target, {}, canon, log, ref=True)
-    if o:
+    if o and not real_or_bts:
         expanded, _, _, _ = handle_expansion(o, x, page, page_links, appearances, sources, set(), 0, 0, is_reference=True)
         if len(expanded) == 1:
             return expanded[0], True
@@ -160,7 +160,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
             ref_length = original_length - len(link[0])
             if x:
                 link_w_quotes = link[0] + link[3]
-                o, expanded = determine_id_for_reference(x, page, appearances, sources, page_links, canon, log)
+                o, expanded = determine_id_for_reference(x, page, appearances, sources, page_links, canon, real_or_bts, log)
                 flag = should_flag_series(o, not real_or_bts, ref_length)
                 if o and not o.use_original_text and o.replace_references and o.master.original != link_w_quotes:
                     found.append(o.master)
@@ -224,7 +224,7 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
             if x:
                 if x.template and is_nav_or_date_template(x.template, types):
                     continue
-                o, expanded = determine_id_for_reference(x, page, appearances, sources, page_links, canon, log)
+                o, expanded = determine_id_for_reference(x, page, appearances, sources, page_links, canon, real_or_bts, log)
                 if o and o.current.is_card_or_mini():
                     flag = "{{UnknownRef}}" if o.current.unknown else ""
                     new_templates.append((t, flag, o, []))
@@ -237,6 +237,8 @@ def handle_reference(full_ref, ref: str, page: Page, new_text, types, appearance
                         if flag:
                             new_templates.append((t, flag, o, []))
                         continue
+                    elif o.master.is_reprint and not o.master.has_content and o.master.original_printing:
+                        new_templates.append((t, flag, ItemId(o.master.original_printing, o.master.original_printing, False), []))
                     elif t != (o.master.original.replace(f"|int={page.title()}|", "|").replace(f"|int={page.title()}" + "}", "}") if media else o.master.original):
                         ex = []
                         if "|author=" in t:

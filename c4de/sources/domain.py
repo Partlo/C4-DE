@@ -23,6 +23,7 @@ class Item:
     :type text: str
     :type alternate_url: str
     :type alternate_urls: list[str]
+    :type original_printing: Item
     """
 
     def __init__(self, original: str, mode: str, is_app: bool, *, invalid=False, target: str = None, text: str = None,

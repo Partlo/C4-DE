@@ -204,7 +204,7 @@ def load_source_lists(site, log, include_web=True):
 
                 if "Toys" in sp:
                     line = re.sub(r"(\|text=.*?)(\|set=.*?)\|", "\\2\\1|", line)
-                    line = re.sub(r"(\|a?l?t?link=.*?) ?(\|pack=.*?)(\|.*?)?}}", "\\2\\1\\3}}", line)
+                    line = re.sub(r"(\|a?o?l?d?t?link=.*?) ?(\|pack=.*?)(\|.*?)?}}", "\\2\\1\\3}}", line)
                     line = re.sub(r" {{C\|1?=?(original|alternate): (?P<a>.*?)}}", "", line)
                 x = re.search(r"[*#](?P<d>.*?):(?P<r><ref.*?(</ref>|/>))? (D: )?(?P<t>.*?)( {{C\|d: .*?}})?$", line)
                 if x:
@@ -482,6 +482,10 @@ def load_full_sources(site, types, log, include_web=True) -> FullListData:
     return FullListData(unique_sources, full_sources, urls, target_sources, by_parent, set(), both_continuities, reprints)
 
 
+def item_list() -> List[Item]:
+    return []
+
+
 def load_full_appearances(site, types, log, canon_only=False, legends_only=False, log_match=True) -> FullListData:
     appearances = load_appearances(site, log, canon_only=canon_only, legends_only=legends_only)
     cx, canon, c_unknown = parse_new_timeline(Page(site, "Timeline of canon media"), types)
@@ -489,15 +493,15 @@ def load_full_appearances(site, types, log, canon_only=False, legends_only=False
     count = 0
     unique_appearances = {}
     full_appearances = {}
-    target_appearances = defaultdict(list)
+    target_appearances = defaultdict(item_list)
     parentheticals = set()
     both_continuities = set()
     today = datetime.now().strftime("%Y-%m-%d")
     no_canon_index = []
     no_legends_index = []
-    reprints = defaultdict(list)
-    by_parent = defaultdict(list)
-    urls = defaultdict(list)
+    reprints = defaultdict(item_list)
+    by_parent = defaultdict(item_list)
+    urls = defaultdict(item_list)
     for i in appearances:
         item = i['item']
         old = f"{i['item']}"

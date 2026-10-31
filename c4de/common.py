@@ -305,6 +305,7 @@ def fix_redirects(redirects: Dict[str, str], text, section_name, disambigs, rema
                     text = re.sub(r"\[\[(" + x + ")(s)?]]", f"[[{t}]]\\2", text)
                     text = re.sub(r"\[\[" + x + r"(\|.*?)]](s)?", f"[[{t}]]\\2", text)
                 else:
+                    text = re.sub(r"(''')('')?\[\[(" + x + r")]](''')('')?", f"\\1[[{t}|\\2\\3\\2]]\\1", text)
                     text = re.sub(r"(''')?('')?\[\[(" + x + r")]]([A-Za-z']*)", f"\\1[[{t}|\\2\\3\\4]]\\1", text)
                     text = re.sub(r"\[\[" + x + r"(\|.*?)]](s)?", f"[[{t}\\1\\2]]", text)
             if "/" not in r:

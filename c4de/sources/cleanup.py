@@ -9,6 +9,7 @@ from c4de.sources.infoboxer import handle_infobox_on_page
 REPLACEMENTS = [
     ("Apearance", "Appearance"), ("Appearence", "Appearance"), ("Souces", "Sources"),  ("referneces", "references"),
     ("=Source=", "=Sources="), ("===Non-canonical appearances===\n*", "===Non-canon appearances===\n*"),
+    ("==Non-Canon Appearances==", "==Non-canon appearances=="),
     ("==Work==", "==Works=="), ("==Traits and personality==", "==Personality and traits=="),
     ("==Media==\n*{{ISBN|", "==Media==\n===Editions===\n*{{ISBN|"),
     ("\n==Back-cover summary==\n", "\n===Back-cover summary===\n"),
@@ -20,15 +21,20 @@ REPLACEMENTS = [
     ("[[:category:", "[[:Category:"), ("[[category:", "[[Category:"), ("[[Category: ", "[[Category:"), ("[[Image:", "[[File:"),
 
     ("{{C|variant cover only}}", "{{Vco}}"), ("{{C|Variant cover only}}", "{{Vco}}"), ("*{{Indexpage", "{{Indexpage"),
+    ("{{C|Mentioned only}}", "{{Mo}}"), ("{{C|Cover only}}", "{{Co}}"), ("{{C|Hologram only}}", "{{Hologram}}"),
+    ("{{C|Voice only}}", "{{Vo}}"), ("{{C|Pictured only}}", "{{Po}}"), ("{{C|Picture only}}", "{{Po}}"),
     ("{{InvalidCategory}}", ""), ("{{IntroMissingTitle}} ", ""), ("{{IntroMissingTitle}}\n", ""),
     ("{{App|characters=", "{{App\n|characters="),
     ("<onlyinclude>\n{{Incomplete_app}}", "{{IncompleteApp}}\n<onlyinclude>"),
     ("<onlyinclude>\n{{IncompleteApp}}", "{{IncompleteApp}}\n<onlyinclude>"),
     ("{{C|non-canon|reprint=1}}", ""), ("{{Crawl|imo=1}}", "{{ImoCrawl}}"),
+    ("{{Mo}} {{Flash}}", "{{MoFlash}}"), ("{{Flash}} {{Mo}}", "{{MoFlash}}"),
+    ("{{Imo}} {{Flash}}", "{{ImoFlash}}"), ("{{Flash}} {{Imo}}", "{{ImoFlash}}"),
+    ("{{C|Wreckage only}}", "{{Wreck}}"), ("{{C|Wreckage}}", "{{Wreck}}"),
+    ("{{C|Non-canon appearance}}", "{{Nc}}"), ("{{C|Non-canonical appearance}}", "{{Nc}}"),
 
-    ("Millenium", "Millennium"), ("Milennium", "Millennium"),
+    ("Millenium", "Millennium"), ("Milennium", "Millennium"), ('[[Old Friends Not Forgotten]]s', '[[Old Friends Not Forgotten]]'),
     ("The Empire Strike Back", "The Empire Strikes Back"),
-    ("[[Black]]", "[[Color/Legends|Black]]"), ("[[black]]", "[[Color/Legends|black]]"),
 
     ("''[[Order 66: A Republic Commando Novel]]''", "''[[Republic Commando: Order 66]]''"),
     ("''[[Republic Commando]]''", "[[Star Wars: Republic Commando (novel series)|''Star Wars: Repbulic Commando'']]"),
@@ -37,18 +43,17 @@ REPLACEMENTS = [
     ("[[Book of Sith: Secrets from the Dark Side|''Book of Sith'']]", "''[[Star Wars: Book of Sith]]''"),
     ("[[Book of Sith: Secrets from the Dark Side]]", "[[Star Wars: Book of Sith]]"),
     ("[[Star Wars: Imperial Handbook: A Commander's Guide]]", "[[Star Wars: Imperial Handbook]]"),
-    ("[[The Bounty Hunter Code: From the Files of Boba Fett]]", "[[Star Wars: The Bounty Hunter Code]]"),
     ("{{EncyclopediaCite|Padmé Amidala Naberrie}}", "{{EncyclopediaCite|Padmé Amidala}}"),
 
     (">''[[Star Wars: Spark of Rebellion]]'' {{AD|", ">{{Rebels|Spark of Rebellion}} {{AD|"),
     ("[[Star Wars Complete Vehicles, New Edition]]", "[[Star Wars: Complete Vehicles, New Edition]]"),
-    ("''[[A Crash of Fate]]''", "''[[Galaxy's Edge: A Crash of Fate]]''"),
+    ("[[A Crash of Fate]]", "[[Galaxy's Edge: A Crash of Fate]]"),
     ("''[[Star Wars: A-wing Deluxe Book and 3D Wood Model]]''", "''[[IncrediBuilds: Journey to Star Wars: The Last Jedi: A-wing]]''"),
     ("''[[Star Wars: BB-8 Deluxe Book and 3D Wood Model]]''", "''[[IncrediBuilds: Journey to Star Wars: The Last Jedi: BB-8]]''"),
     ("''[[Star Wars: Star Destroyer Book and 3D Wood Model]]''", "''[[IncrediBuilds: Star Wars: Star Destroyer]]''"),
 ]
 
-EXTRA = r"\{+ ?(1st[A-z]*|[Cc]|V?[A-z][od]|[Bb]ts[Oo]nly|DLC|[Ll]n|[Cc]rp|[Uu]n|[Nn]c[ms]?|[Aa]mbig|[Aa]dvert|[Mm]ap[Pp]oint|[Cc]osmetic|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Uu]nborn|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene|[Ii]?m?o?[Cc]rawl) ?[|}]"
+EXTRA = r"\{+ ?(1st[A-z]*|[Cc]|V?[A-z][od]|[Bb]ts[Oo]nly|DLC|[Ll]n|[Cc]rp|[Uu]n|[Nn]c[ms]?||AD|[Aa]mbig|[Aa]dvert|[Oo]therlang|[Gg]ameVersion|[Mm]ap[Pp]oint|[Cc]osmetic|[Gg]amecameo|[Cc]odex|[Cc]irca|[Cc]orpse|[Rr]etcon|[Ff]lash(back)?|[Ii]?[Mm]o[Ff]lash|[Uu]nborn|[Gg]host|[Dd]el|[Hh]olo(cron|gram)|[Ii]mo|ID|[Rr]et|[Ss]im|[Vv]ideo|[Vv]ision|[Vv]oice|[Ww]reck|[Cc]utscene|[Ii]?m?o?[Cc]rawl) ?[|}]"
 
 
 def clean_references(before):
@@ -129,6 +134,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, infobox_log=T
     before = re.sub(r"(\{\{[A-z0-9-]+[^{}\n]+?) *\n *}}", "\\1}}", before)
     before = re.sub(r"^([^\[\]\n]+\[\[[^\[\]\n]+)]]]+('*)", "\\1]]\\2", before)
     before = re.sub(r"(\{\{([A-z _0-9]+)\|.*?}}) (\{\{1st[a-z]*)\|\{\{\2.*?}}( \{.*?)?\n", "\\1 \\3}}\\4\n", before)
+    before = re.sub(r"([ \n])'(\[\[.*?]])''", "\\1''\\2''", before)
     # small-parentheses within wikilinks, unnecessary pipelink
     before = re.sub(r"\[\[(.*?)\|''\1'']]([ .,<])", "''[[\\1]]''\\2", before)
     before = re.sub(r"(\[\[[^\n[\]{}|]+\|[^\n[\]{}|]+) ?\{\{[Cc]\|(.*?)}}(.*?]])", "\\1(\\2)\\3", before)
@@ -193,6 +199,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, infobox_log=T
     before = re.sub(r"(\|set=(.*?))\|sformatted=''\2''", "\\1", before)
     before = re.sub(r"( \{\{(C\|Hologram|1st|[MmPpCcVv]o).*?}})\1+", "\\1", before)
     before = re.sub(r"( \{\{(Reprint|Ab)\|.*?}})\1+", "\\1", before)
+    # before = re.sub(r"\{\{C\|(\[\[Wikipedia:)([A-z]+)( \(.*?\))?(\|\2]])? version( only)?}}", "{{Otherlang|\\2}}", before)
 
     # temp fixes
     before = temp_regex_cleanup(before)
@@ -208,10 +215,10 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, infobox_log=T
     if "{{c|first" in before.lower():
         before = re.sub(r"\{\{[Cc]\|First appear[a-z]+(,? simultaneous with (.*?))?}}", "{{1st|\\2}}", before)
         before = re.sub(r"\{\{[Cc]\|First mention[a-z]*(,? simultaneous with (.*?))?}}", "{{1st|\\2}}", before)
-        before = re.sub(r"\{\{[Cc]\|First appear[a-z]+,? before b?e?i?n?g? (\[\[Retroac.*?\|)?[Rr]etcon]*(,? simultaneous with (.*?))}}", "{{1str|\\3}}", before)
-        before = re.sub(r"\{\{[Cc]\|First appear[a-z]+,? before b?e?i?n?g? (\[\[Retroac.*?\|)?[Rr]etcon]*}}", "{{1str}}", before)
-        before = re.sub(r"\{\{[Cc]\|First mentione?d?,? before b?e?i?n?g? (\[\[Retroac.*?\|)?[Rr]etcon]*(,? simultaneous with (.*?))}}", "{{1stmr|\\3}}", before)
-        before = re.sub(r"\{\{[Cc]\|First mentione?d?,? before b?e?i?n?g? (\[\[Retroac.*?\|)?[Rr]etcon]*}}", "{{1stmr}}", before)
+        before = re.sub(r"\{\{[Cc]\|First appear[a-z]+,? before (being )?(\[\[Retroac.*?\|)?[Rr]etcon]*(,? simultaneous with (.*?))}}", "{{1str|\\4}}", before)
+        before = re.sub(r"\{\{[Cc]\|First appear[a-z]+,? before (being )?(\[\[Retroac.*?\|)?[Rr]etcon]*}}", "{{1str}}", before)
+        before = re.sub(r"\{\{[Cc]\|First mentione?d?,? before (being )?(\[\[Retroac.*?\|)?[Rr]etcon]*(,? simultaneous with (.*?))}}", "{{1stmr|\\4}}", before)
+        before = re.sub(r"\{\{[Cc]\|First mentione?d?,? before (being )?(\[\[Retroac.*?\|)?[Rr]etcon]*}}", "{{1stmr}}", before)
     before = re.sub(r"\{\{C\|Mentione?d?( only)?[;,]? in t?h?e? ?\[*opening crawl]*}}", "{{Crawl}}", before)
     before = re.sub(r"\{\{C\|Indirectl?y? mentione?d?( only)?[,;]? in t?h?e? ?\[*opening crawl]*}}", "{{ImoCrawl}}", before)
     before = re.sub(r"\{\{[Cc]\|Mentione?d in Codex( entry)?}}", "{{Codex}}", before)
@@ -251,7 +258,7 @@ def initial_cleanup(target: Page, all_infoboxes, before: str=None, infobox_log=T
         before = re.sub(r"\|work='*?\[\[Wikipedia:(The A\.V\. Club|The Daily Telegraph|The Guardian|The Hollywood Reporter|The Huffington Post|The Independent|The New York Times|The New Yorker|The Times|The Verge|The Washington Post|Time|TIME|USA Today|Universal Music Group)( \(.*?\))?\|.*?]]'*", "", before)
         before = re.sub(r"\|work='*?(TheForce\.net|Valnet#Collider|Valnet#Screen_Rant|Vanity Fair|Variety|VentureBeat|Wired|WIRED|Yahoo)'*(\|.*?)?}}", "\\2}}", before)
         before = re.sub(r"\|work='*?\[\[Wikipedia:(Valnet#Collider|Valnet#Screen_Rant|Vanity Fair|Variety|VentureBeat|Wired|WIRED|Yahoo)( \(.*?\))?\|.*?]]'*", "", before)
-        before = re.sub(r"(url=.*?//(.*?\.)?(abcnews|aiptcomics|aveleyman|bbc|biography|britannica|cbr|cbsnews|cinemablend|cnn|collider|comicbook|discogs|ew|fanthatracks|gameinformer|ign|inverse|io9\.gizmodo|jedi-bibliothek|jedinews|latimes|metacritic|nerdist|newsarama|npr|nypost|planetdagobah|rollingstone|screenrant|starwarsinterviews|swtor\.jedipedia|telegraph|theforce|thewrap|time|usatoday|yahoo)\..*?)\|work=.*?(\|[a-z ]+=.*?)?}}", "\\1\\4}}", before)
+        before = re.sub(r"(url=.*?//([^\n{}|]+?\.)?(abcnews|advancedgraphics|adventuresinpoortaste|aiptcomics|avclub|aveleyman|bafta|bbc|bbc\.co|bfi|biography|bleedingcool|boardgamegeek|britannica|cbr|cbsnews|cinemablend|clubjade|cnn|collider|comicbook|comicbookresources|dailymail|deadline|dictionary|dictionary\.cambridge|digitalfoundry|discogs|ebay|empireonline|engadget|eonline|esquire|esrb|eurogamer|ew|excelsior|fanthatracks|forbes|gameinformer|gamerant|gamespot|gamesradar|gizmodo|goodmorningamerica|hollywood|hollywoodreporter|huffingtonpost|huffpost|ibdb|ign|independent\.co|inverse|jedi-bibliothek|jedinews|kotaku|latimes|mashable|merriam-webster|metro\.co\.uk|midtowncomics|model-space|mtv|nbc|nerdist|newsarama|newyorker|npr|nypost|nytimes|oscars|oswfc|pcgamer|pcgames|planetdagobah|playstarwarsuprising|polygon|qidian|qobuz|rollingstone|rottentomatoes|screenrant|slashfilm|starwars-media|starwarscommander|starwarsinterviews|swtor\.jedipedia|syfy|tcdb|techradar|telegraph|tfaw|thedirect|theforce|theguardian|thetimes|theverge|thewrap|time|tmz|universal-music|usatoday|vanityfair|variety|venturebeat|washingtonpost|wdwnt|wired|yahoo)\.[^\n{}]+?)\|work=[^\n{}]*?(\|[a-z ]+=[^{}\n]*?)?}}", "\\1\\4}}", before)
 
     before = re.sub(r"(\{\{[A-z0-9 _]+\|.*?\|(.*?) \(.*?\))\|\2}}", "\\1}}", before)
 
@@ -283,9 +290,7 @@ def temp_regex_cleanup(before):
     before = re.sub(r"\[\[(Star Wars: (A New Hope|The Empire Strikes Back|Return of the Jedi|Revenge of the Sith) \(novelization\))\|'*Star Wars[: ']+Episode [IV]+[: ']+\2'*( \(?novel[a-z]*\)?)?]]", "[[\\1|''Star Wars: \\2'' novelization]]", before)
     before = re.sub(r"\[\[(Star Wars: (A New Hope|The Empire Strikes Back|Return of the Jedi) \(paperback novel\))\|'*Star Wars[: ']+Episode [IV]+[: ']+\2'*( \(?(junior )?novel[a-z]*\)?)?]]", "[[\\1|''Star Wars: \\2'' junior novelization]]", before)
     before = re.sub(r"\[\[((Star Wars: Shadows of the Empire) \(([a-z ]+?)\))\|'*(Star Wars: )?Shadows of the Empire'*( [a-z ]+)?]]", "[[\\1|''\\2'' \\3]]", before)
-    before = re.sub(r"'*\[\[Star.Wars:.X-Wing.vs..TIE.Fighter#Expansion.pack\|.*?]]'*", "''[[Star Wars: X-Wing vs. TIE Fighter: Balance of Power]]''", before)
     before = re.sub(r"\[\[The Official Star Wars Fact File Part ([0-9]+)(\|.*?)?]]'* \{\{C\|(([0-9]+ )?[A-Z0-9]{2}[A-Z0-9]? .*?}})", "{{FactFile2014|\\1|\\3", before)
-    before = re.sub(r"\{\{SWIA\|set=Star Wars: Imperial Assault Core Set(\|text=Core Set)?(\|.*?)?}}", "{{SWIA|set=Core Set\\2}}", before)
 
     before = re.sub(r"'*\[\[Almas, Sweet Almas: (A Dark Fortress|Desert Cries|The Kaluthin Are Always Greener)\|'*\1'*]]([,.])?'*", "\"[[Almas, Sweet Almas: \\1]]\\2\"", before)
     before = re.sub(r"'*\[\[Below the Belt: (Philanthropy|Philology|Philosophy)\|'*\1'*]]([,.])?'*", "\"[[Below the Belt: \\1]]\\2\"", before)

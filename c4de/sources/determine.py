@@ -187,8 +187,6 @@ def match_issue_item(o: Item, data, site, by_target: Dict[str, List[Item]], othe
     t = f"{o.mode}|None|{o.target}|None|None|None|None|None"
     if t in data:
         return ItemId(o, data[t], o.protected_format, False)
-    elif o.parent and "Special Edition" in o.parent and by_target.get(o.parent):
-        return ItemId(o, by_target[o.parent][0], True, False)
     x = match_issue_target(o, by_target, other_targets, True)
     if not x and o.target and not o.followed_redirect and not o.template == "FigurineCite":
         if follow_redirect(o, site, True):
