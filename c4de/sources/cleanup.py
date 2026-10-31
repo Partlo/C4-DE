@@ -287,6 +287,9 @@ def temp_regex_cleanup(before):
     before = re.sub(r">'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \1'*]]'*", ">{{Rebels|\\1}}", before)
     before = re.sub(r"'*\[\[(Heroes of Mandalore|Steps Into Shadow|The Siege of Lothal)\|'*Star Wars Rebels: \1'*]]'*", "\"[[\\1]]\"", before)
 
+    before = re.sub(r"\{\{(GEAttr|GalaxysEdge)\|(Star Wars: )?Rise of the Resistance.*?}}", "{{GalaxysEdge|Star Wars: Rise of the Resistance}}", before)
+    before = re.sub(r"\{\{(GEAttr|GalaxysEdge)\|Millennium Falcon: Smuggl.*?}}", "{{GalaxysEdge|Millennium Falcon: Smugglers Run}}", before)
+
     before = re.sub(r"\[\[(Star Wars: (A New Hope|The Empire Strikes Back|Return of the Jedi|Revenge of the Sith) \(novelization\))\|'*Star Wars[: ']+Episode [IV]+[: ']+\2'*( \(?novel[a-z]*\)?)?]]", "[[\\1|''Star Wars: \\2'' novelization]]", before)
     before = re.sub(r"\[\[(Star Wars: (A New Hope|The Empire Strikes Back|Return of the Jedi) \(paperback novel\))\|'*Star Wars[: ']+Episode [IV]+[: ']+\2'*( \(?(junior )?novel[a-z]*\)?)?]]", "[[\\1|''Star Wars: \\2'' junior novelization]]", before)
     before = re.sub(r"\[\[((Star Wars: Shadows of the Empire) \(([a-z ]+?)\))\|'*(Star Wars: )?Shadows of the Empire'*( [a-z ]+)?]]", "[[\\1|''\\2'' \\3]]", before)

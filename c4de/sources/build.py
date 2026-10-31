@@ -205,6 +205,7 @@ def sort_categories(pieces, namespace_id, bad_categories) -> str:
     x = "\n".join(final).replace("|\n[[Category:", "|[[Category:")
     x = re.sub(r"(\[\[Category:.*?)(\|.*?]])\n\1]]", "\\1\\2", x)
     x = re.sub(r"(\[\[Category:.*?)]]\n\1(\|.*?]])", "\\1\\2", x)
+    x = re.sub(r"\n\n+", "\n\n", x)
     return x
 
 
@@ -415,34 +416,20 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
     new_txt = sort_categories(pieces, page.namespace().id, results.flag)
     if results.canon and not results.real and "/Legends" in new_txt:
         new_txt = handle_legends_links(new_txt, page.title())
+
     new_txt, _ = clean_archive_usages(page, new_txt, sources.archive_data, redo)
     if "|archive" in new_txt:
         new_txt, _ = clean_archive_usages(page, new_txt, sources.archive_data, redo)
     if "|archive" in new_txt:
         new_txt, _ = clean_archive_usages(page, new_txt, sources.archive_data, redo)
+    # log_time("archive", now)
 
     if results.is_iu():
-        has_notoc = "notoc=" in new_txt
-        iu_sections = new_txt.count("==History==") + new_txt.count("==Biography==")
-        oou_sections = 0
-        for sx in ["Behind the scenes", "Appearances", "Sources", "Notes and references", "External links"]:
-            a, b, c = new_txt.partition(f"=={sx}==")
-            if b and c:
-                iu_sections = a.count("\n==") - a.count("\n===")
-                oou_sections = ("\n" + b + c).count("\n==")
-                break
-        if has_notoc and (iu_sections > 0 or oou_sections < 4):
-            new_txt = new_txt.replace("|notoc=1", "")
-            print(f"Removing NOTOC: {iu_sections} IU sections and {oou_sections} OOU sections")
-        elif not has_notoc and iu_sections == 0 and oou_sections > 3:
-            new_txt = re.sub(r"(\{\{Top(\|.*?)?)}}", "\\1|notoc=1}}", new_txt)
-            print(f"Adding NOTOC to article with no IU sections and {oou_sections} OOU sections")
-
-    # log_time("archive", now)
+        new_txt = handle_notoc(new_txt)
 
     new_txt = re.sub(r"(\{\{DEFAULTSORT:.*?}})\n\n+\[\[[Cc]ategory", "\\1\n[[Category", new_txt)
     new_txt = re.sub(r"(?<![\n=}])\n==", "\n\n==", re.sub(r"\n\n+", "\n\n", new_txt)).strip()
-    new_txt = re.sub(r"(stub|End[Gg]ame)}}\n==", "\\1}}\n\n==", new_txt)
+    new_txt = re.sub(r"([Ss]tub|End[Gg]ame)}}\n?==", "\\1}}\n\n==", new_txt)
     new_txt = re.sub(r"(\{\{Quote\|[^\n]+}})\n\n", "\\1\n", new_txt)
     new_txt = new_txt.replace("\n\n}}", "\n}}").replace("\n\n{{More", "\n{{More")
     if "{{Multiple" in new_txt:
@@ -470,6 +457,25 @@ def final_steps(page: Page, results: PageComponents, components: NewComponents, 
     return t
 
 
+def handle_notoc(new_txt):
+    has_notoc = "notoc=" in new_txt
+    iu_sections = new_txt.count("==History==") + new_txt.count("==Biography==")
+    oou_sections = 0
+    for sx in ["Behind the scenes", "Appearances", "Sources", "Notes and references", "External links"]:
+        a, b, c = new_txt.partition(f"=={sx}==")
+        if b and c:
+            iu_sections = a.count("\n==") - a.count("\n===")
+            oou_sections = ("\n" + b + c).count("\n==")
+            break
+    if has_notoc and (iu_sections > 0 or oou_sections < 4):
+        new_txt = new_txt.replace("|notoc=1", "")
+        print(f"Removing NOTOC: {iu_sections} IU sections and {oou_sections} OOU sections")
+    elif not has_notoc and iu_sections == 0 and oou_sections > 3:
+        new_txt = re.sub(r"(\{\{Top(\|.*?)?)}}", "\\1|notoc=1}}", new_txt)
+        print(f"Adding NOTOC to article with no IU sections and {oou_sections} OOU sections")
+    return new_txt
+
+
 def handle_legends_links(text, title):
     body, header, bts = text.partition("==Behind the scenes==")
     if "/Legends" in body:
@@ -487,7 +493,7 @@ def handle_legends_links(text, title):
                             line = line.replace(f"[[{i}/Legends", f"[[{i}")
             new_lines.append(line)
         body = "\n".join(new_lines)
-    return f"{body}{header}{bts}"
+    return f"{body}\n{header}{bts}"
 
 
 def build_final(final, media_cat, redirects, canon):

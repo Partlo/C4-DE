@@ -165,7 +165,7 @@ class C4DE_Bot(commands.Bot):
 
         self.overdue_cts = []
         self.project_data = {}
-        self.files_to_be_renamed = []
+        self.pages_to_be_renamed = []
         self.source_rev_ids = {}
 
         self.infoboxes = {}
@@ -215,7 +215,7 @@ class C4DE_Bot(commands.Bot):
                 self.check_rights_nominations.start()
                 self.check_policy.start()
                 self.check_deleted_pages.start()
-                self.check_files_to_be_renamed.start()
+                self.check_rename_requests.start()
                 self.check_bot_requests.start()
 
                 self.check_spoiler_templates_and_cleanup.start()
@@ -1687,15 +1687,15 @@ class C4DE_Bot(commands.Bot):
             await self.report_error(f"Deleted Pages: {e}", type(e), e)
 
     @tasks.loop(minutes=15)
-    async def check_files_to_be_renamed(self):
+    async def check_rename_requests(self):
         log("Checking FTBR")
         try:
-            files = [p for p in Category(self.site, "Files to be renamed").articles()]
-            new_files = []
-            for f in files:
+            pages = [p for p in Category(self.site, "Files to be renamed").articles()]
+            pages += [p for p in Category(self.site, "Articles to be moved").articles()]
+            for f in pages:
                 try:
-                    if f.title() not in self.files_to_be_renamed:
-                        x = re.search(r"\{\{(FileRenameRequest|FTBR)\|.*\|(.*?)}}", f.get())
+                    if f.title() not in self.pages_to_be_renamed:
+                        x = re.search(r"\{\{(FileRenameRequest|FTBR|MoveRequest)\|.*\|(.*?)}}", f.get())
                         new_name_text = f" to **{x.group(2)}**" if x else ""
                         m = f"⚠️ **{f.lastNonBotUser()}** requested [**{f.title()}**](<{f.full_url()}>) be renamed{new_name_text}\n"
                         msg = await self.text_channel(ADMIN_REQUESTS).send(m)
@@ -1703,7 +1703,7 @@ class C4DE_Bot(commands.Bot):
                 except Exception as e:
                     await self.report_error(f"FTBR: {f.title()}", type(e), e)
 
-            self.files_to_be_renamed = [f.title() for f in files]
+            self.pages_to_be_renamed = [f.title() for f in pages]
             with open(ADMIN_CACHE, "w") as f:
                 f.writelines(json.dumps(self.admin_messages, indent=4))
         except Exception as e:

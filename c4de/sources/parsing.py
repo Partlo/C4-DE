@@ -487,7 +487,7 @@ def parse_section(section: str, types: dict, is_appearances: bool, unknown: list
 
         if "SourceContents-start" in s:
             s = re.sub(r"^.*?{{SourceContents-start\|(set=|parent=|issue=)?(\{\{.*?)}}( \{\{.*?}}.*?)}}", "*\\2|parent=1}}\\3", s)
-            s = re.sub(r"^.*?{{SourceContents-start\|(set=|parent=|issue=)?('*\[\[.*?]]'*)( \{\{.*?}}.*?)}}", "*\\2}}\\3", s)
+            s = re.sub(r"^.*?{{SourceContents-start\|(set=|parent=|issue=)?('*\[\[.*?]]'*)( \{\{.*?}}.*?)}}", "*\\2\\3", s)
             s = re.sub(r"^.*?{{SourceContents-start\|(set=|parent=|issue=)?(.*?)$", "", s)
             s = re.sub(r"\|parent=1(.*?)\|parent=1", "|parent=1\\1", s)
             cs += 1
